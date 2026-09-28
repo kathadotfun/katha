@@ -32,7 +32,8 @@ bridge to the artwork record, not proof by itself.
 ## Project status
 
 Katha is under active development. This repository currently contains the public
-product specification, architecture decisions, and repository safeguards.
+product specification, architecture decisions, repository safeguards, and a pinned
+pnpm workspace.
 Application, API, database, and Solana program behavior described in the
 specification is planned until its corresponding implementation lands and is tested.
 
@@ -52,7 +53,7 @@ outside the current scope.
 - [Architecture overview](docs/architecture/overview.md)
 - [Artwork lifecycle and state separation](docs/architecture/artwork-lifecycle.md)
 - [Trust and lifecycle decision](docs/decisions/0001-trust-and-lifecycle.md)
-- Development setup documentation will be added with the working foundation.
+- [Workspace setup](docs/development/workspace.md)
 
 ## Repository policy
 
