@@ -1,0 +1,86 @@
+# Keep reviewed Anchor IDLs eligible; ignore other Rust/Anchor artifacts
+**/target/*
+!/target/idl/
+!/target/idl/**
+
+# Private workspace references and agent guidance
+helper/
+logo/
+logos/
+.agents/
+.codex/
+AGENTS.md
+/Katha — README.md
+
+# Local environment files; reviewed examples may be public
+.env
+.env.*
+!.env.example
+.envrc
+
+# Credentials and signing material
+secrets/
+.secrets/
+credentials/
+keypairs/
+*keypair*.json
+id.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies, build output, and caches
+node_modules/
+.pnpm-store/
+.next/
+.turbo/
+.cache/
+dist/
+build/
+out/
+*.tsbuildinfo
+next-env.d.ts
+
+.anchor/
+.surfpool/
+.ledger/
+ledger/
+test-ledger/
+
+# Logs and test reports
+*.log
+logs/
+coverage/
+.nyc_output/
+playwright-report/
+playwright/.cache/
+test-results/
+
+# Local uploads, storage, database contents, and dumps
+.data/
+.storage/
+/uploads/
+/storage/
+/data/
+/apps/api/uploads/
+/apps/api/storage/
+pgdata/
+postgres-data/
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite3-journal
+*.db
+*.db-journal
+*.dump
+*.sql.gz
+
+# Local editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
