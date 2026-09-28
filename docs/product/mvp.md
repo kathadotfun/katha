@@ -2,6 +2,10 @@
 
 Status: planned and under implementation.
 
+The [architecture overview](../architecture/overview.md) and
+[artwork lifecycle](../architecture/artwork-lifecycle.md) define system boundaries
+and the independent state transitions that implement these requirements.
+
 This document defines the behavior and acceptance criteria for Katha's first
 complete Devnet release. It is a product specification, not a statement that every
 described feature has shipped.
@@ -181,9 +185,11 @@ are anchored on-chain.
 
 ## 7. Physical custody and fulfillment
 
-Custody transitions are explicit, authorized, and historically preserved. MVP
-states cover registration, verification, Katha custody, transit, owner custody,
-pending resale inspection, resale approval, and delivery to a new owner.
+Custody transitions are explicit, authorized, and historically preserved. They
+record Katha custody, the actual owner/custodian holding the work, or transit.
+Registration and verification remain separate from custody; pending inspection
+and resale approval belong to the inspection workflow. A sale changes digital
+ownership without asserting physical movement or replacing the recorded custodian.
 
 Physical inspection, tag writing, packaging, shipping, receipt confirmation, and
 delivery coordination remain manual. A successful chain transfer never claims that

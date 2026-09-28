@@ -32,9 +32,9 @@ bridge to the artwork record, not proof by itself.
 ## Project status
 
 Katha is under active development. This repository currently contains the public
-product specification and repository safeguards. Application, API, database, and
-Solana program behavior described in the specification is planned until its
-corresponding implementation lands and is tested.
+product specification, architecture decisions, and repository safeguards.
+Application, API, database, and Solana program behavior described in the
+specification is planned until its corresponding implementation lands and is tested.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -49,8 +49,10 @@ outside the current scope.
 ## Documentation
 
 - [MVP specification](docs/product/mvp.md)
-- Architecture and development setup documentation will be added with the code
-  they describe.
+- [Architecture overview](docs/architecture/overview.md)
+- [Artwork lifecycle and state separation](docs/architecture/artwork-lifecycle.md)
+- [Trust and lifecycle decision](docs/decisions/0001-trust-and-lifecycle.md)
+- Development setup documentation will be added with the working foundation.
 
 ## Repository policy
 
