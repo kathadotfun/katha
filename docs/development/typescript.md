@@ -4,11 +4,11 @@ The root workspace pins TypeScript 6.0.3. Extend one of the shared configuration
 from each package; keep package-specific `include`, `exclude`, `rootDir`, and
 `outDir` settings in that package rather than the shared presets.
 
-| Preset | Use | Runtime libraries and module resolution |
-|---|---|---|
-| `tsconfig.base.json` | Environment-neutral strict defaults | ES2024 only; no ambient type packages |
-| `tsconfig.node.json` | Node services, scripts, and server packages | NodeNext; Node declarations must be installed by the consuming package |
-| `tsconfig.web.json` | Browser application and browser-only packages | Bundler; DOM and React declarations must be installed by the consuming package |
+| Preset               | Use                                           | Runtime libraries and module resolution                                        |
+| -------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| `tsconfig.base.json` | Environment-neutral strict defaults           | ES2024 only; no ambient type packages                                          |
+| `tsconfig.node.json` | Node services, scripts, and server packages   | NodeNext; Node declarations must be installed by the consuming package         |
+| `tsconfig.web.json`  | Browser application and browser-only packages | Bundler; DOM and React declarations must be installed by the consuming package |
 
 All presets disable emit and enable strict checking, exact optional properties,
 checked indexed access, explicit type-only imports/exports, and consistent file

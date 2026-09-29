@@ -1,0 +1,17 @@
+# Local handoff notes, agent instructions, and source artwork stay private.
+/AGENTS.md
+/helper/
+/logo/
+/logos/
+/.agents/
+/.codex/
+
+# Package manager state, generated clients, build output, and caches.
+/pnpm-lock.yaml
+**/node_modules/
+**/.next/
+**/dist/
+**/coverage/
+**/target/
+**/generated/
+**/*.generated.*

@@ -53,16 +53,16 @@ and independent state dimensions.
 
 ## Alternatives considered
 
-| Alternative | Reason for the chosen design |
-|---|---|
-| One combined artwork status | Cannot accurately represent custody, sale, and inspection independently |
-| Database as the current-owner authority | Can lag, be edited, or miss chain activity |
-| One unbounded on-chain owner-history array | Grows with every transfer and makes history an account-size problem |
-| Separate Core mint and Registry bind transactions | Allows a successful partial result or mismatched binding |
-| Direct URI updates followed by a later hash update | Exposes a period where metadata and commitment disagree |
-| Permanent listing delegates | Retain transfer/freeze power beyond a specific listing |
-| API-controlled signing and sale approval | Makes backend trust replace wallet and program enforcement |
-| A new database or queue for indexing | Adds infrastructure before the polling worker requires it |
+| Alternative                                        | Reason for the chosen design                                            |
+| -------------------------------------------------- | ----------------------------------------------------------------------- |
+| One combined artwork status                        | Cannot accurately represent custody, sale, and inspection independently |
+| Database as the current-owner authority            | Can lag, be edited, or miss chain activity                              |
+| One unbounded on-chain owner-history array         | Grows with every transfer and makes history an account-size problem     |
+| Separate Core mint and Registry bind transactions  | Allows a successful partial result or mismatched binding                |
+| Direct URI updates followed by a later hash update | Exposes a period where metadata and commitment disagree                 |
+| Permanent listing delegates                        | Retain transfer/freeze power beyond a specific listing                  |
+| API-controlled signing and sale approval           | Makes backend trust replace wallet and program enforcement              |
+| A new database or queue for indexing               | Adds infrastructure before the polling worker requires it               |
 
 ## Consequences and verification
 

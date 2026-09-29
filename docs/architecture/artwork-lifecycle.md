@@ -6,16 +6,16 @@ their implementation. Read with the [architecture overview](overview.md) and
 
 ## State dimensions
 
-| Dimension | Meaning | Authority and update rule |
-|---|---|---|
-| Permanent identity and authorship | Which work this is and who created it | Registry; immutable after registration |
-| Content publication | Whether approved artwork content is publicly visible | Authorized application workflow; no implied verification |
-| Verification | Whether Katha authenticated the registered artwork | Verifier-signed Registry attestation |
-| Physical custody | Last attested custodian or transit state | Authorized custody transition; independent of listing |
-| Condition | Ordered inspection reports and current applicable grade | Verifier-signed versioned reports |
-| Resale approval | Eligibility for the current owner and custody facts | Derived from current anchored inspection and configured policy |
-| Digital ownership | Current owner of the bound unique asset | Core; validated live when executing a sale |
-| Listing | Sale terms, active/cancelled/purchased state, effective expiry | Marketplace; no implied physical movement |
+| Dimension                         | Meaning                                                        | Authority and update rule                                      |
+| --------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
+| Permanent identity and authorship | Which work this is and who created it                          | Registry; immutable after registration                         |
+| Content publication               | Whether approved artwork content is publicly visible           | Authorized application workflow; no implied verification       |
+| Verification                      | Whether Katha authenticated the registered artwork             | Verifier-signed Registry attestation                           |
+| Physical custody                  | Last attested custodian or transit state                       | Authorized custody transition; independent of listing          |
+| Condition                         | Ordered inspection reports and current applicable grade        | Verifier-signed versioned reports                              |
+| Resale approval                   | Eligibility for the current owner and custody facts            | Derived from current anchored inspection and configured policy |
+| Digital ownership                 | Current owner of the bound unique asset                        | Core; validated live when executing a sale                     |
+| Listing                           | Sale terms, active/cancelled/purchased state, effective expiry | Marketplace; no implied physical movement                      |
 
 Registration, verification, inspection-pending, and resale-approved describe other
 dimensions; they are not physical custody states. Custody records describe Katha
@@ -101,16 +101,16 @@ overlap are checked independently from ownership and physical custody.
 
 ## Custody and inspected resale
 
-| Trigger | Custody effect | Ownership, listing, and approval effect |
-|---|---|---|
-| List a Katha-held work | Katha custody continues | Seller remains owner; listing becomes active |
-| Purchase a Katha-held work | Katha custody continues | Buyer becomes owner; listing is consumed |
-| Request delivery | Private request only | No automatic chain ownership or custody change |
-| Authorized dispatch | Attest transit from the recorded custodian | Prior custody-bound resale approval becomes inapplicable |
-| Authorized receipt | Attest the actual receiving custodian | Owner and recipient are checked independently |
-| Request collector-held inspection | Owner custody continues until an actual attested movement | Request alone grants no resale approval |
-| Approve collector-held resale | Custody continues | Inspector attestation binds approval to current owner and custody facts |
-| Purchase approved collector-held resale | Existing custody continues until actual dispatch/receipt | New digital owner; previous owner's approval is unusable |
+| Trigger                                 | Custody effect                                            | Ownership, listing, and approval effect                                 |
+| --------------------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- |
+| List a Katha-held work                  | Katha custody continues                                   | Seller remains owner; listing becomes active                            |
+| Purchase a Katha-held work              | Katha custody continues                                   | Buyer becomes owner; listing is consumed                                |
+| Request delivery                        | Private request only                                      | No automatic chain ownership or custody change                          |
+| Authorized dispatch                     | Attest transit from the recorded custodian                | Prior custody-bound resale approval becomes inapplicable                |
+| Authorized receipt                      | Attest the actual receiving custodian                     | Owner and recipient are checked independently                           |
+| Request collector-held inspection       | Owner custody continues until an actual attested movement | Request alone grants no resale approval                                 |
+| Approve collector-held resale           | Custody continues                                         | Inspector attestation binds approval to current owner and custody facts |
+| Purchase approved collector-held resale | Existing custody continues until actual dispatch/receipt  | New digital owner; previous owner's approval is unusable                |
 
 The current custodian may be the previous collector while the new digital owner
 awaits delivery. Record the actual custody subject; do not reinterpret an

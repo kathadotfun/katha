@@ -32,17 +32,17 @@ independently authorize chain writes. The API never becomes a signing authority.
 
 ## Responsibility and source of truth
 
-| Concern | Authoritative record | Application responsibility |
-|---|---|---|
-| Artist profile and draft content | PostgreSQL application records | Admin authorization and relational validation |
-| Registered identity and attribution | Registry artwork account | Preserve permanent ID, artist identity, and binding |
-| Current digital owner | Core asset account | Read live ownership for sensitive decisions |
-| Verification and condition | Registry attestations and exact hashed documents | Display authorized claims and integrity results |
-| Recorded physical custody | Authorized Registry custody attestations | Coordinate manual handling; show the last recorded fact |
-| Listing and settled sale | Marketplace accounts and successful transactions | Quotes, wallet workflow, listing queries |
-| Historical provenance | Successful finalized Registry, Marketplace, and Core activity | Idempotent PostgreSQL projections with freshness status |
-| Shipping and private evidence | Restricted off-chain records and storage | Role-based access and redacted public responses |
-| Document integrity | Registry hash and versioned stored bytes | Hash exact bytes; preserve previous versions |
+| Concern                             | Authoritative record                                          | Application responsibility                              |
+| ----------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------- |
+| Artist profile and draft content    | PostgreSQL application records                                | Admin authorization and relational validation           |
+| Registered identity and attribution | Registry artwork account                                      | Preserve permanent ID, artist identity, and binding     |
+| Current digital owner               | Core asset account                                            | Read live ownership for sensitive decisions             |
+| Verification and condition          | Registry attestations and exact hashed documents              | Display authorized claims and integrity results         |
+| Recorded physical custody           | Authorized Registry custody attestations                      | Coordinate manual handling; show the last recorded fact |
+| Listing and settled sale            | Marketplace accounts and successful transactions              | Quotes, wallet workflow, listing queries                |
+| Historical provenance               | Successful finalized Registry, Marketplace, and Core activity | Idempotent PostgreSQL projections with freshness status |
+| Shipping and private evidence       | Restricted off-chain records and storage                      | Role-based access and redacted public responses         |
+| Document integrity                  | Registry hash and versioned stored bytes                      | Hash exact bytes; preserve previous versions            |
 
 A custody attestation records an operator's physical claim. Core ownership does
 not establish present physical possession. A database ownership projection must
@@ -50,16 +50,16 @@ not replace live account validation during listing or purchase.
 
 ## Planned repository responsibilities
 
-| Location | Responsibility |
-|---|---|
-| `apps/web` | Public, collector, and admin UI; wallet session and signing boundary |
-| `apps/api` | Validated REST API, storage/payment adapters, unsigned operations, polling worker |
-| `packages/shared` | Zod contracts, domain values, canonical document hashing |
-| `packages/db` | Drizzle schema, migrations, database queries |
-| `packages/solana` | Kit clients, transaction builders, isolated Metaplex adapter, generated clients |
-| `programs/katha_registry` | Bounded artwork trust records and lifecycle authorization |
-| `programs/katha_marketplace` | Eligibility, temporary delegates, atomic settlement |
-| `docs` | Product requirements, architecture decisions, setup and operating instructions |
+| Location                     | Responsibility                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `apps/web`                   | Public, collector, and admin UI; wallet session and signing boundary              |
+| `apps/api`                   | Validated REST API, storage/payment adapters, unsigned operations, polling worker |
+| `packages/shared`            | Zod contracts, domain values, canonical document hashing                          |
+| `packages/db`                | Drizzle schema, migrations, database queries                                      |
+| `packages/solana`            | Kit clients, transaction builders, isolated Metaplex adapter, generated clients   |
+| `programs/katha_registry`    | Bounded artwork trust records and lifecycle authorization                         |
+| `programs/katha_marketplace` | Eligibility, temporary delegates, atomic settlement                               |
+| `docs`                       | Product requirements, architecture decisions, setup and operating instructions    |
 
 Turborepo orchestrates workspace tasks. The indexer stays alongside the API
 codebase, with its own worker command and database checkpoint. There is no
@@ -67,16 +67,16 @@ additional queue, database, or service infrastructure in the MVP.
 
 ## Authorization boundaries
 
-| Action | Required authority | Independent chain enforcement |
-|---|---|---|
-| Create profiles or edit drafts | Authenticated admin | No chain change is implied |
-| Initialize platform configuration | Authorized bootstrap signer | Program validates configured authority and prevents replacement initialization |
-| Register an artwork | Configured registration authority | Registry validates immutable identity and account derivation |
-| Authenticate or inspect | Configured verifier | Registry validates signer, artwork, condition hash, and attestation |
-| Record custody | Configured custody authority | Registry validates transition and current record |
-| Mint or revise metadata | Authorized platform role | Registry validates prerequisites and controls Core update CPI |
-| List or cancel | Current seller; defined expiry recovery for expired listings | Marketplace checks live Core ownership, listing, and delegate authority |
-| Purchase | Buyer signer | Marketplace validates listing, eligibility, token accounts, and all recipients |
+| Action                            | Required authority                                           | Independent chain enforcement                                                  |
+| --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Create profiles or edit drafts    | Authenticated admin                                          | No chain change is implied                                                     |
+| Initialize platform configuration | Authorized bootstrap signer                                  | Program validates configured authority and prevents replacement initialization |
+| Register an artwork               | Configured registration authority                            | Registry validates immutable identity and account derivation                   |
+| Authenticate or inspect           | Configured verifier                                          | Registry validates signer, artwork, condition hash, and attestation            |
+| Record custody                    | Configured custody authority                                 | Registry validates transition and current record                               |
+| Mint or revise metadata           | Authorized platform role                                     | Registry validates prerequisites and controls Core update CPI                  |
+| List or cancel                    | Current seller; defined expiry recovery for expired listings | Marketplace checks live Core ownership, listing, and delegate authority        |
+| Purchase                          | Buyer signer                                                 | Marketplace validates listing, eligibility, token accounts, and all recipients |
 
 Admin and verifier session roles grant API access, not arbitrary chain privileges.
 Before preparing an operation, the API checks that the connected wallet can perform

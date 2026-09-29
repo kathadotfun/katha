@@ -33,7 +33,7 @@ bridge to the artwork record, not proof by itself.
 
 Katha is under active development. This repository currently contains the public
 product specification, architecture decisions, repository safeguards, a pinned
-pnpm workspace, and shared strict TypeScript presets.
+pnpm workspace, shared strict TypeScript presets, and lint/format checks.
 Application, API, database, and Solana program behavior described in the
 specification is planned until its corresponding implementation lands and is tested.
 
@@ -55,6 +55,7 @@ outside the current scope.
 - [Trust and lifecycle decision](docs/decisions/0001-trust-and-lifecycle.md)
 - [Workspace setup](docs/development/workspace.md)
 - [TypeScript configuration](docs/development/typescript.md)
+- [Linting and formatting](docs/development/code-quality.md)
 
 ## Repository policy
 

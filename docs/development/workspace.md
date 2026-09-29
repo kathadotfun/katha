@@ -5,10 +5,10 @@ added incrementally; this setup currently installs the workspace foundation.
 
 ## Pinned tools
 
-| Tool | Version | Project configuration |
-|---|---|---|
-| Node.js | 24.21.0 LTS | `.nvmrc` and `package.json` engines |
-| pnpm | 12.6.0 | `package.json` package manager and engines |
+| Tool    | Version     | Project configuration                      |
+| ------- | ----------- | ------------------------------------------ |
+| Node.js | 24.21.0 LTS | `.nvmrc` and `package.json` engines        |
+| pnpm    | 12.6.0      | `package.json` package manager and engines |
 
 These are the selected, verified development versions. See the
 [Node release](https://nodejs.org/en/blog/release/v24.21.0) and
