@@ -70,6 +70,6 @@ See [pnpm settings](https://pnpm.io/settings),
 [CLI and engine settings](https://pnpm.io/settings/cli), and
 [version prefix settings](https://pnpm.io/settings/other#saveprefix).
 
-Development, lint, type checking, build, and test commands will be added with the
-tools and packages they execute. The full application setup is documented as the
-working foundation is completed.
+The web package supports local development, linting, route-aware type checking,
+and production builds. See the [Next.js application guide](nextjs.md) for commands.
+Other package commands will be added with the tools and packages they execute.
