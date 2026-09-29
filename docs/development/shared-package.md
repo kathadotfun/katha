@@ -1,8 +1,8 @@
 # Shared TypeScript package
 
 `packages/shared` contains contracts and utilities used by more than one Katha
-application. Its first domain contract validates the three MVP artwork categories
-and permanent Katha IDs. Artist attribution, lifecycle states, and other
+application. It validates the three MVP artwork categories, permanent Katha IDs,
+artist attribution, and structured artwork documentation. Lifecycle states and
 request/response schemas arrive in later steps.
 
 The category values are `MANDALA`, `PAUBHA`, and `THANGKA`. A permanent ID uses
@@ -11,6 +11,24 @@ digits from `000001` through `999999`. Parsing is strict: it does not trim,
 change case, or coerce input. For example, `KATHA-PAUBHA-000001` is valid while
 `KATHA-PAUBHA-000000` is not. Allocation and uniqueness enforcement are added
 with the database and Registry implementations; this schema validates shape only.
+
+`artistAttributionSchema` identifies an artist by a stable UUID and display name;
+the creator wallet may be absent. `artistProfileSchema` adds biography, region,
+traditions, public links, and a separate optional payout wallet. A profile can
+exist without either wallet. The payout wallet becomes mandatory at the later
+sale-eligibility boundary. Wallet fields are checked for base58 text shape here;
+chain-facing code must decode and validate the actual address. The profile
+contract includes payout configuration and is not itself a public API response
+schema.
+
+`artworkSchema` requires a matching ID and category, title, attribution, a
+lowercase 64-character SHA-256 authorship evidence hash, creation year, structured
+origin, integer dimensions in millimetres, materials, technique, and public story,
+meaning, cultural context, and process text. Nested objects reject unlisted
+fields, including accidental private evidence or fulfillment fields. This
+schema does not determine whether text is approved for publication; the later
+admin workflow must review it. Media and lifecycle state contracts are added
+in their respective steps.
 
 ```ts
 import { artworkCategorySchema, kathaIdSchema } from "@katha/shared";

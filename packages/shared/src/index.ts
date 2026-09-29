@@ -6,3 +6,21 @@ export {
   kathaIdSchema,
 } from "./artwork-identity.js";
 export type { ArtworkCategory, KathaId } from "./artwork-identity.js";
+
+export {
+  artistAttributionSchema,
+  artistProfileSchema,
+  artworkDimensionsSchema,
+  artworkOriginSchema,
+  artworkPublicContentSchema,
+  artworkSchema,
+  walletAddressSchema,
+} from "./artwork-domain.js";
+export type {
+  ArtistAttribution,
+  ArtistProfile,
+  Artwork,
+  ArtworkDimensions,
+  ArtworkOrigin,
+  ArtworkPublicContent,
+} from "./artwork-domain.js";
