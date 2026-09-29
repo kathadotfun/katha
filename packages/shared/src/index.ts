@@ -41,3 +41,16 @@ export type {
   ArtworkRegistrationState,
   ArtworkRegistrationTransition,
 } from "./artwork-lifecycle.js";
+
+export {
+  conditionGradeSchema,
+  conditionReasonSchema,
+  conditionReportCommitmentSchema,
+  conditionReportDocumentSchema,
+} from "./condition-report.js";
+export type {
+  ConditionGrade,
+  ConditionReason,
+  ConditionReportCommitment,
+  ConditionReportDocument,
+} from "./condition-report.js";

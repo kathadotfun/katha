@@ -2,8 +2,9 @@
 
 `packages/shared` contains contracts and utilities used by more than one Katha
 application. It validates the three MVP artwork categories, permanent Katha IDs,
-artist attribution, and structured artwork documentation. Lifecycle states and
-request/response schemas arrive in later steps.
+artist attribution, and structured artwork documentation. Lifecycle and
+condition-report contracts are also defined here. API request/response schemas
+arrive in later steps.
 
 The category values are `MANDALA`, `PAUBHA`, and `THANGKA`. A permanent ID uses
 `KATHA-<CATEGORY>-<SEQUENCE>`, where the sequence is exactly six ASCII decimal
@@ -27,8 +28,7 @@ origin, integer dimensions in millimetres, materials, technique, and public stor
 meaning, cultural context, and process text. Nested objects reject unlisted
 fields, including accidental private evidence or fulfillment fields. This
 schema does not determine whether text is approved for publication; the later
-admin workflow must review it. Media and condition contracts arrive in later
-steps.
+admin workflow must review it. Artwork media contracts arrive in later steps.
 
 ## Independent lifecycle states
 
@@ -51,6 +51,31 @@ values in these enums.
 The transition schemas validate action names and state pairs, not signer
 permission or live on-chain state. Registry instructions must verify the actual
 artwork record, current state, attested custodian, and authorized signer.
+
+## Condition reports
+
+`conditionReportDocumentSchema` validates a detailed inspection document with a
+stable report UUID, permanent artwork ID, grade, reason, inspector UUID, verifier
+wallet, inspection and report times, notes, and one to twenty unique lowercase
+SHA-256 media hashes. Grades are `EXCELLENT`, `GOOD`, `FAIR`, `POOR`, and
+`DAMAGED`. Reasons are `INITIAL_VERIFICATION`, `PRE_SALE`, `POST_DELIVERY`,
+`PRE_RESALE`, `RETURN_TO_CUSTODY`, and `INSURANCE`. A reason describes why an
+inspection occurred; it does not grant resale approval or change custody.
+
+Times use UTC with exactly three fractional second digits, such as
+`2025-06-15T09:30:00.000Z`. The report time cannot precede the inspection time.
+The document rejects unlisted fields, including shipping details and private
+photo URLs. Notes and associated media may contain sensitive information, so the
+full document must be stored privately and must not be returned directly by a
+public API. Public summaries require an explicit visibility review.
+
+`conditionReportCommitmentSchema` validates the separate report UUID, artwork ID,
+and lowercase SHA-256 report hash. Keeping the hash outside the document avoids
+self-reference. The later canonical-hashing step computes it from exact document
+bytes; persistence must ensure the document and commitment share their identities
+and preserve prior reports. Later Registry instructions verify signer authority
+and anchor the commitment and verifier on-chain. These schemas validate shape and
+chronology only; they do not prove inspection or authorize an attestation.
 
 ```ts
 import { artworkCategorySchema, kathaIdSchema } from "@katha/shared";
