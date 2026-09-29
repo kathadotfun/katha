@@ -54,3 +54,18 @@ export type {
   ConditionReportCommitment,
   ConditionReportDocument,
 } from "./condition-report.js";
+
+export {
+  basisPointsSchema,
+  listingPriceSchema,
+  listingStatusSchema,
+  marketplaceFeeRatesSchema,
+  tokenAmountSchema,
+} from "./marketplace.js";
+export type {
+  BasisPoints,
+  ListingPrice,
+  ListingStatus,
+  MarketplaceFeeRates,
+  TokenAmount,
+} from "./marketplace.js";

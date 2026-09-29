@@ -3,8 +3,8 @@
 `packages/shared` contains contracts and utilities used by more than one Katha
 application. It validates the three MVP artwork categories, permanent Katha IDs,
 artist attribution, and structured artwork documentation. Lifecycle and
-condition-report contracts are also defined here. API request/response schemas
-arrive in later steps.
+condition-report and marketplace contracts are also defined here. API
+request/response schemas arrive in later steps.
 
 The category values are `MANDALA`, `PAUBHA`, and `THANGKA`. A permanent ID uses
 `KATHA-<CATEGORY>-<SEQUENCE>`, where the sequence is exactly six ASCII decimal
@@ -45,8 +45,8 @@ recorded physical custodian, whose identity must be stored separately; it does
 not imply possession by the current Core owner. Physical moves pass through
 `IN_TRANSIT`, including a direct handoff recorded as dispatch and receipt. A
 purchase or listing does not itself change custody. Listing status and resale
-inspection approval have separate contracts in later steps and are not valid
-values in these enums.
+inspection approval are separate from custody and are not valid values in these
+enums.
 
 The transition schemas validate action names and state pairs, not signer
 permission or live on-chain state. Registry instructions must verify the actual
@@ -76,6 +76,29 @@ bytes; persistence must ensure the document and commitment share their identitie
 and preserve prior reports. Later Registry instructions verify signer authority
 and anchor the commitment and verifier on-chain. These schemas validate shape and
 chronology only; they do not prove inspection or authorize an attestation.
+
+## Listings and exact payment values
+
+`listingStatusSchema` accepts `ACTIVE`, `CANCELLED`, `PURCHASED`, and `EXPIRED`.
+An active listing can already be ineligible after its expiry timestamp; `EXPIRED`
+records completed expiry recovery. Listing status does not change physical
+custody, verification, or inspection approval. Later Marketplace instructions
+validate live ownership, expiry, eligibility, and authorized transitions.
+
+`tokenAmountSchema` accepts canonical unsigned decimal strings from `"0"` through
+`"18446744073709551615"`, the full Solana `u64` range in token base units.
+`listingPriceSchema` uses the same bound but requires a positive amount. JSON
+numbers, signs, leading zeros, fractions, exponent notation, and overflow are
+rejected so client and server do not silently round token values. A six-decimal
+test-token amount of one whole token is `"1000000"` base units; decimal display
+and conversion belong at the application boundary.
+
+`basisPointsSchema` accepts integer numbers from 0 through 10,000.
+`marketplaceFeeRatesSchema` validates separate platform commission and secondary
+artist royalty rates and rejects a combined rate over 10,000 basis points. The
+Devnet simulation defaults are 250 and 500 basis points respectively. These
+contracts validate configuration shapes, not actual settlement; checked fee
+arithmetic and recipient verification belong to the Marketplace program.
 
 ```ts
 import { artworkCategorySchema, kathaIdSchema } from "@katha/shared";
