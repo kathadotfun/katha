@@ -24,3 +24,20 @@ export type {
   ArtworkOrigin,
   ArtworkPublicContent,
 } from "./artwork-domain.js";
+
+export {
+  artworkVerificationStateSchema,
+  artworkVerificationTransitionSchema,
+  physicalCustodyStateSchema,
+  physicalCustodyTransitionSchema,
+  artworkRegistrationStateSchema,
+  artworkRegistrationTransitionSchema,
+} from "./artwork-lifecycle.js";
+export type {
+  ArtworkVerificationState,
+  ArtworkVerificationTransition,
+  PhysicalCustodyState,
+  PhysicalCustodyTransition,
+  ArtworkRegistrationState,
+  ArtworkRegistrationTransition,
+} from "./artwork-lifecycle.js";
