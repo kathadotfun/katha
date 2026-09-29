@@ -34,10 +34,10 @@ bridge to the artwork record, not proof by itself.
 Katha is under active development. This repository currently contains the public
 product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
-orchestration, a minimal Next.js web scaffold, and a bare Hono API service. The
-artwork browsing and provenance experience, API behavior, database, and Solana
-program behavior described in the specification remain planned until implemented
-and tested.
+orchestration, a minimal Next.js web scaffold, a bare Hono API service, and the initial shared TypeScript package. The artwork
+browsing and provenance experience, API behavior, database, and Solana program
+behavior described in the specification remain planned until implemented and
+tested.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -61,6 +61,7 @@ outside the current scope.
 - [Workspace task orchestration](docs/development/turborepo.md)
 - [Next.js web application](docs/development/nextjs.md)
 - [Hono API service](docs/development/api.md)
+- [Shared TypeScript package](docs/development/shared-package.md)
 
 ## Repository policy
 
