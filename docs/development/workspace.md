@@ -71,5 +71,7 @@ See [pnpm settings](https://pnpm.io/settings),
 [version prefix settings](https://pnpm.io/settings/other#saveprefix).
 
 The web package supports local development, linting, route-aware type checking,
-and production builds. See the [Next.js application guide](nextjs.md) for commands.
-Other package commands will be added with the tools and packages they execute.
+and production builds. The API package supports development, linting, type checking,
+compilation, and graceful shutdown. See the [Next.js guide](nextjs.md) and
+[Hono API guide](api.md) for package commands. Other package commands will be added
+with the tools and packages they execute.
