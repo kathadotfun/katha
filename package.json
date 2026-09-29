@@ -24,6 +24,9 @@
     "build": "turbo run build",
     "lint:root": "eslint eslint.config.mjs",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test"
+    "test": "turbo run test",
+    "db:start": "docker compose up --detach --wait",
+    "db:status": "docker compose ps",
+    "db:stop": "docker compose down"
   }
 }

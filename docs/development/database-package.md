@@ -3,6 +3,8 @@
 `packages/db` is the Node-only workspace boundary for PostgreSQL access. The
 package currently contains only a buildable entrypoint; it defines no connection,
 ORM, tables, migrations, or query behavior. Those arrive in their planned steps.
+The [local PostgreSQL service](local-services.md) can run now; this package does
+not connect to it yet.
 
 ## Build and check
 
