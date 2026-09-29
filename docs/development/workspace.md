@@ -1,7 +1,8 @@
 # JavaScript workspace setup
 
-Status: the root workspace is initialized. Application and shared packages are
-added incrementally; this setup currently installs the workspace foundation.
+Status: the workspace includes `apps/web`, `apps/api`, `packages/shared`, and
+`packages/db`. Their implemented behavior is deliberately limited to the scaffolds
+documented below; product capabilities are added in later steps.
 
 ## Pinned tools
 
@@ -45,9 +46,9 @@ pnpm install --frozen-lockfile
 
 The generated lockfile has two YAML documents: package-manager dependencies
 (pnpm and its platform executables), followed by the workspace resolution. The
-workspace currently contains only the root package with no application dependencies.
-Keep both documents; dependencies enter manifests and the shared lockfile as their
-corresponding implementation is added.
+second document records the root package and each app/package importer, including
+packages with no runtime dependencies. Keep both documents and commit the generated
+lockfile with manifest changes.
 
 ## Workspace configuration
 
@@ -72,7 +73,7 @@ See [pnpm settings](https://pnpm.io/settings),
 
 The web package supports local development, linting, route-aware type checking,
 and production builds. The API package supports development, linting, type checking,
-compilation, and graceful shutdown. See the [Next.js guide](nextjs.md) and
-[Hono API guide](api.md) for package commands. Other package commands will be added
-with the tools and packages they execute. See the [shared package guide](shared-package.md)
-for its exports and build commands.
+compilation, and graceful shutdown. The shared and database packages provide
+buildable TypeScript entrypoints. See the [Next.js guide](nextjs.md), [Hono API
+guide](api.md), [shared package guide](shared-package.md), and [database package
+guide](database-package.md) for package details and commands.
