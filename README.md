@@ -36,9 +36,9 @@ product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
 orchestration, a minimal Next.js web scaffold, a bare Hono API service, an initial
 shared TypeScript package, a Node-only database package boundary, a Solana client
-package scaffold, and an empty Anchor Registry program. Artwork browsing and
-provenance, API behavior, database behavior, and Solana client/program behavior
-remain planned until implemented and tested.
+package scaffold, and empty Anchor Registry and Marketplace programs. Artwork
+browsing and provenance, API behavior, database behavior, and Solana client/program
+behavior remain planned until implemented and tested.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
