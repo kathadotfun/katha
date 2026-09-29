@@ -35,10 +35,10 @@ Katha is under active development. This repository currently contains the public
 product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
 orchestration, a minimal Next.js web scaffold, a bare Hono API service, an initial
-shared TypeScript package, and a Node-only database package boundary. The artwork
+shared TypeScript package, a Node-only database package boundary, and a Solana package scaffold. The artwork
 browsing and provenance experience, API behavior, database behavior, and Solana
-program behavior described in the specification remain planned until implemented
-and tested.
+client/program behavior described in the specification remain planned until
+implemented and tested.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -64,6 +64,7 @@ outside the current scope.
 - [Hono API service](docs/development/api.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
+- [Solana package boundary](docs/development/solana-package.md)
 
 ## Repository policy
 

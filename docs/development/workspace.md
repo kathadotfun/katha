@@ -73,7 +73,7 @@ See [pnpm settings](https://pnpm.io/settings),
 
 The web package supports local development, linting, route-aware type checking,
 and production builds. The API package supports development, linting, type checking,
-compilation, and graceful shutdown. The shared and database packages provide
-buildable TypeScript entrypoints. See the [Next.js guide](nextjs.md), [Hono API
+compilation, and graceful shutdown. The shared, database, and Solana packages provide buildable TypeScript
+entrypoints. See the [Next.js guide](nextjs.md), [Hono API
 guide](api.md), [shared package guide](shared-package.md), and [database package
 guide](database-package.md) for package details and commands.
