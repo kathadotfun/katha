@@ -1,0 +1,10 @@
+{
+  "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+  "metadata": {
+    "name": "katha_registry",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Katha artwork registry program"
+  },
+  "instructions": []
+}

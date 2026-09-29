@@ -1,0 +1,17 @@
+[toolchain]
+anchor_version = "1.2.0"
+solana_version = "4.1.2"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+katha_registry = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[workspace]
+members = ["programs/*"]
