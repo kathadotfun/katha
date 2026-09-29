@@ -6,8 +6,9 @@ not require secrets or local helper files.
 
 The workspace job installs the pinned Node and pnpm versions from the repository,
 requires the committed lockfile, then checks formatting, linting, types, builds,
-and the safe Docker Compose configuration. The Rust job selects Rust 1.95.0 and
-checks formatting and host compilation of both empty Anchor programs.
+the shared-domain tests, and the safe Docker Compose configuration. The Rust job
+selects Rust 1.95.0 and checks formatting and host compilation of both empty
+Anchor programs.
 
 Run the same checks locally from the repository root:
 
@@ -17,6 +18,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm build
+pnpm test
 docker compose --env-file .env.example config --quiet
 cargo fmt --all -- --check
 cargo check --workspace --locked

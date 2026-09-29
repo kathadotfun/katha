@@ -28,6 +28,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build
+      - run: pnpm test
       - name: Validate local service configuration
         run: docker compose --env-file .env.example config --quiet
 
