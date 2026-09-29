@@ -66,6 +66,7 @@ outside the current scope.
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Local PostgreSQL service](docs/development/local-services.md)
+- [Foundation CI](docs/development/ci.md)
 - [Solana package boundary](docs/development/solana-package.md)
 - [Anchor program workspace](docs/development/anchor-workspace.md)
 

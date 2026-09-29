@@ -1,0 +1,44 @@
+name: Foundation checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/setup@v3
+        with:
+          require-lockfile: true
+      - name: Verify pinned tools
+        run: |
+          test "$(node --version)" = "v24.21.0"
+          test "$(pnpm --version)" = "12.6.0"
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - name: Validate local service configuration
+        run: docker compose --env-file .env.example config --quiet
+
+  rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt
+      - run: cargo fmt --all -- --check
+      - run: cargo check --workspace --locked
