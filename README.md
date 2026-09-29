@@ -57,6 +57,7 @@ outside the current scope.
 - [Architecture overview](docs/architecture/overview.md)
 - [Artwork lifecycle and state separation](docs/architecture/artwork-lifecycle.md)
 - [Trust and lifecycle decision](docs/decisions/0001-trust-and-lifecycle.md)
+- [Fresh-checkout local setup](docs/development/getting-started.md)
 - [Workspace setup](docs/development/workspace.md)
 - [TypeScript configuration](docs/development/typescript.md)
 - [Linting and formatting](docs/development/code-quality.md)
