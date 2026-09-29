@@ -6,5 +6,8 @@
   "engines": {
     "node": "24.21.0",
     "pnpm": "12.6.0"
+  },
+  "devDependencies": {
+    "typescript": "6.0.3"
   }
 }
