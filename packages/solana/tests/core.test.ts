@@ -4,7 +4,9 @@ import {
 } from "@metaplex-foundation/mpl-core";
 import { getAssetV1AccountDataSerializer } from "@metaplex-foundation/mpl-core/dist/src/generated/types/assetV1AccountData.js";
 import { getCollectionV1AccountDataSerializer } from "@metaplex-foundation/mpl-core/dist/src/generated/types/collectionV1AccountData.js";
+import { publicKey } from "@metaplex-foundation/umi";
 import { AccountRole, address } from "@solana/kit";
+import type { Address } from "@solana/kit";
 import { describe, expect, it } from "vitest";
 import {
   buildCreateCoreCollectionInstruction,
@@ -20,7 +22,7 @@ const authority = address("BPFLoaderUpgradeab1e11111111111111111111111");
 const owner = address("11111111111111111111111111111111");
 const uri = "https://katha.fun/metadata/collection.json";
 
-function encodedAccount(accountAddress: typeof collection, data: Uint8Array) {
+function encodedAccount(accountAddress: Address, data: Uint8Array) {
   return {
     exists: true,
     address: accountAddress,
@@ -35,18 +37,18 @@ function encodedAccount(accountAddress: typeof collection, data: Uint8Array) {
 const collectionData = () =>
   getCollectionV1AccountDataSerializer().serialize({
     key: Key.CollectionV1,
-    updateAuthority: authority,
+    updateAuthority: publicKey(authority),
     name: "Katha",
     uri,
     numMinted: 1,
     currentSize: 1,
   });
 
-const assetData = (collectionAddress: string = collection) =>
+const assetData = (collectionAddress: Address = collection) =>
   getAssetV1AccountDataSerializer().serialize({
     key: Key.AssetV1,
-    owner,
-    updateAuthority: { __kind: "Collection", fields: [collectionAddress] },
+    owner: publicKey(owner),
+    updateAuthority: { __kind: "Collection", fields: [publicKey(collectionAddress)] },
     name: "Artwork",
     uri: "https://katha.fun/metadata/artwork.json",
     seq: null,
@@ -70,7 +72,7 @@ describe("Core collection builder", () => {
     ]);
     expect(
       getCreateCollectionV2InstructionDataSerializer().deserialize(
-        instruction.data!,
+        Uint8Array.from(instruction.data!),
       )[0],
     ).toMatchObject({
       discriminator: 21,

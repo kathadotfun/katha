@@ -22,9 +22,10 @@
     "format:write": "prettier --write .",
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "lint:root": "eslint eslint.config.mjs",
+    "lint:root": "eslint eslint.config.mjs scripts",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "program:test": "node scripts/test-core-cpi.mjs",
     "db:start": "docker compose up --detach --wait",
     "db:status": "docker compose ps",
     "db:stop": "docker compose down"

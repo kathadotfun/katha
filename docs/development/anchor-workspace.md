@@ -8,8 +8,9 @@ The on-chain workspace contains two independent Anchor programs:
 | Marketplace | `programs/katha_marketplace` | Listings, sale eligibility, and settlement                         |
 
 Each program has its own crate, public development ID, and generated IDL. Both
-currently have no instructions or account state; their behavior is added in later
-implementation steps.
+currently have no production instructions or account state; their behavior is added
+in later implementation steps. The Registry has a feature-gated, local-only
+Core CPI probe for the [program test harness](program-testing.md).
 
 ## Pinned tools
 
@@ -51,3 +52,6 @@ Rust workspace checks run separately from the TypeScript task graph:
 cargo metadata --no-deps --format-version 1
 cargo fmt --all -- --check
 ```
+
+The normal `anchor build` omits the `core-cpi-test` feature, so its Registry
+IDL remains empty. Run `pnpm program:test` for the isolated Core CPI gate.

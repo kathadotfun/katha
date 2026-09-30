@@ -11,6 +11,7 @@ name = "katha_registry"
 
 [features]
 default = []
+core-cpi-test = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-log-ix-name = []
@@ -22,6 +23,7 @@ custom-panic = []
 
 [dependencies]
 anchor-lang = "=1.2.0"
+mpl-core = "=0.12.1"
 
 
 [lints.rust]
