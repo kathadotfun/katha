@@ -57,7 +57,7 @@ export const conditionReportDocumentSchema = z
   });
 export type ConditionReportDocument = z.infer<typeof conditionReportDocumentSchema>;
 
-// Hash the exact canonical document bytes later; the hash is outside that document.
+// The canonical document hash is outside the document to avoid self-reference.
 export const conditionReportCommitmentSchema = z.strictObject({
   reportId: z.uuid(),
   kathaId: kathaIdSchema,

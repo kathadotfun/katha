@@ -100,6 +100,37 @@ Devnet simulation defaults are 250 and 500 basis points respectively. These
 contracts validate configuration shapes, not actual settlement; checked fee
 arithmetic and recipient verification belong to the Marketplace program.
 
+## Canonical document commitments
+
+`canonicalDocumentBytes` turns a validated JSON value into UTF-8 bytes using
+[JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785.html)
+serialization rules: object keys sort by UTF-16 code unit, nested objects sort
+recursively, and array order remains unchanged. There is no BOM, whitespace, or
+trailing newline. The shared implementation rejects unsupported or lossy values,
+including `undefined`, non-finite or unsafe integers, sparse arrays, non-plain
+objects, accessors, cycles, symbol fields, and unpaired Unicode surrogates.
+Amounts that may exceed JavaScript's safe integer range remain decimal strings.
+
+Validate each document with its strict domain schema before canonicalization.
+For public metadata, include only approved public fields; a private condition
+report is a different document and must never be merged into public metadata.
+The generic byte function cannot decide which content is approved for publication.
+
+`sha256Hex` returns a lowercase SHA-256 digest of the **provided bytes** using Web
+Crypto. Store or publish the exact `canonicalDocumentBytes` output that was
+hashed, and compare those same bytes against the Registry commitment later.
+Changing a field or reordering media changes the digest; reordering object keys
+does not. Document versioning, storage, and on-chain anchoring arrive in later
+steps.
+
+```ts
+import { artworkSchema, canonicalDocumentBytes, sha256Hex } from "@katha/shared";
+
+declare const input: unknown;
+const bytes = canonicalDocumentBytes(artworkSchema.parse(input));
+const hash = await sha256Hex(bytes);
+```
+
 ```ts
 import { artworkCategorySchema, kathaIdSchema } from "@katha/shared";
 

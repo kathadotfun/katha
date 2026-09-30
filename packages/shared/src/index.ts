@@ -69,3 +69,5 @@ export type {
   MarketplaceFeeRates,
   TokenAmount,
 } from "./marketplace.js";
+
+export { canonicalDocumentBytes, sha256Hex } from "./canonical-document.js";
