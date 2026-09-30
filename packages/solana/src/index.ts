@@ -12,3 +12,10 @@ export type {
   KathaTransactionVersion,
   WalletTransactionVersion,
 } from "./client.js";
+export {
+  buildCreateCoreCollectionInstruction,
+  CORE_PROGRAM_ADDRESS,
+  readCoreAsset,
+  readCoreCollection,
+} from "./core.js";
+export type { CoreAssetView, CoreCollectionInput, CoreCollectionView } from "./core.js";

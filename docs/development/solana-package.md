@@ -61,3 +61,29 @@ pnpm --filter @katha/solana build
 
 The tests use synthetic account responses and make no RPC calls to a live
 cluster. Build output remains in the ignored `packages/solana/dist` directory.
+
+## Metaplex Core boundary
+
+Step 025 pins `@metaplex-foundation/mpl-core` 1.10.0 and Umi 1.6.0 only
+inside `src/core.ts`. Public inputs and results use Kit `Address` and
+`Instruction` types; callers do not need Umi contexts or signers. The Core
+program address comes from the SDK.
+
+`buildCreateCoreCollectionInstruction` produces one unsigned Core `CreateCollectionV2`
+instruction from a new collection address, payer, update authority, name, and
+public HTTPS metadata URI. The collection address and payer are required
+signers. The caller must supply and authorize those signers when composing a
+transaction later; this builder does not create keypairs or submit a transaction.
+It does not add plugins, fees, or a collection deployment workflow.
+
+`readCoreCollection` checks the account address, Core program owner, CollectionV1
+discriminator, and expected update authority. `readCoreAsset` checks the address,
+Core program owner, AssetV1 discriminator, and current Collection update-authority
+link against the Registry-supplied expected collection. It returns the current
+Core owner separately. A matching collection link is a current-state check:
+Core can move an asset between collections when authorized, so Registry binding
+and mint-time uniqueness must still be enforced on chain in later steps.
+Neither function infers authenticity from a metadata URI. Callers fetch
+finalized encoded accounts with `fetchOwnedEncodedAccount` and provide the
+expected registry addresses. Synthetic tests cover substituted accounts,
+collection mismatch, authority mismatch, malformed data, and signer roles.
