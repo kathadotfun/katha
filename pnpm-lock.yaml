@@ -262,6 +262,9 @@ importers:
 
   packages/solana:
     dependencies:
+      '@katha/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@metaplex-foundation/mpl-core':
         specifier: 1.10.0
         version: 1.10.0(@metaplex-foundation/umi@1.6.0)(@noble/hashes@1.8.0)

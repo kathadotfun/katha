@@ -24,8 +24,11 @@ import {
 import {
   ArtworkCategory,
   getArtworkRecordDecoder,
-  getRegisterArtworkInstructionAsync,
 } from "../src/generated/registry/index.js";
+import {
+  buildInitializePlatformTransaction,
+  buildRegisterArtworkTransaction,
+} from "../src/registration.js";
 
 const REGISTRY = address("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
 const SYSTEM = address("11111111111111111111111111111111");
@@ -611,7 +614,40 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     ).rejects.toThrow();
     remainsAbsent();
 
-    await client.sendTransaction([instruction()]);
+    const lifetime = (await client.rpc.getLatestBlockhash().send()).value;
+    const context = {
+      cluster: "localnet" as const,
+      feePayerAddress: bootstrap.address,
+      authorityAddress: bootstrap.address,
+      supportedTransactionVersions: new Set([0] as const),
+      lifetime,
+      // This fixture does not advance slots; LiteSVM exposes no block-height RPC.
+      currentBlockHeight: 0n,
+    };
+    const bootstrapProgram = client.svm.getAccount(REGISTRY);
+    const bootstrapData = client.svm.getAccount(dataAddress);
+    const bootstrapCollection = client.svm.getAccount(collection.address);
+    if (
+      !bootstrapProgram.exists ||
+      !bootstrapData.exists ||
+      !bootstrapCollection.exists
+    )
+      throw new Error("Bootstrap account snapshots are missing");
+    const initialized = await buildInitializePlatformTransaction(context, {
+      programAccount: bootstrapProgram,
+      programDataAccount: bootstrapData,
+      collectionAccount: bootstrapCollection,
+      registrationAuthority: registration.address,
+      verifierAuthority: verifier.address,
+      custodyAuthority: custody.address,
+      treasury: treasury.address,
+    });
+    expect(Array.from(initialized.instruction.data)).toEqual(
+      Array.from(instruction().data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([bootstrap], initialized.instruction),
+    ]);
     const config = client.svm.getAccount(pdas.config);
     if (!config.exists) throw new Error("KathaConfig was not created");
     expect(config.programAddress).toBe(REGISTRY);
@@ -725,20 +761,29 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       await expect(client.sendTransaction([invalid])).rejects.toThrow();
       absent();
     }
-    const generatedRegistration = await getRegisterArtworkInstructionAsync({
-      registrationAuthority: registration,
-      kathaId,
-      artistId,
-      creatorWallet: null,
-      category: ArtworkCategory.Paubha,
-      creationYear: 2025,
-      authorshipEvidenceHash: new Uint8Array(32).fill(7),
-    });
+    const preparedRegistration = await buildRegisterArtworkTransaction(
+      {
+        ...context,
+        authorityAddress: registration.address,
+      },
+      config,
+      {
+        kathaId,
+        artistId,
+        creatorWallet: null,
+        category: "PAUBHA",
+        creationYear: 2025,
+        authorshipEvidenceHash: "07".repeat(32),
+      },
+    );
+    const generatedRegistration = preparedRegistration.instruction;
     expect(Array.from(generatedRegistration.data)).toEqual(Array.from(register().data));
     expect(
       generatedRegistration.accounts.map(({ address, role }) => ({ address, role })),
     ).toEqual(register().accounts.map(({ address, role }) => ({ address, role })));
-    await client.sendTransaction([generatedRegistration]);
+    await client.sendTransaction([
+      addSignersToInstruction([registration], generatedRegistration),
+    ]);
     const record = client.svm.getAccount(artwork);
     if (!record.exists) throw new Error("ArtworkRecord was not created");
     expect(record.programAddress).toBe(REGISTRY);

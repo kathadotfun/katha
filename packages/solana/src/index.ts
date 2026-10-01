@@ -19,3 +19,12 @@ export {
   readCoreCollection,
 } from "./core.js";
 export type { CoreAssetView, CoreCollectionInput, CoreCollectionView } from "./core.js";
+export {
+  buildInitializePlatformTransaction,
+  buildRegisterArtworkTransaction,
+} from "./registration.js";
+export type {
+  RegistryTransactionContext,
+  PlatformInitializationInput,
+  ArtworkRegistrationInput,
+} from "./registration.js";

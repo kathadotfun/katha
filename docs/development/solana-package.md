@@ -54,6 +54,12 @@ those checks in their own steps.
 
 ## Build and check
 
+Initialization and artwork registration have [unsigned transaction builders](registration-transactions.md)
+that compose generated Registry instructions with caller-provided account
+snapshots, fee payer, signing authority, cluster, and blockhash lifetime.
+Build the shared workspace package before checking this package in isolation;
+`pnpm build` handles dependency order.
+
 ```bash
 pnpm --filter @katha/solana lint
 pnpm --filter @katha/solana typecheck
