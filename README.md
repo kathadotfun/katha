@@ -82,6 +82,7 @@ outside the current scope.
 - [Registry Core asset minting](docs/development/registry-mint.md)
 - [Generated Solana program clients](docs/development/program-clients.md)
 - [Registry registration transactions](docs/development/registration-transactions.md)
+- [Verifier transaction preparation](docs/development/attestation-transactions.md)
 
 ## Repository policy
 

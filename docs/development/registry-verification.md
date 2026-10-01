@@ -25,8 +25,11 @@ only its approved commitment belongs in this trust record.
 `pnpm program:test` uses synthetic signers in LiteSVM to test authorization,
 wrong configuration and artwork relationships, hash mismatch, wrong collection,
 identity mismatch, successful attestation, and duplicate rejection. The normal
-Anchor build generates `target/idl/katha_registry.json`; generated application
-clients are scheduled for the later client-generation step.
+Anchor build generates `target/idl/katha_registry.json`. The reviewed IDL feeds
+generated clients; the [verification transaction builder](attestation-transactions.md)
+validates caller-supplied account snapshots and the expected evidence hash,
+then prepares an unsigned instruction/message for wallet approval. The local
+lifecycle executes its prepared instruction against LiteSVM.
 
 The checks use [Anchor account constraints](https://www.anchor-lang.com/docs/references/account-constraints)
 and an [Anchor event](https://www.anchor-lang.com/docs/features/events).

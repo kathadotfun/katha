@@ -1,3 +1,8 @@
+import {
+  canonicalDocumentBytes,
+  sha256Hex,
+  type ConditionReportDocument,
+} from "@katha/shared";
 import { createHash } from "node:crypto";
 import {
   AccountRole,
@@ -29,6 +34,12 @@ import {
   buildInitializePlatformTransaction,
   buildRegisterArtworkTransaction,
 } from "../src/registration.js";
+
+import {
+  buildVerifyArtworkTransaction,
+  buildInitializeConditionTransaction,
+  buildRecordUnmintedConditionTransaction,
+} from "../src/attestation.js";
 
 const REGISTRY = address("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
 const SYSTEM = address("11111111111111111111111111111111");
@@ -911,7 +922,19 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     client.svm.setAccount(record);
     client.svm.expireBlockhash();
 
-    await client.sendTransaction([verify()]);
+    const verifierContext = { ...context, authorityAddress: verifier.address };
+    const verifierAccounts = { configAccount: config, artworkAccount: record };
+    const preparedVerification = await buildVerifyArtworkTransaction(
+      verifierContext,
+      verifierAccounts,
+      { kathaId, expectedAuthorshipEvidenceHash: "07".repeat(32) },
+    );
+    expect(Array.from(preparedVerification.instruction.data)).toEqual(
+      Array.from(verify().data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([verifier], preparedVerification.instruction),
+    ]);
     const attestation = client.svm.getAccount(verification);
     if (!attestation.exists) throw new Error("ArtworkVerification was not created");
     expect(attestation.programAddress).toBe(REGISTRY);
@@ -1269,8 +1292,50 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       });
     const [conditionReport1] = await reportPda(conditionId1);
     const [conditionReport2] = await reportPda(conditionId2);
-    const reportHash1 = new Uint8Array(32).fill(21);
-    const reportHash2 = new Uint8Array(32).fill(22);
+    const document1: ConditionReportDocument = {
+      reportId: "123e4567-e89b-42d3-a456-426614174001",
+      kathaId,
+      grade: "GOOD",
+      reason: "INITIAL_VERIFICATION",
+      inspectorId: "123e4567-e89b-42d3-a456-426614174009",
+      verifierWallet: verifier.address,
+      inspectedAt: new Date(inspectionTime * 1000).toISOString(),
+      reportedAt: new Date(Number(clock.unixTimestamp) * 1000).toISOString(),
+      notes: "Synthetic initial inspection",
+      mediaHashes: ["09".repeat(32)],
+    };
+    const document2: ConditionReportDocument = {
+      ...document1,
+      reportId: "123e4567-e89b-42d3-a456-426614174002",
+      grade: "FAIR",
+      reason: "PRE_SALE",
+      notes: "Synthetic pre-sale inspection",
+    };
+    const input1 = {
+      document: document1,
+      commitment: {
+        reportId: document1.reportId,
+        kathaId,
+        reportHash: await sha256Hex(canonicalDocumentBytes(document1)),
+      },
+      currentUnixTimestamp: clock.unixTimestamp,
+    };
+    const input2 = {
+      document: document2,
+      commitment: {
+        reportId: document2.reportId,
+        kathaId,
+        reportHash: await sha256Hex(canonicalDocumentBytes(document2)),
+      },
+      currentUnixTimestamp: clock.unixTimestamp,
+      expectedVersion: 1,
+    };
+    const reportHash1 = new Uint8Array(
+      Buffer.from(input1.commitment.reportHash, "hex"),
+    );
+    const reportHash2 = new Uint8Array(
+      Buffer.from(input2.commitment.reportHash, "hex"),
+    );
     const condition = (
       action: "initialize_condition" | "record_unminted_condition",
       reportId: Uint8Array,
@@ -1487,7 +1552,18 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       await expect(client.sendTransaction([invalid])).rejects.toThrow();
       conditionAbsent();
     }
-    await client.sendTransaction([initialCondition()]);
+    const conditionAccounts = { ...verifierAccounts, verificationAccount: attestation };
+    const preparedInitial = await buildInitializeConditionTransaction(
+      verifierContext,
+      conditionAccounts,
+      input1,
+    );
+    expect(Array.from(preparedInitial.instruction.data)).toEqual(
+      Array.from(initialCondition().data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([verifier], preparedInitial.instruction),
+    ]);
     const firstConditionHead = client.svm.getAccount(conditionHead);
     const firstConditionReport = client.svm.getAccount(conditionReport1);
     if (!firstConditionHead.exists || !firstConditionReport.exists) {
@@ -1508,7 +1584,7 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       conditionReport1,
     );
     expect(Array.from(firstConditionHead.data.subarray(76, 108))).toEqual(
-      Array(32).fill(21),
+      Array.from(reportHash1),
     );
     expect(firstConditionReport.data.length).toBe(201);
     expect(getAddressDecoder().decode(firstConditionReport.data.subarray(8, 40))).toBe(
@@ -1524,7 +1600,7 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       Array.from(conditionId1),
     );
     expect(Array.from(firstConditionReport.data.subarray(60, 92))).toEqual(
-      Array(32).fill(21),
+      Array.from(reportHash1),
     );
     expect(firstConditionReport.data[92]).toBe(1);
     expect(firstConditionReport.data[93]).toBe(0);
@@ -1579,7 +1655,21 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       ]),
     ).rejects.toThrow();
     unchangedConditionHead();
-    await client.sendTransaction([followupCondition()]);
+    const preparedFollowup = await buildRecordUnmintedConditionTransaction(
+      verifierContext,
+      {
+        ...conditionAccounts,
+        conditionHeadAccount: firstConditionHead,
+        currentReportAccount: firstConditionReport,
+      },
+      input2,
+    );
+    expect(Array.from(preparedFollowup.instruction.data)).toEqual(
+      Array.from(followupCondition().data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([verifier], preparedFollowup.instruction),
+    ]);
     const secondConditionHead = client.svm.getAccount(conditionHead);
     const secondConditionReport = client.svm.getAccount(conditionReport2);
     if (!secondConditionHead.exists || !secondConditionReport.exists) {
@@ -1595,7 +1685,7 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       conditionReport2,
     );
     expect(Array.from(secondConditionHead.data.subarray(76, 108))).toEqual(
-      Array(32).fill(22),
+      Array.from(reportHash2),
     );
     expect(secondConditionReport.data[92]).toBe(2);
     expect(secondConditionReport.data[93]).toBe(1);

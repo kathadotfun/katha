@@ -36,8 +36,10 @@ post-mint inspections can affect resale eligibility.
 `pnpm program:test` exercises version 1 and 2, account relationships,
 authorization, invalid inputs, duplicate IDs/versions, rollback, historical
 preservation, and the post-mint boundary using temporary test identities. The
-normal Anchor build generates `target/idl/katha_registry.json`. Application
-client generation is scheduled for a later step.
+normal Anchor build generates `target/idl/katha_registry.json`. The generated
+clients support [unsigned condition transaction builders](attestation-transactions.md)
+that validate canonical documents, commitments, verifier roles, and current
+account relationships before composing these two pre-mint instructions.
 
 See the [Anchor account constraints](https://www.anchor-lang.com/docs/references/account-constraints)
 and [account space reference](https://www.anchor-lang.com/docs/references/space).

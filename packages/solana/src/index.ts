@@ -23,6 +23,19 @@ export {
   buildInitializePlatformTransaction,
   buildRegisterArtworkTransaction,
 } from "./registration.js";
+export {
+  buildVerifyArtworkTransaction,
+  buildInitializeConditionTransaction,
+  buildRecordUnmintedConditionTransaction,
+} from "./attestation.js";
+export type {
+  VerifierArtworkAccounts,
+  VerifiedArtworkAccounts,
+  UnmintedConditionAccounts,
+  ArtworkVerificationInput,
+  ConditionAttestationInput,
+  UnmintedConditionInput,
+} from "./attestation.js";
 export type {
   RegistryTransactionContext,
   PlatformInitializationInput,

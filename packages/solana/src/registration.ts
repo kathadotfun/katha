@@ -75,13 +75,16 @@ export type ArtworkRegistrationInput = Pick<
 > &
   Pick<ArtistAttribution, "artistId" | "creatorWallet">;
 
-function nonzeroAddress(value: Address): Address {
+export function nonzeroAddress(value: Address): Address {
   const result = address(value);
   if (result === SYSTEM) throw new TypeError("Wallet or role address must not be zero");
   return result;
 }
 
-function unsignedMessage(context: RegistryTransactionContext, generated: Instruction) {
+export function unsignedMessage(
+  context: RegistryTransactionContext,
+  generated: Instruction,
+) {
   const version = selectKathaTransactionVersion(
     context.cluster,
     context.supportedTransactionVersions,
@@ -202,12 +205,8 @@ export async function buildInitializePlatformTransaction(
   });
 }
 
-/** Registers an immutable identity; it neither mints Core nor changes custody. */
-export async function buildRegisterArtworkTransaction(
-  context: RegistryTransactionContext,
-  configAccount: EncodedAccount,
-  input: ArtworkRegistrationInput,
-) {
+// Internal account validation shared by Registry operation builders.
+export async function readRegistryConfiguration(configAccount: EncodedAccount) {
   const [config, configBump] = await findConfigPda();
   const [collectionAuthority, collectionAuthorityBump] =
     await findCollectionAuthorityPda();
@@ -228,12 +227,21 @@ export async function buildRegisterArtworkTransaction(
   if (
     state.bump !== configBump ||
     state.collectionAuthority !== collectionAuthority ||
-    state.collectionAuthorityBump !== collectionAuthorityBump ||
-    state.registrationAuthority !== nonzeroAddress(context.authorityAddress)
+    state.collectionAuthorityBump !== collectionAuthorityBump
   )
-    throw new TypeError(
-      "Registration authority or configuration PDA relationship is invalid",
-    );
+    throw new TypeError("Configuration PDA relationship is invalid");
+  return { config, state };
+}
+
+/** Registers an immutable identity; it neither mints Core nor changes custody. */
+export async function buildRegisterArtworkTransaction(
+  context: RegistryTransactionContext,
+  configAccount: EncodedAccount,
+  input: ArtworkRegistrationInput,
+) {
+  const { config, state } = await readRegistryConfiguration(configAccount);
+  if (state.registrationAuthority !== nonzeroAddress(context.authorityAddress))
+    throw new TypeError("Registration authority is invalid");
 
   const kathaId = artworkSchema.shape.kathaId.parse(input.kathaId);
   const category = artworkSchema.shape.category.parse(input.category);
