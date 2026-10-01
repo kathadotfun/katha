@@ -41,6 +41,16 @@ import {
   buildRecordUnmintedConditionTransaction,
 } from "../src/attestation.js";
 
+import {
+  buildInitializeCustodyTransaction,
+  buildTransitionCustodyTransaction,
+  buildInitializeMetadataTransaction,
+  buildReviseUnmintedMetadataTransaction,
+  buildReviseMintedMetadataTransaction,
+  buildMintArtworkTransaction,
+  simulateRegistryTransaction,
+} from "../src/lifecycle.js";
+
 const REGISTRY = address("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
 const SYSTEM = address("11111111111111111111111111111111");
 const UPGRADEABLE_LOADER = address("BPFLoaderUpgradeab1e11111111111111111111111");
@@ -984,8 +994,26 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     const [revision3] = await metadataPda("metadata-version", 3);
     const uri1 = "https://katha.fun/metadata/000001.json";
     const uri2 = "https://katha.fun/metadata/000001-v2.json";
-    const hash1 = new Uint8Array(32).fill(11);
-    const hash2 = new Uint8Array(32).fill(12);
+    const metadataBytes1 = canonicalDocumentBytes({
+      kathaId,
+      title: "Synthetic original artwork",
+    });
+    const metadataBytes2 = canonicalDocumentBytes({
+      kathaId,
+      title: "Synthetic revised artwork",
+    });
+    const hash1 = new Uint8Array(Buffer.from(await sha256Hex(metadataBytes1), "hex"));
+    const hash2 = new Uint8Array(Buffer.from(await sha256Hex(metadataBytes2), "hex"));
+    const lifecycleContext = async (authorityAddress: Address) => ({
+      ...context,
+      authorityAddress,
+      lifetime: (await client.rpc.getLatestBlockhash().send()).value,
+    });
+    const localAccount = (accountAddress: Address) => {
+      const snapshot = client.svm.getAccount(accountAddress);
+      if (!snapshot.exists) throw new Error("Required lifecycle snapshot missing");
+      return snapshot;
+    };
     const metadata = (
       action: "initialize_metadata" | "revise_unminted_metadata",
       targetRevision: Address,
@@ -1094,7 +1122,18 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       await expect(client.sendTransaction([invalid])).rejects.toThrow();
       noMetadata();
     }
-    await client.sendTransaction([initial()]);
+    const preparedMetadata = await buildInitializeMetadataTransaction(
+      await lifecycleContext(registration.address),
+      verifierAccounts,
+      { kathaId, documentBytes: metadataBytes1, uri: uri1 },
+    );
+    expect(Array.from(preparedMetadata.instruction.data)).toEqual(
+      Array.from(initial().data),
+    );
+    noMetadata();
+    await client.sendTransaction([
+      addSignersToInstruction([registration], preparedMetadata.instruction),
+    ]);
     const firstHead = client.svm.getAccount(head);
     const firstRevision = client.svm.getAccount(revision1);
     if (!firstHead.exists || !firstRevision.exists) {
@@ -1110,7 +1149,7 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       ),
     ).toBe(1);
     expect(getAddressDecoder().decode(firstHead.data.subarray(44, 76))).toBe(revision1);
-    expect(Array.from(firstHead.data.subarray(76, 108))).toEqual(Array(32).fill(11));
+    expect(Array.from(firstHead.data.subarray(76, 108))).toEqual(Array.from(hash1));
     expect(firstRevision.data.length).toBe(321);
     expect(getAddressDecoder().decode(firstRevision.data.subarray(8, 40))).toBe(
       artwork,
@@ -1121,7 +1160,7 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
         true,
       ),
     ).toBe(1);
-    expect(Array.from(firstRevision.data.subarray(44, 76))).toEqual(Array(32).fill(11));
+    expect(Array.from(firstRevision.data.subarray(44, 76))).toEqual(Array.from(hash1));
     expect(readBorshString(firstRevision.data, 76).value).toBe(uri1);
     await expect(client.sendTransaction([initial()])).rejects.toThrow();
 
@@ -1199,7 +1238,22 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     client.svm.setAccount(record);
     headUnchanged();
     client.svm.expireBlockhash();
-    await client.sendTransaction([revise()]);
+    const metadataAccounts = {
+      ...verifierAccounts,
+      metadataHeadAccount: firstHead,
+      currentRevisionAccount: firstRevision,
+    };
+    const preparedRevision = await buildReviseUnmintedMetadataTransaction(
+      await lifecycleContext(registration.address),
+      metadataAccounts,
+      { kathaId, expectedVersion: 1, documentBytes: metadataBytes2, uri: uri2 },
+    );
+    expect(Array.from(preparedRevision.instruction.data)).toEqual(
+      Array.from(revise().data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([registration], preparedRevision.instruction),
+    ]);
     const secondHead = client.svm.getAccount(head);
     const secondRevision = client.svm.getAccount(revision2);
     if (!secondHead.exists || !secondRevision.exists) {
@@ -1214,7 +1268,7 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     expect(getAddressDecoder().decode(secondHead.data.subarray(44, 76))).toBe(
       revision2,
     );
-    expect(Array.from(secondHead.data.subarray(76, 108))).toEqual(Array(32).fill(12));
+    expect(Array.from(secondHead.data.subarray(76, 108))).toEqual(Array.from(hash2));
     expect(readBorshString(secondRevision.data, 76).value).toBe(uri2);
     const preserved = client.svm.getAccount(revision1);
     expect(preserved.exists && Array.from(preserved.data)).toEqual(
@@ -1225,7 +1279,18 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       Array.from(record.data),
     );
     const relocatedUri = "https://katha.fun/metadata/000001-relocated.json";
-    await client.sendTransaction([revise(2, 3, hash2, relocatedUri, revision3)]);
+    const preparedRelocation = await buildReviseUnmintedMetadataTransaction(
+      await lifecycleContext(registration.address),
+      {
+        ...verifierAccounts,
+        metadataHeadAccount: secondHead,
+        currentRevisionAccount: secondRevision,
+      },
+      { kathaId, expectedVersion: 2, documentBytes: metadataBytes2, uri: relocatedUri },
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([registration], preparedRelocation.instruction),
+    ]);
     const thirdHead = client.svm.getAccount(head);
     const thirdRevision = client.svm.getAccount(revision3);
     if (!thirdHead.exists || !thirdRevision.exists) {
@@ -1238,7 +1303,7 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       ),
     ).toBe(3);
     expect(getAddressDecoder().decode(thirdHead.data.subarray(44, 76))).toBe(revision3);
-    expect(Array.from(thirdHead.data.subarray(76, 108))).toEqual(Array(32).fill(12));
+    expect(Array.from(thirdHead.data.subarray(76, 108))).toEqual(Array.from(hash2));
     expect(readBorshString(thirdRevision.data, 76).value).toBe(relocatedUri);
     const preservedSecond = client.svm.getAccount(revision2);
     expect(preservedSecond.exists && Array.from(preservedSecond.data)).toEqual(
@@ -1861,7 +1926,25 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     custodyAbsent();
     client.svm.setAccount(record);
     client.svm.expireBlockhash();
-    await client.sendTransaction([initialCustody()]);
+    const preparedCustody = await buildInitializeCustodyTransaction(
+      await lifecycleContext(custody.address),
+      verifierAccounts,
+      {
+        kathaId,
+        transition: {
+          action: "ATTEST_KATHA_CUSTODY",
+          from: "UNKNOWN",
+          to: "KATHA_HELD",
+        },
+        collector: null,
+      },
+    );
+    expect(Array.from(preparedCustody.instruction.data)).toEqual(
+      Array.from(initialCustody().data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([custody], preparedCustody.instruction),
+    ]);
     const head1 = client.svm.getAccount(custody1.head);
     const event1 = client.svm.getAccount(custody1.transition);
     if (!head1.exists || !event1.exists) throw new Error("Initial custody missing");
@@ -1932,7 +2015,27 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     client.svm.setAccount(head1);
     unchangedAt(head1, custody2.transition);
     client.svm.expireBlockhash();
-    await client.sendTransaction([moveCustody(1n, 2n, 2, custody2.transition)]);
+    const prepareMove = async (
+      transition: import("@katha/shared").PhysicalCustodyTransition,
+      collector: Address | null,
+      expectedRevision: bigint,
+    ) =>
+      buildTransitionCustodyTransaction(
+        await lifecycleContext(custody.address),
+        { ...verifierAccounts, custodyHeadAccount: localAccount(custody1.head) },
+        { kathaId, transition, collector, expectedRevision },
+      );
+    const dispatchKatha = await prepareMove(
+      { action: "DISPATCH_FROM_KATHA", from: "KATHA_HELD", to: "IN_TRANSIT" },
+      null,
+      1n,
+    );
+    expect(Array.from(dispatchKatha.instruction.data)).toEqual(
+      Array.from(moveCustody(1n, 2n, 2, custody2.transition).data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([custody], dispatchKatha.instruction),
+    ]);
     const head2 = client.svm.getAccount(custody1.head);
     const event2 = client.svm.getAccount(custody2.transition);
     if (!head2.exists || !event2.exists) throw new Error("Dispatch missing");
@@ -1958,21 +2061,40 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       await expect(client.sendTransaction([invalid])).rejects.toThrow();
       unchangedAt(head2, custody3.transition);
     }
+    const receiveCollector = await prepareMove(
+      { action: "RECEIVE_BY_COLLECTOR", from: "IN_TRANSIT", to: "COLLECTOR_HELD" },
+      collectorA,
+      2n,
+    );
     await client.sendTransaction([
-      moveCustody(2n, 3n, 5, custody3.transition, collectorA),
+      addSignersToInstruction([custody], receiveCollector.instruction),
     ]);
     const head3 = client.svm.getAccount(custody1.head);
     if (!head3.exists) throw new Error("Collector receipt missing");
     expect(head3.data[48]).toBe(2);
     expect(getAddressDecoder().decode(head3.data.subarray(50, 82))).toBe(collectorA);
-    await client.sendTransaction([moveCustody(3n, 4n, 3, custody4.transition)]);
+    const dispatchCollector = await prepareMove(
+      { action: "DISPATCH_FROM_COLLECTOR", from: "COLLECTOR_HELD", to: "IN_TRANSIT" },
+      null,
+      3n,
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([custody], dispatchCollector.instruction),
+    ]);
     const head4 = client.svm.getAccount(custody1.head);
     if (!head4.exists) throw new Error("Collector dispatch missing");
     expect(head4.data[48]).toBe(3);
     const event4 = client.svm.getAccount(custody4.transition);
     if (!event4.exists) throw new Error("Collector dispatch event missing");
     expect(getAddressDecoder().decode(event4.data.subarray(52, 84))).toBe(collectorA);
-    await client.sendTransaction([moveCustody(4n, 5n, 4, custody5.transition)]);
+    const receiveKatha = await prepareMove(
+      { action: "RECEIVE_AT_KATHA", from: "IN_TRANSIT", to: "KATHA_HELD" },
+      null,
+      4n,
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([custody], receiveKatha.instruction),
+    ]);
     const head5 = client.svm.getAccount(custody1.head);
     if (!head5.exists) throw new Error("Katha receipt missing");
     expect(head5.data[48]).toBe(1);
@@ -2188,7 +2310,25 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     client.svm.setAccount(originalRegistrationAccount);
     notMinted();
     client.svm.expireBlockhash();
-    await client.sendTransaction([mint()]);
+    const preparedMint = await buildMintArtworkTransaction(
+      await lifecycleContext(registration.address),
+      {
+        ...verifierAccounts,
+        verificationAccount: attestation,
+        metadataHeadAccount: thirdHead,
+        currentRevisionAccount: thirdRevision,
+        conditionHeadAccount: secondConditionHead,
+        initialConditionAccount: firstConditionReport,
+        custodyHeadAccount: localAccount(custody1.head),
+        collectionAccount: localAccount(collection.address),
+        assetAccount: client.svm.getAccount(coreAsset),
+      },
+      kathaId,
+    );
+    expect(Array.from(preparedMint.instruction.data)).toEqual(Array.from(mint().data));
+    await client.sendTransaction([
+      addSignersToInstruction([registration], preparedMint.instruction),
+    ]);
     const mintedArtwork = client.svm.getAccount(artwork);
     const mintedAsset = client.svm.getAccount(coreAsset);
     if (!mintedArtwork.exists || !mintedAsset.exists) {
@@ -2228,7 +2368,11 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     expect(client.svm.getAccount(custody1.head)).toEqual(head5);
 
     const [revision4] = await metadataPda("metadata-version", 4);
-    const hash4 = new Uint8Array(32).fill(14);
+    const metadataBytes4 = canonicalDocumentBytes({
+      kathaId,
+      title: "Synthetic minted revision",
+    });
+    const hash4 = new Uint8Array(Buffer.from(await sha256Hex(metadataBytes4), "hex"));
     const uri4 = "https://katha.fun/metadata/000001-v4.json";
     const updateMinted = (
       expectedVersion = 3,
@@ -2387,7 +2531,24 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     unchangedAfterFailure();
 
     client.svm.expireBlockhash();
-    await client.sendTransaction([updateMinted()]);
+    const preparedMintedRevision = await buildReviseMintedMetadataTransaction(
+      await lifecycleContext(registration.address),
+      {
+        configAccount: config,
+        artworkAccount: mintedArtwork,
+        metadataHeadAccount: thirdHead,
+        currentRevisionAccount: thirdRevision,
+        collectionAccount: localAccount(collection.address),
+        assetAccount: localAccount(coreAsset),
+      },
+      { kathaId, expectedVersion: 3, documentBytes: metadataBytes4, uri: uri4 },
+    );
+    expect(Array.from(preparedMintedRevision.instruction.data)).toEqual(
+      Array.from(updateMinted().data),
+    );
+    await client.sendTransaction([
+      addSignersToInstruction([registration], preparedMintedRevision.instruction),
+    ]);
     const fourthHead = client.svm.getAccount(head);
     const fourthRevision = client.svm.getAccount(revision4);
     const fourthAsset = client.svm.getAccount(coreAsset);
@@ -2526,6 +2687,37 @@ describe("Registry platform initialization in Surfpool", () => {
     ).rejects.toThrow();
     expect((await fetchEncodedAccount(client.rpc, pdas.config)).exists).toBe(false);
 
+    const bootstrapCollection = await fetchEncodedAccount(
+      client.rpc,
+      collection.address,
+    );
+    if (!programData.exists || !bootstrapCollection.exists)
+      throw new Error("Simulation snapshots missing");
+    const preparedBootstrap = await buildInitializePlatformTransaction(
+      {
+        cluster: "localnet",
+        feePayerAddress: bootstrap.address,
+        authorityAddress: bootstrap.address,
+        supportedTransactionVersions: new Set([0] as const),
+        lifetime: (await client.rpc.getLatestBlockhash().send()).value,
+        currentBlockHeight: await client.rpc.getBlockHeight().send(),
+      },
+      {
+        programAccount: program,
+        programDataAccount: programData,
+        collectionAccount: bootstrapCollection,
+        registrationAuthority: registration.address,
+        verifierAuthority: verifier.address,
+        custodyAuthority: custody.address,
+        treasury: treasury.address,
+      },
+    );
+    const simulatedBootstrap = await simulateRegistryTransaction(
+      client.rpc,
+      preparedBootstrap,
+    );
+    expect(simulatedBootstrap.value.err).toBeNull();
+    expect((await fetchEncodedAccount(client.rpc, pdas.config)).exists).toBe(false);
     await client.sendTransaction([init(bootstrap.address)]);
     const config = await fetchEncodedAccount(client.rpc, pdas.config);
     if (!config.exists) throw new Error("KathaConfig was not created");

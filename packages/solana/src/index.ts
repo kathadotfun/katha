@@ -41,3 +41,24 @@ export type {
   PlatformInitializationInput,
   ArtworkRegistrationInput,
 } from "./registration.js";
+export {
+  buildInitializeCustodyTransaction,
+  buildTransitionCustodyTransaction,
+  buildInitializeMetadataTransaction,
+  buildReviseUnmintedMetadataTransaction,
+  buildReviseMintedMetadataTransaction,
+  buildMintArtworkTransaction,
+  simulateRegistryTransaction,
+  RegistryLifecycleError,
+} from "./lifecycle.js";
+export type {
+  ArtworkLifecycleAccounts,
+  CustodyTransitionAccounts,
+  MetadataRevisionAccounts,
+  MintedMetadataAccounts,
+  ArtworkMintAccounts,
+  CustodyTransactionInput,
+  CustodyRevisionInput,
+  MetadataTransactionInput,
+  MetadataRevisionInput,
+} from "./lifecycle.js";

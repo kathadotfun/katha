@@ -34,7 +34,9 @@ hash atomically; see the [metadata commitments guide](registry-metadata.md).
 signers, account/PDA substitution, missing or stale prerequisites, transit
 custody, insufficient rent, duplicate minting, and atomic rollback. The normal
 Anchor build regenerates `target/idl/katha_registry.json`; generated application
-clients are scheduled for step 035.
+clients now support the [unsigned mint builder](lifecycle-transactions.md), which
+validates prerequisite snapshots and derives the canonical asset address before
+preparing the atomic Registry instruction.
 
 See the [Metaplex Core CPI reference](https://www.metaplex.com/docs/smart-contracts/core/using-core-in-anchor)
 and [Solana transaction pipeline](https://solana.com/docs/core/transactions/transaction-pipeline).

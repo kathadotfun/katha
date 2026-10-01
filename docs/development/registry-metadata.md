@@ -40,8 +40,9 @@ physical custody do not change.
 `pnpm program:test` exercises pre- and post-mint revisions, stale writes,
 forged relationships, invalid content, Core rent failure rollback, preservation
 of earlier versions, and unchanged artist and custody records. The normal Anchor build generates the public
-`target/idl/katha_registry.json`; application client generation is scheduled
-for a later step.
+`target/idl/katha_registry.json`. The [unsigned metadata builders](lifecycle-transactions.md)
+validate canonical bytes, version linkage, and the live Core relationship for
+post-mint revisions before composing generated Registry instructions.
 
 See the [Anchor PDA constraints](https://www.anchor-lang.com/docs/references/account-constraints)
 and [account space guide](https://www.anchor-lang.com/docs/references/space).

@@ -90,13 +90,16 @@ const REASON = {
   INSURANCE: ConditionReason.Insurance,
 } as const;
 
-function equalBytes(left: ReadonlyUint8Array, right: ReadonlyUint8Array): boolean {
+export function equalBytes(
+  left: ReadonlyUint8Array,
+  right: ReadonlyUint8Array,
+): boolean {
   return (
     left.length === right.length && left.every((value, index) => value === right[index])
   );
 }
 
-function hexBytes(value: string): Uint8Array {
+export function hexBytes(value: string): Uint8Array {
   const result = new Uint8Array(value.length / 2);
   for (let index = 0; index < result.length; index++)
     result[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
@@ -114,7 +117,7 @@ function uuidBytes(value: string): Uint8Array {
   return hexBytes(value.replaceAll("-", ""));
 }
 
-function checkAccount(
+export function checkAccount(
   account: EncodedAccount,
   expected: Address,
   kind: KathaRegistryAccount,
@@ -129,14 +132,18 @@ function checkAccount(
     throw new TypeError("Registry account type or allocated size is invalid");
 }
 
-async function verifierArtwork(
+export async function readAuthorizedArtwork(
   context: RegistryTransactionContext,
   accounts: VerifierArtworkAccounts,
   identity: string,
+  role:
+    | "verifierAuthority"
+    | "registrationAuthority"
+    | "custodyAuthority" = "verifierAuthority",
 ) {
   const { config, state } = await readRegistryConfiguration(accounts.configAccount);
-  if (state.verifierAuthority !== nonzeroAddress(context.authorityAddress))
-    throw new TypeError("Configured verifier authority is required");
+  if (state[role] !== nonzeroAddress(context.authorityAddress))
+    throw new TypeError(`Configured ${role} is required`);
   const kathaId = kathaIdSchema.parse(identity);
   const [artwork, bump] = await findArtworkPda({ kathaId });
   // Anchor allocates the maximum bounded record size, including unused option space.
@@ -160,6 +167,7 @@ async function verifierArtwork(
     config,
     artwork,
     record,
+    configuration: state,
     verifierAuthority: createNoopSigner(state.verifierAuthority),
   };
 }
@@ -169,7 +177,7 @@ async function verifiedArtwork(
   accounts: VerifiedArtworkAccounts,
   identity: string,
 ) {
-  const prepared = await verifierArtwork(context, accounts, identity);
+  const prepared = await readAuthorizedArtwork(context, accounts, identity);
   if (prepared.record.coreAsset.__option !== "None")
     throw new TypeError("Minted condition reports require owner and custody scope");
   const [verification, bump] = await findVerificationPda({ artwork: prepared.artwork });
@@ -200,7 +208,7 @@ export async function buildVerifyArtworkTransaction(
   accounts: VerifierArtworkAccounts,
   input: ArtworkVerificationInput,
 ) {
-  const prepared = await verifierArtwork(context, accounts, input.kathaId);
+  const prepared = await readAuthorizedArtwork(context, accounts, input.kathaId);
   const hash = hexBytes(
     artworkSchema.shape.authorshipEvidenceHash.parse(
       input.expectedAuthorshipEvidenceHash,

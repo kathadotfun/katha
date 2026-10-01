@@ -36,12 +36,13 @@ product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
 orchestration, a minimal Next.js web scaffold, a bare Hono API service, an initial
 shared TypeScript package, a Node-only database package boundary, a Solana client
-package scaffold, empty Anchor Registry and Marketplace programs, and a
-local PostgreSQL service. The Kit client and Core adapter are in place, and a
-local Core CPI probe has passed in LiteSVM and Surfpool. The Registry now has
-a one-time, upgrade-authority-gated platform configuration. Artwork browsing,
-API and database behavior, and artwork/Marketplace business instructions remain
-planned.
+package, an Anchor Registry, an empty Marketplace program, and a local
+PostgreSQL service. The Solana package includes Kit clients, a Core adapter,
+generated program clients, unsigned transaction builders, and simulation.
+Local tests cover Registry configuration, artwork registration and verification,
+condition and custody attestations, versioned metadata, Core minting, and atomic
+post-mint metadata updates. Artwork browsing, API and database behavior, and
+Marketplace business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -83,6 +84,7 @@ outside the current scope.
 - [Generated Solana program clients](docs/development/program-clients.md)
 - [Registry registration transactions](docs/development/registration-transactions.md)
 - [Verifier transaction preparation](docs/development/attestation-transactions.md)
+- [Artwork lifecycle transaction preparation](docs/development/lifecycle-transactions.md)
 
 ## Repository policy
 

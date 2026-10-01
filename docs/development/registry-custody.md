@@ -46,4 +46,6 @@ eligibility.
 
 `pnpm program:test` runs the six-action path and both initial states in LiteSVM,
 including failure and rollback cases. The normal Anchor build regenerates
-`target/idl/katha_registry.json`; generated application clients come later.
+`target/idl/katha_registry.json`. The [unsigned custody builders](lifecycle-transactions.md)
+compose generated instructions after checking roles, current state, subjects,
+and sequential revisions.
