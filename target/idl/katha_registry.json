@@ -224,6 +224,118 @@
           }
         }
       ]
+    },
+    {
+      "name": "verify_artwork",
+      "discriminator": [
+        114,
+        3,
+        133,
+        184,
+        83,
+        147,
+        170,
+        59
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "verification",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "verifier_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_authorship_evidence_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
     }
   ],
   "accounts": [
@@ -238,6 +350,19 @@
         82,
         241,
         254
+      ]
+    },
+    {
+      "name": "ArtworkVerification",
+      "discriminator": [
+        74,
+        49,
+        109,
+        99,
+        46,
+        131,
+        141,
+        160
       ]
     },
     {
@@ -266,6 +391,19 @@
         66,
         44,
         228
+      ]
+    },
+    {
+      "name": "ArtworkVerified",
+      "discriminator": [
+        87,
+        63,
+        115,
+        167,
+        2,
+        71,
+        52,
+        116
       ]
     },
     {
@@ -337,6 +475,21 @@
       "code": 6010,
       "name": "InvalidCreatorWallet",
       "msg": "Creator wallet must not be the default address"
+    },
+    {
+      "code": 6011,
+      "name": "UnauthorizedVerifier",
+      "msg": "Only the configured verifier can authenticate artwork"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidArtworkCollection",
+      "msg": "Artwork belongs to a different Core collection"
+    },
+    {
+      "code": 6013,
+      "name": "AuthorshipHashMismatch",
+      "msg": "The evidence hash does not match the registered artwork"
     }
   ],
   "types": [
@@ -476,6 +629,72 @@
           },
           {
             "name": "registered_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkVerification",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "authorship_evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "verified_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkVerified",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "katha_id",
+            "type": "string"
+          },
+          {
+            "name": "authorship_evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "verified_at",
             "type": "i64"
           }
         ]

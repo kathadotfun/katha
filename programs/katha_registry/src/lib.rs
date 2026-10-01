@@ -5,6 +5,7 @@ declare_id!("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
 pub const CONFIG_SEED: &[u8] = b"katha-config";
 pub const COLLECTION_AUTHORITY_SEED: &[u8] = b"collection-authority";
 pub const ARTWORK_SEED: &[u8] = b"artwork";
+pub const VERIFICATION_SEED: &[u8] = b"verification";
 
 #[program]
 pub mod katha_registry {
@@ -138,6 +139,33 @@ pub mod katha_registry {
         Ok(())
     }
 
+    pub fn verify_artwork(
+        ctx: Context<VerifyArtwork>,
+        expected_authorship_evidence_hash: [u8; 32],
+    ) -> Result<()> {
+        let artwork = &ctx.accounts.artwork;
+        require!(
+            expected_authorship_evidence_hash == artwork.authorship_evidence_hash,
+            RegistryError::AuthorshipHashMismatch
+        );
+
+        let verification = &mut ctx.accounts.verification;
+        verification.artwork = artwork.key();
+        verification.authorship_evidence_hash = artwork.authorship_evidence_hash;
+        verification.verifier = ctx.accounts.verifier_authority.key();
+        verification.verified_at = Clock::get()?.unix_timestamp;
+        verification.bump = ctx.bumps.verification;
+
+        emit!(ArtworkVerified {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            authorship_evidence_hash: verification.authorship_evidence_hash,
+            verifier: verification.verifier,
+            verified_at: verification.verified_at,
+        });
+        Ok(())
+    }
+
     // Compiled only into the local harness binary, never the normal Registry build.
     #[cfg(feature = "core-cpi-test")]
     pub fn probe_create_core_collection(
@@ -214,6 +242,19 @@ impl ArtworkRecord {
         8 + (4 + 20) + (4 + 36) + (1 + 32) + 1 + 2 + 32 + 32 + (1 + 32) + 32 + 8 + 1;
 }
 
+#[account]
+pub struct ArtworkVerification {
+    pub artwork: Pubkey,
+    pub authorship_evidence_hash: [u8; 32],
+    pub verifier: Pubkey,
+    pub verified_at: i64,
+    pub bump: u8,
+}
+
+impl ArtworkVerification {
+    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1;
+}
+
 #[derive(Accounts)]
 pub struct InitializePlatform<'info> {
     #[account(init, payer = bootstrap_authority, space = KathaConfig::SPACE, seeds = [CONFIG_SEED], bump)]
@@ -251,6 +292,29 @@ pub struct RegisterArtwork<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct VerifyArtwork<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        init,
+        payer = verifier_authority,
+        space = ArtworkVerification::SPACE,
+        seeds = [VERIFICATION_SEED, artwork.key().as_ref()],
+        bump
+    )]
+    pub verification: Account<'info, ArtworkVerification>,
+    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    pub verifier_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 #[event]
 pub struct PlatformInitialized {
     pub config: Pubkey,
@@ -274,6 +338,15 @@ pub struct ArtworkRegistered {
     pub collection: Pubkey,
     pub registered_by: Pubkey,
     pub registered_at: i64,
+}
+
+#[event]
+pub struct ArtworkVerified {
+    pub artwork: Pubkey,
+    pub katha_id: String,
+    pub authorship_evidence_hash: [u8; 32],
+    pub verifier: Pubkey,
+    pub verified_at: i64,
 }
 
 #[error_code]
@@ -300,6 +373,12 @@ pub enum RegistryError {
     InvalidAuthorshipHash,
     #[msg("Creator wallet must not be the default address")]
     InvalidCreatorWallet,
+    #[msg("Only the configured verifier can authenticate artwork")]
+    UnauthorizedVerifier,
+    #[msg("Artwork belongs to a different Core collection")]
+    InvalidArtworkCollection,
+    #[msg("The evidence hash does not match the registered artwork")]
+    AuthorshipHashMismatch,
 }
 
 #[cfg(feature = "core-cpi-test")]

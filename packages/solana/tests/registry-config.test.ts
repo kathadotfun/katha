@@ -131,6 +131,30 @@ function registerArtworkInstruction(
   };
 }
 
+function verifyArtworkInstruction(
+  config: Address,
+  artwork: Address,
+  verification: Address,
+  verifier: Address,
+  evidenceHash: Uint8Array,
+) {
+  const discriminator = createHash("sha256")
+    .update("global:verify_artwork")
+    .digest()
+    .subarray(0, 8);
+  return {
+    programAddress: REGISTRY,
+    accounts: [
+      { address: config, role: AccountRole.READONLY },
+      { address: artwork, role: AccountRole.READONLY },
+      { address: verification, role: AccountRole.WRITABLE },
+      { address: verifier, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM, role: AccountRole.READONLY },
+    ],
+    data: Uint8Array.from([...discriminator, ...evidenceHash]),
+  };
+}
+
 function readBorshString(data: Uint8Array, offset: number) {
   const length = new DataView(data.buffer, data.byteOffset).getUint32(offset, true);
   return {
@@ -178,7 +202,7 @@ function assertConfigData(
 }
 
 describe("Registry platform and artwork identity in LiteSVM", () => {
-  it("binds a fresh Core collection once and rejects forged bootstrap relationships", async () => {
+  it("bootstraps, registers, and verifies with canonical authorities and accounts", async () => {
     const bootstrap = await generateKeyPairSigner();
     const wrongSigner = await generateKeyPairSigner();
     const collection = await generateKeyPairSigner();
@@ -515,6 +539,110 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     const afterDuplicate = client.svm.getAccount(artwork);
     expect(afterDuplicate.exists && Array.from(afterDuplicate.data)).toEqual(
       Array.from(record.data),
+    );
+
+    client.svm.airdrop(verifier.address, lamports(2_000_000_000n));
+    const [verification, verificationBump] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [
+        new TextEncoder().encode("verification"),
+        getAddressEncoder().encode(artwork),
+      ],
+    });
+    const verify = (
+      art = artwork,
+      attestation = verification,
+      authority = verifier.address,
+      evidenceHash = new Uint8Array(32).fill(7),
+      configAddress = pdas.config,
+    ) =>
+      addSignersToInstruction(
+        [authority === verifier.address ? verifier : wrongSigner],
+        verifyArtworkInstruction(
+          configAddress,
+          art,
+          attestation,
+          authority,
+          evidenceHash,
+        ),
+      );
+    const unverified = () =>
+      expect(client.svm.getAccount(verification).exists).toBe(false);
+    await expect(
+      client.sendTransaction([verify(artwork, verification, wrongSigner.address)]),
+    ).rejects.toThrow();
+    unverified();
+    await expect(
+      client.sendTransaction([
+        verify(artwork, verification, verifier.address, undefined, wrongSigner.address),
+      ]),
+    ).rejects.toThrow();
+    unverified();
+    await expect(
+      client.sendTransaction([
+        verify(artwork, verification, verifier.address, new Uint8Array(32).fill(8)),
+      ]),
+    ).rejects.toThrow();
+    unverified();
+    await expect(client.sendTransaction([verify(wrongArtwork)])).rejects.toThrow();
+    unverified();
+    const [otherArtwork] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [
+        new TextEncoder().encode("artwork"),
+        new TextEncoder().encode("KATHA-PAUBHA-000002"),
+      ],
+    });
+    await client.sendTransaction([
+      register("KATHA-PAUBHA-000002", artistId, 1, 2025, undefined, otherArtwork),
+    ]);
+    await expect(client.sendTransaction([verify(otherArtwork)])).rejects.toThrow();
+    unverified();
+    const wrongCollectionData = Uint8Array.from(record.data);
+    wrongCollectionData.set(
+      getAddressEncoder().encode(wrongSigner.address),
+      artist.next + 36,
+    );
+    client.svm.setAccount({ ...record, data: wrongCollectionData });
+    await expect(client.sendTransaction([verify()])).rejects.toThrow();
+    unverified();
+    const wrongIdentityData = Uint8Array.from(record.data);
+    wrongIdentityData[id.next - 1] = "2".charCodeAt(0);
+    client.svm.expireBlockhash();
+    client.svm.setAccount({ ...record, data: wrongIdentityData });
+    await expect(client.sendTransaction([verify()])).rejects.toThrow();
+    unverified();
+    client.svm.setAccount(record);
+    client.svm.expireBlockhash();
+
+    await client.sendTransaction([verify()]);
+    const attestation = client.svm.getAccount(verification);
+    if (!attestation.exists) throw new Error("ArtworkVerification was not created");
+    expect(attestation.programAddress).toBe(REGISTRY);
+    expect(attestation.data.length).toBe(113);
+    expect(Array.from(attestation.data.subarray(0, 8))).toEqual(
+      Array.from(
+        createHash("sha256")
+          .update("account:ArtworkVerification")
+          .digest()
+          .subarray(0, 8),
+      ),
+    );
+    expect(getAddressDecoder().decode(attestation.data.subarray(8, 40))).toBe(artwork);
+    expect(Array.from(attestation.data.subarray(40, 72))).toEqual(Array(32).fill(7));
+    expect(getAddressDecoder().decode(attestation.data.subarray(72, 104))).toBe(
+      verifier.address,
+    );
+    expect(attestation.data[112]).toBe(verificationBump);
+    const afterVerification = client.svm.getAccount(artwork);
+    expect(afterVerification.exists && Array.from(afterVerification.data)).toEqual(
+      Array.from(record.data),
+    );
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([verify()])).rejects.toThrow();
+    const afterReplay = client.svm.getAccount(verification);
+    expect(afterReplay.exists && Array.from(afterReplay.data)).toEqual(
+      Array.from(attestation.data),
     );
   });
 });

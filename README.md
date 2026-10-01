@@ -74,6 +74,8 @@ outside the current scope.
 - [Anchor program workspace](docs/development/anchor-workspace.md)
 - [Local program testing](docs/development/program-testing.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
+- [Registry artwork identities](docs/development/registry-artwork.md)
+- [Registry artwork authentication](docs/development/registry-verification.md)
 
 ## Repository policy
 

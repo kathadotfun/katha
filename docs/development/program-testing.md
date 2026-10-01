@@ -34,13 +34,16 @@ authority is the Registry PDA. It checks the program's upgrade authority, linked
 ProgramData, canonical PDAs, collection ownership and authority, role values,
 and duplicate initialization. Failed cases leave the config account absent.
 LiteSVM's upgradeable ProgramData and Surfpool's program-authority cheatcode
-provide synthetic test authorities. No existing wallet is read.
+provide synthetic test authorities. The same LiteSVM suite registers a bounded
+artwork, rejects invalid identity inputs and duplicate registration, then tests
+verifier-only authentication, account/PDA and collection substitution, wrong
+evidence hash, and replay rejection. No existing wallet is read.
 
 The probe instruction exists only with the `core-cpi-test` Cargo feature. The
 ordinary `NO_DNA=1 anchor build --ignore-keys` omits it; the normal Registry
-IDL contains `initialize_platform` only. The test binary lives in a separate
-ignored directory; do not deploy it. Artwork identity and lifecycle instructions
-start in later steps.
+IDL contains platform initialization, artwork registration, and authentication.
+The test binary lives in a separate ignored directory; do not deploy it.
+Condition, custody, and minting instructions come in later steps.
 
 The underlying [Core CPI builder](https://www.metaplex.com/docs/smart-contracts/core/using-core-in-anchor),
 [LiteSVM program loading](https://www.anchor-lang.com/docs/testing/litesvm),
