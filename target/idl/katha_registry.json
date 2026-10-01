@@ -8,6 +8,160 @@
   },
   "instructions": [
     {
+      "name": "initialize_metadata",
+      "discriminator": [
+        35,
+        215,
+        241,
+        156,
+        122,
+        208,
+        206,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "head",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "revision",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97,
+                  45,
+                  118,
+                  101,
+                  114,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  1,
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registration_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "document_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "initialize_platform",
       "discriminator": [
         119,
@@ -226,6 +380,163 @@
       ]
     },
     {
+      "name": "revise_unminted_metadata",
+      "discriminator": [
+        146,
+        41,
+        123,
+        23,
+        109,
+        27,
+        40,
+        211
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "head",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "revision",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97,
+                  45,
+                  118,
+                  101,
+                  114,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              },
+              {
+                "kind": "arg",
+                "path": "next_version"
+              }
+            ]
+          }
+        },
+        {
+          "name": "registration_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_version",
+          "type": "u32"
+        },
+        {
+          "name": "next_version",
+          "type": "u32"
+        },
+        {
+          "name": "document_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "uri",
+          "type": "string"
+        }
+      ]
+    },
+    {
       "name": "verify_artwork",
       "discriminator": [
         114,
@@ -377,6 +688,32 @@
         81,
         140
       ]
+    },
+    {
+      "name": "MetadataHead",
+      "discriminator": [
+        171,
+        236,
+        164,
+        227,
+        151,
+        223,
+        104,
+        247
+      ]
+    },
+    {
+      "name": "MetadataRevision",
+      "discriminator": [
+        208,
+        129,
+        170,
+        207,
+        65,
+        21,
+        139,
+        166
+      ]
     }
   ],
   "events": [
@@ -404,6 +741,19 @@
         71,
         52,
         116
+      ]
+    },
+    {
+      "name": "MetadataCommitted",
+      "discriminator": [
+        168,
+        184,
+        5,
+        129,
+        121,
+        182,
+        213,
+        25
       ]
     },
     {
@@ -490,6 +840,36 @@
       "code": 6013,
       "name": "AuthorshipHashMismatch",
       "msg": "The evidence hash does not match the registered artwork"
+    },
+    {
+      "code": 6014,
+      "name": "InvalidMetadataHash",
+      "msg": "Metadata hash must not be zero"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidMetadataUri",
+      "msg": "Metadata URI must be a bounded public HTTP or HTTPS URI"
+    },
+    {
+      "code": 6016,
+      "name": "StaleMetadataVersion",
+      "msg": "Metadata version is stale"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidMetadataVersion",
+      "msg": "Metadata versions must advance by exactly one"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidMetadataRelationship",
+      "msg": "Metadata head is unrelated to the artwork"
+    },
+    {
+      "code": 6019,
+      "name": "MintedMetadataRequiresCoreSync",
+      "msg": "Minted metadata changes must synchronize Core URI atomically"
     }
   ],
   "types": [
@@ -739,6 +1119,121 @@
           },
           {
             "name": "collection_authority_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MetadataCommitted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "katha_id",
+            "type": "string"
+          },
+          {
+            "name": "revision",
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "type": "u32"
+          },
+          {
+            "name": "document_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "committed_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "committed_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MetadataHead",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "type": "u32"
+          },
+          {
+            "name": "current_revision",
+            "type": "pubkey"
+          },
+          {
+            "name": "current_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MetadataRevision",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "type": "u32"
+          },
+          {
+            "name": "document_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "uri",
+            "type": "string"
+          },
+          {
+            "name": "committed_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "committed_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
             "type": "u8"
           }
         ]

@@ -76,6 +76,7 @@ outside the current scope.
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)
 - [Registry artwork authentication](docs/development/registry-verification.md)
+- [Registry metadata commitments](docs/development/registry-metadata.md)
 
 ## Repository policy
 

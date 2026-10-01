@@ -41,7 +41,8 @@ evidence hash, and replay rejection. No existing wallet is read.
 
 The probe instruction exists only with the `core-cpi-test` Cargo feature. The
 ordinary `NO_DNA=1 anchor build --ignore-keys` omits it; the normal Registry
-IDL contains platform initialization, artwork registration, and authentication.
+IDL contains platform initialization, artwork registration, authentication,
+and pre-mint metadata commitments.
 The test binary lives in a separate ignored directory; do not deploy it.
 Condition, custody, and minting instructions come in later steps.
 

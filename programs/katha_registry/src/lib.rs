@@ -6,6 +6,8 @@ pub const CONFIG_SEED: &[u8] = b"katha-config";
 pub const COLLECTION_AUTHORITY_SEED: &[u8] = b"collection-authority";
 pub const ARTWORK_SEED: &[u8] = b"artwork";
 pub const VERIFICATION_SEED: &[u8] = b"verification";
+pub const METADATA_HEAD_SEED: &[u8] = b"metadata";
+pub const METADATA_VERSION_SEED: &[u8] = b"metadata-version";
 
 #[program]
 pub mod katha_registry {
@@ -166,6 +168,85 @@ pub mod katha_registry {
         Ok(())
     }
 
+    pub fn initialize_metadata(
+        ctx: Context<InitializeMetadata>,
+        document_hash: [u8; 32],
+        uri: String,
+    ) -> Result<()> {
+        validate_metadata_commitment(&document_hash, &uri)?;
+        let artwork = &ctx.accounts.artwork;
+        let revision = &mut ctx.accounts.revision;
+        revision.artwork = artwork.key();
+        revision.version = 1;
+        revision.document_hash = document_hash;
+        revision.uri = uri;
+        revision.committed_by = ctx.accounts.registration_authority.key();
+        revision.committed_at = Clock::get()?.unix_timestamp;
+        revision.bump = ctx.bumps.revision;
+
+        let head = &mut ctx.accounts.head;
+        head.artwork = artwork.key();
+        head.version = revision.version;
+        head.current_revision = revision.key();
+        head.current_hash = document_hash;
+        head.bump = ctx.bumps.head;
+
+        emit!(MetadataCommitted {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            revision: revision.key(),
+            version: revision.version,
+            document_hash,
+            committed_by: revision.committed_by,
+            committed_at: revision.committed_at,
+        });
+        Ok(())
+    }
+
+    pub fn revise_unminted_metadata(
+        ctx: Context<ReviseUnmintedMetadata>,
+        expected_version: u32,
+        next_version: u32,
+        document_hash: [u8; 32],
+        uri: String,
+    ) -> Result<()> {
+        let head = &mut ctx.accounts.head;
+        require!(
+            head.version == expected_version,
+            RegistryError::StaleMetadataVersion
+        );
+        require!(
+            expected_version.checked_add(1) == Some(next_version),
+            RegistryError::InvalidMetadataVersion
+        );
+        validate_metadata_commitment(&document_hash, &uri)?;
+
+        let artwork = &ctx.accounts.artwork;
+        let revision = &mut ctx.accounts.revision;
+        revision.artwork = artwork.key();
+        revision.version = next_version;
+        revision.document_hash = document_hash;
+        revision.uri = uri;
+        revision.committed_by = ctx.accounts.registration_authority.key();
+        revision.committed_at = Clock::get()?.unix_timestamp;
+        revision.bump = ctx.bumps.revision;
+
+        head.version = next_version;
+        head.current_revision = revision.key();
+        head.current_hash = document_hash;
+
+        emit!(MetadataCommitted {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            revision: revision.key(),
+            version: revision.version,
+            document_hash,
+            committed_by: revision.committed_by,
+            committed_at: revision.committed_at,
+        });
+        Ok(())
+    }
+
     // Compiled only into the local harness binary, never the normal Registry build.
     #[cfg(feature = "core-cpi-test")]
     pub fn probe_create_core_collection(
@@ -185,6 +266,31 @@ pub mod katha_registry {
             .invoke()?;
         Ok(())
     }
+}
+
+fn validate_metadata_commitment(document_hash: &[u8; 32], uri: &str) -> Result<()> {
+    require!(
+        *document_hash != [0; 32],
+        RegistryError::InvalidMetadataHash
+    );
+    let authority = uri
+        .split_once("://")
+        .filter(|(scheme, _)| *scheme == "https" || *scheme == "http")
+        .map(|(_, rest)| rest.split(['/', '?']).next().unwrap_or_default())
+        .unwrap_or_default();
+    require!(
+        uri.len() <= 200
+            && !authority.is_empty()
+            && authority
+                .bytes()
+                .next()
+                .is_some_and(|byte| byte.is_ascii_alphanumeric())
+            && uri
+                .bytes()
+                .all(|byte| byte.is_ascii_graphic() && byte != b'@' && byte != b'#'),
+        RegistryError::InvalidMetadataUri
+    );
+    Ok(())
 }
 
 #[account]
@@ -255,6 +361,34 @@ impl ArtworkVerification {
     pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1;
 }
 
+#[account]
+pub struct MetadataHead {
+    pub artwork: Pubkey,
+    pub version: u32,
+    pub current_revision: Pubkey,
+    pub current_hash: [u8; 32],
+    pub bump: u8,
+}
+
+impl MetadataHead {
+    pub const SPACE: usize = 8 + 32 + 4 + 32 + 32 + 1;
+}
+
+#[account]
+pub struct MetadataRevision {
+    pub artwork: Pubkey,
+    pub version: u32,
+    pub document_hash: [u8; 32],
+    pub uri: String,
+    pub committed_by: Pubkey,
+    pub committed_at: i64,
+    pub bump: u8,
+}
+
+impl MetadataRevision {
+    pub const SPACE: usize = 8 + 32 + 4 + 32 + (4 + 200) + 32 + 8 + 1;
+}
+
 #[derive(Accounts)]
 pub struct InitializePlatform<'info> {
     #[account(init, payer = bootstrap_authority, space = KathaConfig::SPACE, seeds = [CONFIG_SEED], bump)]
@@ -315,6 +449,70 @@ pub struct VerifyArtwork<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct InitializeMetadata<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection,
+        constraint = artwork.core_asset.is_none() @ RegistryError::MintedMetadataRequiresCoreSync
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        init,
+        payer = registration_authority,
+        space = MetadataHead::SPACE,
+        seeds = [METADATA_HEAD_SEED, artwork.key().as_ref()],
+        bump
+    )]
+    pub head: Account<'info, MetadataHead>,
+    #[account(
+        init,
+        payer = registration_authority,
+        space = MetadataRevision::SPACE,
+        seeds = [METADATA_VERSION_SEED, artwork.key().as_ref(), &1u32.to_le_bytes()],
+        bump
+    )]
+    pub revision: Account<'info, MetadataRevision>,
+    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    pub registration_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(expected_version: u32, next_version: u32)]
+pub struct ReviseUnmintedMetadata<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection,
+        constraint = artwork.core_asset.is_none() @ RegistryError::MintedMetadataRequiresCoreSync
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        mut,
+        seeds = [METADATA_HEAD_SEED, artwork.key().as_ref()],
+        bump = head.bump,
+        constraint = head.artwork == artwork.key() @ RegistryError::InvalidMetadataRelationship
+    )]
+    pub head: Account<'info, MetadataHead>,
+    #[account(
+        init,
+        payer = registration_authority,
+        space = MetadataRevision::SPACE,
+        seeds = [METADATA_VERSION_SEED, artwork.key().as_ref(), &next_version.to_le_bytes()],
+        bump
+    )]
+    pub revision: Account<'info, MetadataRevision>,
+    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    pub registration_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 #[event]
 pub struct PlatformInitialized {
     pub config: Pubkey,
@@ -349,6 +547,17 @@ pub struct ArtworkVerified {
     pub verified_at: i64,
 }
 
+#[event]
+pub struct MetadataCommitted {
+    pub artwork: Pubkey,
+    pub katha_id: String,
+    pub revision: Pubkey,
+    pub version: u32,
+    pub document_hash: [u8; 32],
+    pub committed_by: Pubkey,
+    pub committed_at: i64,
+}
+
 #[error_code]
 pub enum RegistryError {
     #[msg("Bootstrap signer is not the Registry upgrade authority")]
@@ -379,6 +588,18 @@ pub enum RegistryError {
     InvalidArtworkCollection,
     #[msg("The evidence hash does not match the registered artwork")]
     AuthorshipHashMismatch,
+    #[msg("Metadata hash must not be zero")]
+    InvalidMetadataHash,
+    #[msg("Metadata URI must be a bounded public HTTP or HTTPS URI")]
+    InvalidMetadataUri,
+    #[msg("Metadata version is stale")]
+    StaleMetadataVersion,
+    #[msg("Metadata versions must advance by exactly one")]
+    InvalidMetadataVersion,
+    #[msg("Metadata head is unrelated to the artwork")]
+    InvalidMetadataRelationship,
+    #[msg("Minted metadata changes must synchronize Core URI atomically")]
+    MintedMetadataRequiresCoreSync,
 }
 
 #[cfg(feature = "core-cpi-test")]

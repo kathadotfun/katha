@@ -155,6 +155,49 @@ function verifyArtworkInstruction(
   };
 }
 
+function metadataInstruction(
+  action: "initialize_metadata" | "revise_unminted_metadata",
+  config: Address,
+  artwork: Address,
+  head: Address,
+  revision: Address,
+  authority: Address,
+  hash: Uint8Array,
+  uri: string,
+  expectedVersion = 0,
+  nextVersion = 0,
+) {
+  const discriminator = createHash("sha256")
+    .update(`global:${action}`)
+    .digest()
+    .subarray(0, 8);
+  const uriBytes = new TextEncoder().encode(uri);
+  const length = new Uint8Array(4);
+  new DataView(length.buffer).setUint32(0, uriBytes.length, true);
+  const versions = new Uint8Array(8);
+  const view = new DataView(versions.buffer);
+  view.setUint32(0, expectedVersion, true);
+  view.setUint32(4, nextVersion, true);
+  return {
+    programAddress: REGISTRY,
+    accounts: [
+      { address: config, role: AccountRole.READONLY },
+      { address: artwork, role: AccountRole.READONLY },
+      { address: head, role: AccountRole.WRITABLE },
+      { address: revision, role: AccountRole.WRITABLE },
+      { address: authority, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM, role: AccountRole.READONLY },
+    ],
+    data: Uint8Array.from([
+      ...discriminator,
+      ...(action === "revise_unminted_metadata" ? versions : []),
+      ...hash,
+      ...length,
+      ...uriBytes,
+    ]),
+  };
+}
+
 function readBorshString(data: Uint8Array, offset: number) {
   const length = new DataView(data.buffer, data.byteOffset).getUint32(offset, true);
   return {
@@ -643,6 +686,293 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     const afterReplay = client.svm.getAccount(verification);
     expect(afterReplay.exists && Array.from(afterReplay.data)).toEqual(
       Array.from(attestation.data),
+    );
+
+    const metadataPda = async (seed: string, version?: number) => {
+      const versionSeed = new Uint8Array(4);
+      if (version !== undefined) {
+        new DataView(versionSeed.buffer).setUint32(0, version, true);
+      }
+      return getProgramDerivedAddress({
+        programAddress: REGISTRY,
+        seeds: [
+          new TextEncoder().encode(seed),
+          getAddressEncoder().encode(artwork),
+          ...(version === undefined ? [] : [versionSeed]),
+        ],
+      });
+    };
+    const [head] = await metadataPda("metadata");
+    const [revision1] = await metadataPda("metadata-version", 1);
+    const [revision2] = await metadataPda("metadata-version", 2);
+    const [revision3] = await metadataPda("metadata-version", 3);
+    const uri1 = "https://katha.fun/metadata/000001.json";
+    const uri2 = "https://katha.fun/metadata/000001-v2.json";
+    const hash1 = new Uint8Array(32).fill(11);
+    const hash2 = new Uint8Array(32).fill(12);
+    const metadata = (
+      action: "initialize_metadata" | "revise_unminted_metadata",
+      targetRevision: Address,
+      hash: Uint8Array,
+      uri: string,
+      expectedVersion = 0,
+      nextVersion = 0,
+      art = artwork,
+      metadataHead = head,
+      authority = registration.address,
+      configAddress = pdas.config,
+    ) =>
+      addSignersToInstruction(
+        [authority === registration.address ? registration : wrongSigner],
+        metadataInstruction(
+          action,
+          configAddress,
+          art,
+          metadataHead,
+          targetRevision,
+          authority,
+          hash,
+          uri,
+          expectedVersion,
+          nextVersion,
+        ),
+      );
+    const initial = (
+      hash = hash1,
+      uri = uri1,
+      art = artwork,
+      metadataHead = head,
+      targetRevision = revision1,
+      authority = registration.address,
+      configAddress = pdas.config,
+    ) =>
+      metadata(
+        "initialize_metadata",
+        targetRevision,
+        hash,
+        uri,
+        0,
+        0,
+        art,
+        metadataHead,
+        authority,
+        configAddress,
+      );
+    const revise = (
+      expectedVersion = 1,
+      nextVersion = 2,
+      hash = hash2,
+      uri = uri2,
+      targetRevision = revision2,
+      art = artwork,
+      metadataHead = head,
+      authority = registration.address,
+      configAddress = pdas.config,
+    ) =>
+      metadata(
+        "revise_unminted_metadata",
+        targetRevision,
+        hash,
+        uri,
+        expectedVersion,
+        nextVersion,
+        art,
+        metadataHead,
+        authority,
+        configAddress,
+      );
+    const noMetadata = () => {
+      expect(client.svm.getAccount(head).exists).toBe(false);
+      expect(client.svm.getAccount(revision1).exists).toBe(false);
+    };
+    await expect(
+      client.sendTransaction([
+        initial(hash1, uri1, artwork, head, revision1, wrongSigner.address),
+      ]),
+    ).rejects.toThrow();
+    noMetadata();
+    await expect(
+      client.sendTransaction([
+        initial(
+          hash1,
+          uri1,
+          artwork,
+          head,
+          revision1,
+          registration.address,
+          wrongSigner.address,
+        ),
+      ]),
+    ).rejects.toThrow();
+    noMetadata();
+    await expect(
+      client.sendTransaction([initial(hash1, uri1, otherArtwork)]),
+    ).rejects.toThrow();
+    noMetadata();
+    for (const invalid of [
+      initial(new Uint8Array(32)),
+      initial(hash1, "http://"),
+      initial(hash1, `https://katha.fun/${"x".repeat(190)}`),
+      initial(hash1, "https://user:password@katha.fun/art.json"),
+    ]) {
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      noMetadata();
+    }
+    await client.sendTransaction([initial()]);
+    const firstHead = client.svm.getAccount(head);
+    const firstRevision = client.svm.getAccount(revision1);
+    if (!firstHead.exists || !firstRevision.exists) {
+      throw new Error("Initial metadata commitment was not created");
+    }
+    expect(firstHead.programAddress).toBe(REGISTRY);
+    expect(firstHead.data.length).toBe(109);
+    expect(getAddressDecoder().decode(firstHead.data.subarray(8, 40))).toBe(artwork);
+    expect(
+      new DataView(firstHead.data.buffer, firstHead.data.byteOffset).getUint32(
+        40,
+        true,
+      ),
+    ).toBe(1);
+    expect(getAddressDecoder().decode(firstHead.data.subarray(44, 76))).toBe(revision1);
+    expect(Array.from(firstHead.data.subarray(76, 108))).toEqual(Array(32).fill(11));
+    expect(firstRevision.data.length).toBe(321);
+    expect(getAddressDecoder().decode(firstRevision.data.subarray(8, 40))).toBe(
+      artwork,
+    );
+    expect(
+      new DataView(firstRevision.data.buffer, firstRevision.data.byteOffset).getUint32(
+        40,
+        true,
+      ),
+    ).toBe(1);
+    expect(Array.from(firstRevision.data.subarray(44, 76))).toEqual(Array(32).fill(11));
+    expect(readBorshString(firstRevision.data, 76).value).toBe(uri1);
+    await expect(client.sendTransaction([initial()])).rejects.toThrow();
+
+    const headUnchanged = () => {
+      const current = client.svm.getAccount(head);
+      expect(current.exists && Array.from(current.data)).toEqual(
+        Array.from(firstHead.data),
+      );
+      expect(client.svm.getAccount(revision2).exists).toBe(false);
+    };
+    await expect(
+      client.sendTransaction([
+        revise(1, 2, hash2, uri2, revision2, artwork, head, wrongSigner.address),
+      ]),
+    ).rejects.toThrow();
+    headUnchanged();
+    await expect(
+      client.sendTransaction([
+        revise(
+          1,
+          2,
+          hash2,
+          uri2,
+          revision2,
+          artwork,
+          head,
+          registration.address,
+          wrongSigner.address,
+        ),
+      ]),
+    ).rejects.toThrow();
+    headUnchanged();
+    await expect(client.sendTransaction([revise(0)])).rejects.toThrow();
+    headUnchanged();
+    await expect(
+      client.sendTransaction([revise(1, 3, hash2, uri2, revision3)]),
+    ).rejects.toThrow();
+    headUnchanged();
+    await expect(
+      client.sendTransaction([revise(1, 2, new Uint8Array(32))]),
+    ).rejects.toThrow();
+    headUnchanged();
+    await expect(
+      client.sendTransaction([revise(1, 2, hash2, "http://")]),
+    ).rejects.toThrow();
+    headUnchanged();
+    await expect(
+      client.sendTransaction([revise(1, 2, hash2, uri2, revision3)]),
+    ).rejects.toThrow();
+    headUnchanged();
+    await expect(
+      client.sendTransaction([
+        revise(1, 2, hash2, uri2, revision2, artwork, wrongArtwork),
+      ]),
+    ).rejects.toThrow();
+    headUnchanged();
+    const unrelatedHeadData = Uint8Array.from(firstHead.data);
+    unrelatedHeadData.set(getAddressEncoder().encode(otherArtwork), 8);
+    client.svm.setAccount({ ...firstHead, data: unrelatedHeadData });
+    await expect(client.sendTransaction([revise()])).rejects.toThrow();
+    client.svm.setAccount(firstHead);
+    headUnchanged();
+    const assetOption = artist.next + 68;
+    const mintedData = new Uint8Array(record.data.length);
+    mintedData.set(record.data.subarray(0, assetOption));
+    mintedData[assetOption] = 1;
+    mintedData.set(getAddressEncoder().encode(wrongSigner.address), assetOption + 1);
+    mintedData.set(
+      record.data.subarray(assetOption + 1, artist.next + 110),
+      assetOption + 33,
+    );
+    client.svm.expireBlockhash();
+    client.svm.setAccount({ ...record, data: mintedData });
+    await expect(client.sendTransaction([revise()])).rejects.toThrow();
+    client.svm.setAccount(record);
+    headUnchanged();
+    client.svm.expireBlockhash();
+    await client.sendTransaction([revise()]);
+    const secondHead = client.svm.getAccount(head);
+    const secondRevision = client.svm.getAccount(revision2);
+    if (!secondHead.exists || !secondRevision.exists) {
+      throw new Error("Second metadata commitment was not created");
+    }
+    expect(
+      new DataView(secondHead.data.buffer, secondHead.data.byteOffset).getUint32(
+        40,
+        true,
+      ),
+    ).toBe(2);
+    expect(getAddressDecoder().decode(secondHead.data.subarray(44, 76))).toBe(
+      revision2,
+    );
+    expect(Array.from(secondHead.data.subarray(76, 108))).toEqual(Array(32).fill(12));
+    expect(readBorshString(secondRevision.data, 76).value).toBe(uri2);
+    const preserved = client.svm.getAccount(revision1);
+    expect(preserved.exists && Array.from(preserved.data)).toEqual(
+      Array.from(firstRevision.data),
+    );
+    const identity = client.svm.getAccount(artwork);
+    expect(identity.exists && Array.from(identity.data)).toEqual(
+      Array.from(record.data),
+    );
+    const relocatedUri = "https://katha.fun/metadata/000001-relocated.json";
+    await client.sendTransaction([revise(2, 3, hash2, relocatedUri, revision3)]);
+    const thirdHead = client.svm.getAccount(head);
+    const thirdRevision = client.svm.getAccount(revision3);
+    if (!thirdHead.exists || !thirdRevision.exists) {
+      throw new Error("Relocated metadata commitment was not created");
+    }
+    expect(
+      new DataView(thirdHead.data.buffer, thirdHead.data.byteOffset).getUint32(
+        40,
+        true,
+      ),
+    ).toBe(3);
+    expect(getAddressDecoder().decode(thirdHead.data.subarray(44, 76))).toBe(revision3);
+    expect(Array.from(thirdHead.data.subarray(76, 108))).toEqual(Array(32).fill(12));
+    expect(readBorshString(thirdRevision.data, 76).value).toBe(relocatedUri);
+    const preservedSecond = client.svm.getAccount(revision2);
+    expect(preservedSecond.exists && Array.from(preservedSecond.data)).toEqual(
+      Array.from(secondRevision.data),
+    );
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([revise()])).rejects.toThrow();
+    const afterStale = client.svm.getAccount(head);
+    expect(afterStale.exists && Array.from(afterStale.data)).toEqual(
+      Array.from(thirdHead.data),
     );
   });
 });
