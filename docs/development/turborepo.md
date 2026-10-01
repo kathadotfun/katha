@@ -14,6 +14,11 @@ test, or build tooling.
 | `pnpm test`         | Build packages before their tests; run the shared identity test suite.           |
 | `pnpm format:check` | Check formatting across supported public files; runs directly through Prettier.  |
 
+Typechecking depends on both `^build` and `^typecheck`. A workspace dependency
+that exports generated `dist` declarations must finish building before its
+consumers are checked. This keeps `pnpm typecheck` working on fresh checkouts,
+including CI, where ignored build output is absent.
+
 The root lint task checks `eslint.config.mjs`; package `lint` scripts check their own
 source. Lint and typecheck tasks cache logs but no file outputs. Build tasks cache
 `.next`, `dist`, and `build` output while excluding `.next/cache`. Test tasks cache logs without file outputs; no coverage or report artifacts are
