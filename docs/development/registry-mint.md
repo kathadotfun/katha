@@ -27,7 +27,8 @@ binding. Retrying a successful mint cannot create another asset.
 Core remains authoritative for current digital ownership. The Registry address is
 a permanent identity binding, not an ownership cache. Later sales transfer Core
 ownership without changing the artist or custody records. Post-mint metadata
-revisions must synchronize Core's URI and the Registry hash in a later step.
+revisions use `revise_minted_metadata` to synchronize Core's URI and the Registry
+hash atomically; see the [metadata commitments guide](registry-metadata.md).
 
 `pnpm program:test` exercises the real Core CPI in LiteSVM, including wrong
 signers, account/PDA substitution, missing or stale prerequisites, transit

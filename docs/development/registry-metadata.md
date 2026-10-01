@@ -1,4 +1,4 @@
-# Registry metadata commitments before minting
+# Registry metadata commitments
 
 The Registry commits SHA-256 hashes of the exact canonical metadata document
 bytes. The shared package defines serialization and hashing; the program accepts
@@ -24,16 +24,22 @@ invalid URI fails without changing the current pointer. The URI is limited to
 200 ASCII bytes, an HTTP or HTTPS scheme with a nonempty host, and no embedded
 credentials or fragment. Application and storage validation will be stricter.
 
-Both instructions require the artwork's canonical PDA and configured Core
-collection. They reject a record with a bound Core asset. After minting, a
-metadata change must use a later instruction that updates the Core URI and
-Registry head atomically; these pre-mint instructions cannot bypass that
-synchronization. Identity, attribution, verification, custody, and ownership
-remain separate from metadata state.
+The pre-mint instructions require the artwork's canonical PDA and configured Core
+collection. They reject a record with a bound Core asset. Once minted,
+`revise_minted_metadata` requires the configured registration signer, the bound
+asset PDA, the current revision, and the canonical collection authority. It
+checks the live Core asset's collection update authority, permanent Katha ID
+name, and URI against the Registry's current revision before changing anything.
+The Registry authority PDA signs Core's `UpdateV1` CPI, changing only the URI.
+In the same transaction, the Registry creates the next immutable revision,
+advances the head's version and hash, and emits `MetadataCommitted`. A failed
+Core update rolls back the new revision and head change. Older revision accounts
+remain available, and the artist attribution, Core owner, verification, and
+physical custody do not change.
 
-`pnpm program:test` exercises successful initialization and revision, stale
-writes, forged relationships, invalid content, post-mint rejection, and
-preservation of version 1. The normal Anchor build generates the public
+`pnpm program:test` exercises pre- and post-mint revisions, stale writes,
+forged relationships, invalid content, Core rent failure rollback, preservation
+of earlier versions, and unchanged artist and custody records. The normal Anchor build generates the public
 `target/idl/katha_registry.json`; application client generation is scheduled
 for a later step.
 

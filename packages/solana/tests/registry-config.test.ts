@@ -329,6 +329,58 @@ function mintArtworkInstruction(
   };
 }
 
+function reviseMintedMetadataInstruction(
+  config: Address,
+  artwork: Address,
+  head: Address,
+  currentRevision: Address,
+  revision: Address,
+  collection: Address,
+  collectionAuthority: Address,
+  asset: Address,
+  registration: Address,
+  expectedVersion: number,
+  nextVersion: number,
+  hash: Uint8Array,
+  uri: string,
+  coreProgram: Address = CORE_PROGRAM_ADDRESS,
+) {
+  const discriminator = createHash("sha256")
+    .update("global:revise_minted_metadata")
+    .digest()
+    .subarray(0, 8);
+  const versions = new Uint8Array(8);
+  const view = new DataView(versions.buffer);
+  view.setUint32(0, expectedVersion, true);
+  view.setUint32(4, nextVersion, true);
+  const uriBytes = new TextEncoder().encode(uri);
+  const length = new Uint8Array(4);
+  new DataView(length.buffer).setUint32(0, uriBytes.length, true);
+  return {
+    programAddress: REGISTRY,
+    accounts: [
+      { address: config, role: AccountRole.READONLY },
+      { address: artwork, role: AccountRole.READONLY },
+      { address: head, role: AccountRole.WRITABLE },
+      { address: currentRevision, role: AccountRole.READONLY },
+      { address: revision, role: AccountRole.WRITABLE },
+      { address: collection, role: AccountRole.READONLY },
+      { address: collectionAuthority, role: AccountRole.READONLY },
+      { address: asset, role: AccountRole.WRITABLE },
+      { address: registration, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM, role: AccountRole.READONLY },
+      { address: coreProgram, role: AccountRole.READONLY },
+    ],
+    data: Uint8Array.from([
+      ...discriminator,
+      ...versions,
+      ...hash,
+      ...length,
+      ...uriBytes,
+    ]),
+  };
+}
+
 function readBorshString(data: Uint8Array, offset: number) {
   const length = new DataView(data.buffer, data.byteOffset).getUint32(offset, true);
   return {
@@ -2014,6 +2066,229 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     expect(client.svm.getAccount(verification)).toEqual(attestation);
     expect(client.svm.getAccount(conditionReport1)).toEqual(firstConditionReport);
     expect(client.svm.getAccount(custody1.head)).toEqual(head5);
+
+    const [revision4] = await metadataPda("metadata-version", 4);
+    const hash4 = new Uint8Array(32).fill(14);
+    const uri4 = "https://katha.fun/metadata/000001-v4.json";
+    const updateMinted = (
+      expectedVersion = 3,
+      nextVersion = 4,
+      hash = hash4,
+      uri = uri4,
+      authority = registration.address,
+      currentRevision = revision3,
+      nextRevision = revision4,
+      assetAddress = coreAsset,
+      collectionAddress = collection.address,
+      coreProgramAddress: Address = CORE_PROGRAM_ADDRESS,
+      configAddress = pdas.config,
+      artworkAddress = artwork,
+      headAddress = head,
+      collectionAuthorityAddress = pdas.collectionAuthority,
+    ) =>
+      addSignersToInstruction(
+        [authority === registration.address ? registration : wrongSigner],
+        reviseMintedMetadataInstruction(
+          configAddress,
+          artworkAddress,
+          headAddress,
+          currentRevision,
+          nextRevision,
+          collectionAddress,
+          collectionAuthorityAddress,
+          assetAddress,
+          authority,
+          expectedVersion,
+          nextVersion,
+          hash,
+          uri,
+          coreProgramAddress,
+        ),
+      );
+    const beforeUpdateHead = client.svm.getAccount(head);
+    const unchangedAfterFailure = () => {
+      expect(client.svm.getAccount(head)).toEqual(beforeUpdateHead);
+      expect(client.svm.getAccount(coreAsset)).toEqual(mintedAsset);
+      expect(client.svm.getAccount(revision4).exists).toBe(false);
+    };
+    for (const invalid of [
+      updateMinted(3, 4, hash4, uri4, wrongSigner.address),
+      updateMinted(2),
+      updateMinted(3, 5),
+      updateMinted(3, 4, new Uint8Array(32)),
+      updateMinted(3, 4, hash4, "http://user:secret@katha.fun/private"),
+      updateMinted(3, 4, hash4, uri4, registration.address, revision2),
+      updateMinted(3, 4, hash4, uri4, registration.address, revision3, revision2),
+      updateMinted(
+        3,
+        4,
+        hash4,
+        uri4,
+        registration.address,
+        revision3,
+        revision4,
+        wrongCoreAsset,
+      ),
+      updateMinted(
+        3,
+        4,
+        hash4,
+        uri4,
+        registration.address,
+        revision3,
+        revision4,
+        coreAsset,
+        wrongAuthorityCollection.address,
+      ),
+      updateMinted(
+        3,
+        4,
+        hash4,
+        uri4,
+        registration.address,
+        revision3,
+        revision4,
+        coreAsset,
+        collection.address,
+        SYSTEM,
+      ),
+      updateMinted(
+        3,
+        4,
+        hash4,
+        uri4,
+        registration.address,
+        revision3,
+        revision4,
+        coreAsset,
+        collection.address,
+        CORE_PROGRAM_ADDRESS,
+        wrongSigner.address,
+      ),
+      updateMinted(
+        3,
+        4,
+        hash4,
+        uri4,
+        registration.address,
+        revision3,
+        revision4,
+        coreAsset,
+        collection.address,
+        CORE_PROGRAM_ADDRESS,
+        pdas.config,
+        wrongArtwork,
+      ),
+      updateMinted(
+        3,
+        4,
+        hash4,
+        uri4,
+        registration.address,
+        revision3,
+        revision4,
+        coreAsset,
+        collection.address,
+        CORE_PROGRAM_ADDRESS,
+        pdas.config,
+        artwork,
+        wrongArtwork,
+      ),
+      updateMinted(
+        3,
+        4,
+        hash4,
+        uri4,
+        registration.address,
+        revision3,
+        revision4,
+        coreAsset,
+        collection.address,
+        CORE_PROGRAM_ADDRESS,
+        pdas.config,
+        artwork,
+        head,
+        wrongSigner.address,
+      ),
+    ]) {
+      client.svm.expireBlockhash();
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      unchangedAfterFailure();
+    }
+
+    const driftedAssetData = Uint8Array.from(mintedAsset.data);
+    const uriOffset = Buffer.from(driftedAssetData).indexOf(relocatedUri);
+    if (uriOffset < 0) throw new Error("Core URI not found in asset account");
+    driftedAssetData[uriOffset] = "x".charCodeAt(0);
+    client.svm.setAccount({ ...mintedAsset, data: driftedAssetData });
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([updateMinted()])).rejects.toThrow();
+    client.svm.setAccount(mintedAsset);
+    unchangedAfterFailure();
+
+    client.svm.expireBlockhash();
+    await client.sendTransaction([updateMinted()]);
+    const fourthHead = client.svm.getAccount(head);
+    const fourthRevision = client.svm.getAccount(revision4);
+    const fourthAsset = client.svm.getAccount(coreAsset);
+    if (!fourthHead.exists || !fourthRevision.exists || !fourthAsset.exists)
+      throw new Error("Minted metadata revision did not commit atomically");
+    expect(
+      new DataView(fourthHead.data.buffer, fourthHead.data.byteOffset).getUint32(
+        40,
+        true,
+      ),
+    ).toBe(4);
+    expect(getAddressDecoder().decode(fourthHead.data.subarray(44, 76))).toBe(
+      revision4,
+    );
+    expect(Array.from(fourthHead.data.subarray(76, 108))).toEqual(Array.from(hash4));
+    expect(readBorshString(fourthRevision.data, 76).value).toBe(uri4);
+    expect(Array.from(fourthRevision.data.subarray(44, 76))).toEqual(Array.from(hash4));
+    expect(readCoreAsset(fourthAsset, coreAsset, collection.address)).toEqual({
+      address: coreAsset,
+      owner: registration.address,
+      collection: collection.address,
+      name: kathaId,
+      uri: uri4,
+    });
+    expect(client.svm.getAccount(artwork)).toEqual(mintedArtwork);
+    expect(client.svm.getAccount(revision3)).toEqual(thirdRevision);
+    expect(client.svm.getAccount(revision2).exists).toBe(true);
+    expect(client.svm.getAccount(revision1).exists).toBe(true);
+    expect(client.svm.getAccount(verification)).toEqual(attestation);
+    expect(client.svm.getAccount(custody1.head)).toEqual(head5);
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([updateMinted()])).rejects.toThrow();
+    expect(client.svm.getAccount(head)).toEqual(fourthHead);
+    expect(client.svm.getAccount(coreAsset)).toEqual(fourthAsset);
+
+    const [revision5] = await metadataPda("metadata-version", 5);
+    const registrationBeforeLowRent = client.svm.getAccount(registration.address);
+    if (!registrationBeforeLowRent.exists)
+      throw new Error("Registration wallet missing");
+    client.svm.setAccount({
+      ...registrationBeforeLowRent,
+      lamports: lamports(fourthRevision.lamports + 100_000n),
+    });
+    client.svm.expireBlockhash();
+    await expect(
+      client.sendTransaction([
+        updateMinted(
+          4,
+          5,
+          hash4,
+          `https://katha.fun/${"a".repeat(180)}`,
+          registration.address,
+          revision4,
+          revision5,
+        ),
+      ]),
+    ).rejects.toThrow();
+    client.svm.setAccount(registrationBeforeLowRent);
+    expect(client.svm.getAccount(revision5).exists).toBe(false);
+    expect(client.svm.getAccount(head)).toEqual(fourthHead);
+    expect(client.svm.getAccount(coreAsset)).toEqual(fourthAsset);
   });
 });
 

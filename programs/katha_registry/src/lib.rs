@@ -252,6 +252,94 @@ pub mod katha_registry {
         Ok(())
     }
 
+    pub fn revise_minted_metadata(
+        ctx: Context<ReviseMintedMetadata>,
+        expected_version: u32,
+        next_version: u32,
+        document_hash: [u8; 32],
+        uri: String,
+    ) -> Result<()> {
+        use mpl_core::instructions::UpdateV1CpiBuilder;
+        use mpl_core::types::UpdateAuthority;
+
+        let head = &ctx.accounts.head;
+        require!(
+            head.version == expected_version,
+            RegistryError::StaleMetadataVersion
+        );
+        require!(
+            expected_version.checked_add(1) == Some(next_version),
+            RegistryError::InvalidMetadataVersion
+        );
+        require!(
+            ctx.accounts.current_revision.version == head.version
+                && ctx.accounts.current_revision.document_hash == head.current_hash,
+            RegistryError::InvalidMetadataRelationship
+        );
+        validate_metadata_commitment(&document_hash, &uri)?;
+
+        let collection_data = ctx.accounts.collection.try_borrow_data()?;
+        let collection = mpl_core::Collection::from_bytes(&collection_data)
+            .map_err(|_| error!(RegistryError::InvalidCollection))?;
+        require_keys_eq!(
+            collection.base.update_authority,
+            ctx.accounts.collection_authority.key(),
+            RegistryError::InvalidCollectionAuthority
+        );
+        drop(collection_data);
+
+        let asset_data = ctx.accounts.asset.try_borrow_data()?;
+        let asset = mpl_core::Asset::from_bytes(&asset_data)
+            .map_err(|_| error!(RegistryError::InvalidCoreAsset))?;
+        require!(
+            asset.base.update_authority
+                == UpdateAuthority::Collection(ctx.accounts.config.collection),
+            RegistryError::InvalidCoreAsset
+        );
+        require!(
+            asset.base.name == ctx.accounts.artwork.katha_id
+                && asset.base.uri == ctx.accounts.current_revision.uri,
+            RegistryError::CoreMetadataOutOfSync
+        );
+        drop(asset_data);
+
+        let collection_bump = [ctx.accounts.config.collection_authority_bump];
+        let collection_seeds: &[&[u8]] = &[COLLECTION_AUTHORITY_SEED, &collection_bump];
+        UpdateV1CpiBuilder::new(&ctx.accounts.core_program.to_account_info())
+            .asset(&ctx.accounts.asset.to_account_info())
+            .collection(Some(&ctx.accounts.collection.to_account_info()))
+            .payer(&ctx.accounts.registration_authority.to_account_info())
+            .authority(Some(&ctx.accounts.collection_authority.to_account_info()))
+            .system_program(&ctx.accounts.system_program.to_account_info())
+            .new_uri(uri.clone())
+            .invoke_signed(&[collection_seeds])?;
+
+        let revision = &mut ctx.accounts.revision;
+        revision.artwork = ctx.accounts.artwork.key();
+        revision.version = next_version;
+        revision.document_hash = document_hash;
+        revision.uri = uri;
+        revision.committed_by = ctx.accounts.registration_authority.key();
+        revision.committed_at = Clock::get()?.unix_timestamp;
+        revision.bump = ctx.bumps.revision;
+
+        let head = &mut ctx.accounts.head;
+        head.version = next_version;
+        head.current_revision = revision.key();
+        head.current_hash = document_hash;
+
+        emit!(MetadataCommitted {
+            artwork: ctx.accounts.artwork.key(),
+            katha_id: ctx.accounts.artwork.katha_id.clone(),
+            revision: revision.key(),
+            version: next_version,
+            document_hash,
+            committed_by: revision.committed_by,
+            committed_at: revision.committed_at,
+        });
+        Ok(())
+    }
+
     pub fn initialize_condition(
         ctx: Context<InitializeCondition>,
         report_id: [u8; 16],
@@ -1004,6 +1092,57 @@ pub struct ReviseUnmintedMetadata<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(expected_version: u32, next_version: u32)]
+pub struct ReviseMintedMetadata<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection,
+        constraint = artwork.core_asset == Some(asset.key()) @ RegistryError::InvalidCoreAsset
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        mut,
+        seeds = [METADATA_HEAD_SEED, artwork.key().as_ref()],
+        bump = head.bump,
+        constraint = head.artwork == artwork.key() @ RegistryError::InvalidMetadataRelationship,
+        constraint = head.current_revision == current_revision.key() @ RegistryError::InvalidMetadataRelationship
+    )]
+    pub head: Account<'info, MetadataHead>,
+    #[account(
+        seeds = [METADATA_VERSION_SEED, artwork.key().as_ref(), &current_revision.version.to_le_bytes()],
+        bump = current_revision.bump,
+        constraint = current_revision.artwork == artwork.key() @ RegistryError::InvalidMetadataRelationship
+    )]
+    pub current_revision: Account<'info, MetadataRevision>,
+    #[account(
+        init,
+        payer = registration_authority,
+        space = MetadataRevision::SPACE,
+        seeds = [METADATA_VERSION_SEED, artwork.key().as_ref(), &next_version.to_le_bytes()],
+        bump
+    )]
+    pub revision: Account<'info, MetadataRevision>,
+    /// CHECK: Core owns the collection; the handler verifies its update authority.
+    #[account(address = config.collection @ RegistryError::InvalidArtworkCollection, owner = mpl_core::ID @ RegistryError::InvalidCollection)]
+    pub collection: UncheckedAccount<'info>,
+    /// CHECK: Canonical Registry PDA signs the Core update CPI.
+    #[account(seeds = [COLLECTION_AUTHORITY_SEED], bump = config.collection_authority_bump, address = config.collection_authority)]
+    pub collection_authority: UncheckedAccount<'info>,
+    /// CHECK: Bound Core asset is parsed and validated before CPI.
+    #[account(mut, seeds = [CORE_ASSET_SEED, artwork.key().as_ref()], bump, owner = mpl_core::ID @ RegistryError::InvalidCoreAsset)]
+    pub asset: UncheckedAccount<'info>,
+    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    pub registration_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    /// CHECK: Program ID is fixed; Core validates the CPI accounts.
+    #[account(address = mpl_core::ID @ RegistryError::InvalidCoreProgram)]
+    pub core_program: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
 #[instruction(report_id: [u8; 16])]
 pub struct InitializeCondition<'info> {
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
@@ -1391,6 +1530,10 @@ pub enum RegistryError {
     InvalidMintCustody,
     #[msg("The provided Core program ID is incorrect")]
     InvalidCoreProgram,
+    #[msg("Bound Core asset is invalid or controlled by another authority")]
+    InvalidCoreAsset,
+    #[msg("Core identity or URI differs from the current Registry metadata revision")]
+    CoreMetadataOutOfSync,
 }
 
 #[cfg(feature = "core-cpi-test")]
