@@ -11,10 +11,10 @@ Each program has its own crate, public development ID, and generated IDL. The
 Registry has a one-time [platform bootstrap](registry-bootstrap.md),
 [permanent artwork registration](registry-artwork.md),
 [verifier authentication](registry-verification.md),
-[pre-mint metadata commitments](registry-metadata.md),
+[versioned metadata commitments and Core URI synchronization](registry-metadata.md),
 [initial condition attestations](registry-condition.md), and
 [physical custody attestations](registry-custody.md), and
-[Core asset minting](registry-mint.md). Post-mint metadata and inspection rules
+[Core asset minting](registry-mint.md). Owner-scoped post-mint inspection rules
 come later. Marketplace has no instructions or account
 state yet. The Registry also has a feature-gated, local-only Core CPI probe for the
 [program test harness](program-testing.md).
@@ -44,7 +44,7 @@ in the workspace are development identifiers, not deployment claims.
 The `--ignore-keys` flag skips a local keypair-to-source-ID comparison; it does
 not submit or sign a transaction. The build emits an Anchor IDL under
 `target/idl/`; reviewed IDLs are eligible for publication. Typed clients are
-generated from IDLs in a later step.
+generated from these IDLs through [Codama](program-clients.md).
 
 To build just one program, pass its crate name:
 
@@ -61,5 +61,6 @@ cargo fmt --all -- --check
 ```
 
 The normal `anchor build` omits the `core-cpi-test` probe. Its Registry IDL
-contains only `initialize_platform`; the Marketplace IDL remains empty. Run
+contains the implemented Registry lifecycle instructions; the Marketplace IDL
+remains empty. Run
 `pnpm program:test` for the Core CPI and Registry bootstrap integration gates.

@@ -8,7 +8,10 @@
     "pnpm": "12.6.0"
   },
   "devDependencies": {
+    "@codama/nodes-from-anchor": "1.5.6",
+    "@codama/renderers-js": "2.5.0",
     "@eslint/js": "10.0.1",
+    "codama": "1.11.0",
     "eslint": "10.11.0",
     "prettier": "3.9.9",
     "turbo": "2.11.5",
@@ -16,6 +19,9 @@
     "typescript-eslint": "8.70.1"
   },
   "scripts": {
+    "program:build": "NO_DNA=1 anchor build --ignore-keys",
+    "codegen": "node scripts/generate-program-clients.mjs",
+    "codegen:check": "node scripts/generate-program-clients.mjs --check",
     "lint": "turbo run lint lint:root",
     "lint:fix": "eslint . --fix",
     "format:check": "prettier --check .",

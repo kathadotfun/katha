@@ -4,7 +4,9 @@
 transaction builders. Step 024 pins `@solana/kit` 8.4.0 and
 `@solana/kit-plugin-rpc` 0.19.0. The current client has RPC and subscription
 capabilities but no payer, signer, or transaction-submission method. Wallet
-connection, unsigned operation builders, and program clients arrive later.
+connection and application operation builders arrive later. Generated Registry
+and Marketplace clients are available through `@katha/solana/registry` and
+`@katha/solana/marketplace`; see the [generation guide](program-clients.md).
 
 ## Clusters and endpoints
 

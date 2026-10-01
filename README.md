@@ -80,6 +80,7 @@ outside the current scope.
 - [Registry condition attestations](docs/development/registry-condition.md)
 - [Registry physical custody attestations](docs/development/registry-custody.md)
 - [Registry Core asset minting](docs/development/registry-mint.md)
+- [Generated Solana program clients](docs/development/program-clients.md)
 
 ## Repository policy
 

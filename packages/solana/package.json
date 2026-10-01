@@ -6,6 +6,14 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
+    "./registry": {
+      "types": "./dist/generated/registry/index.d.ts",
+      "import": "./dist/generated/registry/index.js"
+    },
+    "./marketplace": {
+      "types": "./dist/generated/marketplace/index.d.ts",
+      "import": "./dist/generated/marketplace/index.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"

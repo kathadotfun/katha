@@ -25,6 +25,7 @@ jobs:
           test "$(node --version)" = "v24.21.0"
           test "$(pnpm --version)" = "12.6.0"
       - run: pnpm format:check
+      - run: pnpm codegen:check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm build

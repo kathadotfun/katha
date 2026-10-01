@@ -21,6 +21,11 @@ import {
   CORE_PROGRAM_ADDRESS,
   readCoreAsset,
 } from "../src/core.js";
+import {
+  ArtworkCategory,
+  getArtworkRecordDecoder,
+  getRegisterArtworkInstructionAsync,
+} from "../src/generated/registry/index.js";
 
 const REGISTRY = address("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
 const SYSTEM = address("11111111111111111111111111111111");
@@ -720,11 +725,31 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       await expect(client.sendTransaction([invalid])).rejects.toThrow();
       absent();
     }
-    await client.sendTransaction([register()]);
+    const generatedRegistration = await getRegisterArtworkInstructionAsync({
+      registrationAuthority: registration,
+      kathaId,
+      artistId,
+      creatorWallet: null,
+      category: ArtworkCategory.Paubha,
+      creationYear: 2025,
+      authorshipEvidenceHash: new Uint8Array(32).fill(7),
+    });
+    expect(Array.from(generatedRegistration.data)).toEqual(Array.from(register().data));
+    expect(
+      generatedRegistration.accounts.map(({ address, role }) => ({ address, role })),
+    ).toEqual(register().accounts.map(({ address, role }) => ({ address, role })));
+    await client.sendTransaction([generatedRegistration]);
     const record = client.svm.getAccount(artwork);
     if (!record.exists) throw new Error("ArtworkRecord was not created");
     expect(record.programAddress).toBe(REGISTRY);
     expect(record.data.length).toBe(246);
+    expect(getArtworkRecordDecoder().decode(record.data)).toMatchObject({
+      kathaId,
+      artistId,
+      category: ArtworkCategory.Paubha,
+      registeredBy: registration.address,
+      collection: collection.address,
+    });
     expect(Array.from(record.data.subarray(0, 8))).toEqual(
       Array.from(
         createHash("sha256").update("account:ArtworkRecord").digest().subarray(0, 8),
