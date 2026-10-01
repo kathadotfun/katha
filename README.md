@@ -77,6 +77,7 @@ outside the current scope.
 - [Registry artwork identities](docs/development/registry-artwork.md)
 - [Registry artwork authentication](docs/development/registry-verification.md)
 - [Registry metadata commitments](docs/development/registry-metadata.md)
+- [Registry condition attestations](docs/development/registry-condition.md)
 
 ## Repository policy
 

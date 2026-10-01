@@ -198,6 +198,56 @@ function metadataInstruction(
   };
 }
 
+function conditionInstruction(
+  action: "initialize_condition" | "record_unminted_condition",
+  config: Address,
+  artwork: Address,
+  verification: Address,
+  head: Address,
+  report: Address,
+  authority: Address,
+  reportId: Uint8Array,
+  reportHash: Uint8Array,
+  grade: number,
+  reason: number,
+  inspectorId: Uint8Array,
+  inspectedAt: number,
+  expectedVersion = 0,
+  nextVersion = 0,
+) {
+  const discriminator = createHash("sha256")
+    .update(`global:${action}`)
+    .digest()
+    .subarray(0, 8);
+  const versions = new Uint8Array(8);
+  new DataView(versions.buffer).setUint32(0, expectedVersion, true);
+  new DataView(versions.buffer).setUint32(4, nextVersion, true);
+  const inspectedAtBytes = new Uint8Array(8);
+  new DataView(inspectedAtBytes.buffer).setBigInt64(0, BigInt(inspectedAt), true);
+  return {
+    programAddress: REGISTRY,
+    accounts: [
+      { address: config, role: AccountRole.READONLY },
+      { address: artwork, role: AccountRole.READONLY },
+      { address: verification, role: AccountRole.READONLY },
+      { address: head, role: AccountRole.WRITABLE },
+      { address: report, role: AccountRole.WRITABLE },
+      { address: authority, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM, role: AccountRole.READONLY },
+    ],
+    data: Uint8Array.from([
+      ...discriminator,
+      ...(action === "record_unminted_condition" ? versions : []),
+      ...reportId,
+      ...reportHash,
+      grade,
+      reason,
+      ...inspectorId,
+      ...inspectedAtBytes,
+    ]),
+  };
+}
+
 function readBorshString(data: Uint8Array, offset: number) {
   const length = new DataView(data.buffer, data.byteOffset).getUint32(offset, true);
   return {
@@ -974,6 +1024,414 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     expect(afterStale.exists && Array.from(afterStale.data)).toEqual(
       Array.from(thirdHead.data),
     );
+
+    const uuidBytes = (lastByte: number) =>
+      Uint8Array.from([
+        0x12,
+        0x3e,
+        0x45,
+        0x67,
+        0xe8,
+        0x9b,
+        0x42,
+        0xd3,
+        0xa4,
+        0x56,
+        0x42,
+        0x66,
+        0x14,
+        0x17,
+        0x40,
+        lastByte,
+      ]);
+    const conditionId1 = uuidBytes(1);
+    const conditionId2 = uuidBytes(2);
+    const inspectorId = uuidBytes(9);
+    const clock = client.svm.getClock();
+    clock.unixTimestamp = 2_000_000_000n;
+    client.svm.setClock(clock);
+    const inspectionTime = Number(client.svm.getClock().unixTimestamp) - 60;
+    expect(inspectionTime).toBeGreaterThan(0);
+    const [conditionHead] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [
+        new TextEncoder().encode("condition"),
+        getAddressEncoder().encode(artwork),
+      ],
+    });
+    const reportPda = (reportId: Uint8Array) =>
+      getProgramDerivedAddress({
+        programAddress: REGISTRY,
+        seeds: [new TextEncoder().encode("condition-report"), reportId],
+      });
+    const [conditionReport1] = await reportPda(conditionId1);
+    const [conditionReport2] = await reportPda(conditionId2);
+    const reportHash1 = new Uint8Array(32).fill(21);
+    const reportHash2 = new Uint8Array(32).fill(22);
+    const condition = (
+      action: "initialize_condition" | "record_unminted_condition",
+      reportId: Uint8Array,
+      hash: Uint8Array,
+      grade: number,
+      reason: number,
+      report: Address,
+      expectedVersion = 0,
+      nextVersion = 0,
+      art = artwork,
+      conditionVerification = verification,
+      conditionHeadAddress = conditionHead,
+      authority = verifier.address,
+      inspectedAt = inspectionTime,
+      inspector = inspectorId,
+      configAddress = pdas.config,
+    ) =>
+      addSignersToInstruction(
+        [authority === verifier.address ? verifier : wrongSigner],
+        conditionInstruction(
+          action,
+          configAddress,
+          art,
+          conditionVerification,
+          conditionHeadAddress,
+          report,
+          authority,
+          reportId,
+          hash,
+          grade,
+          reason,
+          inspector,
+          inspectedAt,
+          expectedVersion,
+          nextVersion,
+        ),
+      );
+    const initialCondition = (
+      reportId = conditionId1,
+      hash = reportHash1,
+      grade = 1,
+      reason = 0,
+      report = conditionReport1,
+      art = artwork,
+      conditionVerification = verification,
+      conditionHeadAddress = conditionHead,
+      authority = verifier.address,
+      inspectedAt = inspectionTime,
+      inspector = inspectorId,
+      configAddress = pdas.config,
+    ) =>
+      condition(
+        "initialize_condition",
+        reportId,
+        hash,
+        grade,
+        reason,
+        report,
+        0,
+        0,
+        art,
+        conditionVerification,
+        conditionHeadAddress,
+        authority,
+        inspectedAt,
+        inspector,
+        configAddress,
+      );
+    const followupCondition = (
+      expectedVersion = 1,
+      nextVersion = 2,
+      reportId = conditionId2,
+      hash = reportHash2,
+      grade = 2,
+      reason = 1,
+      report = conditionReport2,
+      art = artwork,
+      conditionVerification = verification,
+      conditionHeadAddress = conditionHead,
+      authority = verifier.address,
+      inspectedAt = inspectionTime,
+      inspector = inspectorId,
+      configAddress = pdas.config,
+    ) =>
+      condition(
+        "record_unminted_condition",
+        reportId,
+        hash,
+        grade,
+        reason,
+        report,
+        expectedVersion,
+        nextVersion,
+        art,
+        conditionVerification,
+        conditionHeadAddress,
+        authority,
+        inspectedAt,
+        inspector,
+        configAddress,
+      );
+    const conditionAbsent = () => {
+      expect(client.svm.getAccount(conditionHead).exists).toBe(false);
+      expect(client.svm.getAccount(conditionReport1).exists).toBe(false);
+    };
+    await expect(
+      client.sendTransaction([
+        initialCondition(
+          conditionId1,
+          reportHash1,
+          1,
+          0,
+          conditionReport1,
+          artwork,
+          verification,
+          conditionHead,
+          wrongSigner.address,
+        ),
+      ]),
+    ).rejects.toThrow();
+    conditionAbsent();
+    await expect(
+      client.sendTransaction([
+        initialCondition(
+          conditionId1,
+          reportHash1,
+          1,
+          0,
+          conditionReport1,
+          artwork,
+          verification,
+          conditionHead,
+          verifier.address,
+          inspectionTime,
+          inspectorId,
+          wrongSigner.address,
+        ),
+      ]),
+    ).rejects.toThrow();
+    conditionAbsent();
+    await expect(
+      client.sendTransaction([
+        initialCondition(
+          conditionId1,
+          reportHash1,
+          1,
+          0,
+          conditionReport1,
+          otherArtwork,
+        ),
+      ]),
+    ).rejects.toThrow();
+    conditionAbsent();
+    await expect(
+      client.sendTransaction([
+        initialCondition(
+          conditionId1,
+          reportHash1,
+          1,
+          0,
+          conditionReport1,
+          artwork,
+          wrongArtwork,
+        ),
+      ]),
+    ).rejects.toThrow();
+    conditionAbsent();
+    const invalidReportId = new Uint8Array(conditionId1);
+    invalidReportId[8] = 0;
+    const invalidInspectorId = new Uint8Array(inspectorId);
+    invalidInspectorId[6] = 0;
+    for (const invalid of [
+      initialCondition(invalidReportId),
+      initialCondition(conditionId1, reportHash1, 1, 3),
+      initialCondition(conditionId1, new Uint8Array(32)),
+      initialCondition(
+        conditionId1,
+        reportHash1,
+        1,
+        0,
+        conditionReport1,
+        artwork,
+        verification,
+        conditionHead,
+        verifier.address,
+        0,
+      ),
+      initialCondition(
+        conditionId1,
+        reportHash1,
+        1,
+        0,
+        conditionReport1,
+        artwork,
+        verification,
+        conditionHead,
+        verifier.address,
+        Number(client.svm.getClock().unixTimestamp) + 60,
+      ),
+      initialCondition(
+        conditionId1,
+        reportHash1,
+        1,
+        0,
+        conditionReport1,
+        artwork,
+        verification,
+        conditionHead,
+        verifier.address,
+        inspectionTime,
+        invalidInspectorId,
+      ),
+    ]) {
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      conditionAbsent();
+    }
+    await client.sendTransaction([initialCondition()]);
+    const firstConditionHead = client.svm.getAccount(conditionHead);
+    const firstConditionReport = client.svm.getAccount(conditionReport1);
+    if (!firstConditionHead.exists || !firstConditionReport.exists) {
+      throw new Error("Initial condition attestation was not created");
+    }
+    expect(firstConditionHead.programAddress).toBe(REGISTRY);
+    expect(firstConditionHead.data.length).toBe(109);
+    expect(getAddressDecoder().decode(firstConditionHead.data.subarray(8, 40))).toBe(
+      artwork,
+    );
+    expect(
+      new DataView(
+        firstConditionHead.data.buffer,
+        firstConditionHead.data.byteOffset,
+      ).getUint32(40, true),
+    ).toBe(1);
+    expect(getAddressDecoder().decode(firstConditionHead.data.subarray(44, 76))).toBe(
+      conditionReport1,
+    );
+    expect(Array.from(firstConditionHead.data.subarray(76, 108))).toEqual(
+      Array(32).fill(21),
+    );
+    expect(firstConditionReport.data.length).toBe(201);
+    expect(getAddressDecoder().decode(firstConditionReport.data.subarray(8, 40))).toBe(
+      artwork,
+    );
+    expect(
+      new DataView(
+        firstConditionReport.data.buffer,
+        firstConditionReport.data.byteOffset,
+      ).getUint32(40, true),
+    ).toBe(1);
+    expect(Array.from(firstConditionReport.data.subarray(44, 60))).toEqual(
+      Array.from(conditionId1),
+    );
+    expect(Array.from(firstConditionReport.data.subarray(60, 92))).toEqual(
+      Array(32).fill(21),
+    );
+    expect(firstConditionReport.data[92]).toBe(1);
+    expect(firstConditionReport.data[93]).toBe(0);
+    expect(Array.from(firstConditionReport.data.subarray(94, 110))).toEqual(
+      Array.from(inspectorId),
+    );
+    expect(
+      getAddressDecoder().decode(firstConditionReport.data.subarray(110, 142)),
+    ).toBe(verifier.address);
+    expect(firstConditionReport.data[158]).toBe(0); // No owner scope before mint.
+    expect(firstConditionReport.data[159]).toBe(0); // No custody scope before attestation.
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([initialCondition()])).rejects.toThrow();
+    const unchangedConditionHead = () => {
+      const current = client.svm.getAccount(conditionHead);
+      expect(current.exists && Array.from(current.data)).toEqual(
+        Array.from(firstConditionHead.data),
+      );
+      expect(client.svm.getAccount(conditionReport2).exists).toBe(false);
+    };
+    await expect(
+      client.sendTransaction([
+        followupCondition(
+          1,
+          2,
+          conditionId2,
+          reportHash2,
+          2,
+          1,
+          conditionReport2,
+          artwork,
+          verification,
+          conditionHead,
+          wrongSigner.address,
+        ),
+      ]),
+    ).rejects.toThrow();
+    unchangedConditionHead();
+    await expect(
+      client.sendTransaction([
+        followupCondition(1, 2, conditionId2, reportHash2, 2, 3),
+      ]),
+    ).rejects.toThrow();
+    unchangedConditionHead();
+    await expect(client.sendTransaction([followupCondition(0)])).rejects.toThrow();
+    unchangedConditionHead();
+    await expect(client.sendTransaction([followupCondition(1, 3)])).rejects.toThrow();
+    unchangedConditionHead();
+    await expect(
+      client.sendTransaction([
+        followupCondition(1, 2, conditionId1, reportHash2, 2, 1, conditionReport1),
+      ]),
+    ).rejects.toThrow();
+    unchangedConditionHead();
+    await client.sendTransaction([followupCondition()]);
+    const secondConditionHead = client.svm.getAccount(conditionHead);
+    const secondConditionReport = client.svm.getAccount(conditionReport2);
+    if (!secondConditionHead.exists || !secondConditionReport.exists) {
+      throw new Error("Follow-up condition attestation was not created");
+    }
+    expect(
+      new DataView(
+        secondConditionHead.data.buffer,
+        secondConditionHead.data.byteOffset,
+      ).getUint32(40, true),
+    ).toBe(2);
+    expect(getAddressDecoder().decode(secondConditionHead.data.subarray(44, 76))).toBe(
+      conditionReport2,
+    );
+    expect(Array.from(secondConditionHead.data.subarray(76, 108))).toEqual(
+      Array(32).fill(22),
+    );
+    expect(secondConditionReport.data[92]).toBe(2);
+    expect(secondConditionReport.data[93]).toBe(1);
+    const preservedCondition = client.svm.getAccount(conditionReport1);
+    expect(preservedCondition.exists && Array.from(preservedCondition.data)).toEqual(
+      Array.from(firstConditionReport.data),
+    );
+    const afterCondition = client.svm.getAccount(artwork);
+    expect(afterCondition.exists && Array.from(afterCondition.data)).toEqual(
+      Array.from(record.data),
+    );
+    const conditionId3 = uuidBytes(3);
+    const [conditionReport3] = await reportPda(conditionId3);
+    client.svm.setAccount({ ...record, data: mintedData });
+    await expect(
+      client.sendTransaction([
+        followupCondition(
+          2,
+          3,
+          conditionId3,
+          new Uint8Array(32).fill(23),
+          1,
+          3,
+          conditionReport3,
+        ),
+      ]),
+    ).rejects.toThrow();
+    client.svm.setAccount(record);
+    expect(client.svm.getAccount(conditionReport3).exists).toBe(false);
+    const afterMintedAttempt = client.svm.getAccount(conditionHead);
+    expect(afterMintedAttempt.exists && Array.from(afterMintedAttempt.data)).toEqual(
+      Array.from(secondConditionHead.data),
+    );
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([followupCondition()])).rejects.toThrow();
+    const afterDuplicateCondition = client.svm.getAccount(conditionHead);
+    expect(
+      afterDuplicateCondition.exists && Array.from(afterDuplicateCondition.data),
+    ).toEqual(Array.from(secondConditionHead.data));
   });
 });
 

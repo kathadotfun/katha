@@ -8,6 +8,8 @@ pub const ARTWORK_SEED: &[u8] = b"artwork";
 pub const VERIFICATION_SEED: &[u8] = b"verification";
 pub const METADATA_HEAD_SEED: &[u8] = b"metadata";
 pub const METADATA_VERSION_SEED: &[u8] = b"metadata-version";
+pub const CONDITION_HEAD_SEED: &[u8] = b"condition";
+pub const CONDITION_REPORT_SEED: &[u8] = b"condition-report";
 
 #[program]
 pub mod katha_registry {
@@ -247,6 +249,144 @@ pub mod katha_registry {
         Ok(())
     }
 
+    pub fn initialize_condition(
+        ctx: Context<InitializeCondition>,
+        report_id: [u8; 16],
+        report_hash: [u8; 32],
+        grade: ConditionGrade,
+        reason: ConditionReason,
+        inspector_id: [u8; 16],
+        inspected_at: i64,
+    ) -> Result<()> {
+        require!(
+            reason == ConditionReason::InitialVerification,
+            RegistryError::InvalidInitialConditionReason
+        );
+        let recorded_at = Clock::get()?.unix_timestamp;
+        validate_condition_report(
+            &report_id,
+            &report_hash,
+            &inspector_id,
+            inspected_at,
+            recorded_at,
+        )?;
+        let artwork = &ctx.accounts.artwork;
+        let report = &mut ctx.accounts.report;
+        report.artwork = artwork.key();
+        report.version = 1;
+        report.report_id = report_id;
+        report.report_hash = report_hash;
+        report.grade = grade;
+        report.reason = reason;
+        report.inspector_id = inspector_id;
+        report.verifier = ctx.accounts.verifier_authority.key();
+        report.inspected_at = inspected_at;
+        report.recorded_at = recorded_at;
+        report.owner_scope = None;
+        report.custody_revision_scope = None;
+        report.bump = ctx.bumps.report;
+
+        let head = &mut ctx.accounts.head;
+        head.artwork = artwork.key();
+        head.version = report.version;
+        head.current_report = report.key();
+        head.current_hash = report_hash;
+        head.bump = ctx.bumps.head;
+
+        emit!(ConditionRecorded {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            report: report.key(),
+            report_id,
+            version: report.version,
+            report_hash,
+            grade,
+            reason,
+            inspector_id,
+            verifier: report.verifier,
+            inspected_at,
+            recorded_at,
+            owner_scope: None,
+            custody_revision_scope: None,
+        });
+        Ok(())
+    }
+
+    pub fn record_unminted_condition(
+        ctx: Context<RecordUnmintedCondition>,
+        expected_version: u32,
+        next_version: u32,
+        report_id: [u8; 16],
+        report_hash: [u8; 32],
+        grade: ConditionGrade,
+        reason: ConditionReason,
+        inspector_id: [u8; 16],
+        inspected_at: i64,
+    ) -> Result<()> {
+        let head = &mut ctx.accounts.head;
+        require!(
+            head.version == expected_version,
+            RegistryError::StaleConditionVersion
+        );
+        require!(
+            expected_version.checked_add(1) == Some(next_version),
+            RegistryError::InvalidConditionVersion
+        );
+        require!(
+            matches!(
+                reason,
+                ConditionReason::PreSale | ConditionReason::Insurance
+            ),
+            RegistryError::InvalidUnmintedConditionReason
+        );
+        let recorded_at = Clock::get()?.unix_timestamp;
+        validate_condition_report(
+            &report_id,
+            &report_hash,
+            &inspector_id,
+            inspected_at,
+            recorded_at,
+        )?;
+
+        let artwork = &ctx.accounts.artwork;
+        let report = &mut ctx.accounts.report;
+        report.artwork = artwork.key();
+        report.version = next_version;
+        report.report_id = report_id;
+        report.report_hash = report_hash;
+        report.grade = grade;
+        report.reason = reason;
+        report.inspector_id = inspector_id;
+        report.verifier = ctx.accounts.verifier_authority.key();
+        report.inspected_at = inspected_at;
+        report.recorded_at = recorded_at;
+        report.owner_scope = None;
+        report.custody_revision_scope = None;
+        report.bump = ctx.bumps.report;
+
+        head.version = next_version;
+        head.current_report = report.key();
+        head.current_hash = report_hash;
+
+        emit!(ConditionRecorded {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            report: report.key(),
+            report_id,
+            version: report.version,
+            report_hash,
+            grade,
+            reason,
+            inspector_id,
+            verifier: report.verifier,
+            inspected_at,
+            recorded_at,
+            owner_scope: None,
+            custody_revision_scope: None,
+        });
+        Ok(())
+    }
+
     // Compiled only into the local harness binary, never the normal Registry build.
     #[cfg(feature = "core-cpi-test")]
     pub fn probe_create_core_collection(
@@ -289,6 +429,31 @@ fn validate_metadata_commitment(document_hash: &[u8; 32], uri: &str) -> Result<(
                 .bytes()
                 .all(|byte| byte.is_ascii_graphic() && byte != b'@' && byte != b'#'),
         RegistryError::InvalidMetadataUri
+    );
+    Ok(())
+}
+
+fn valid_uuid_bytes(id: &[u8; 16]) -> bool {
+    let version = id[6] >> 4;
+    (1..=8).contains(&version) && id[8] & 0xc0 == 0x80
+}
+
+fn validate_condition_report(
+    report_id: &[u8; 16],
+    report_hash: &[u8; 32],
+    inspector_id: &[u8; 16],
+    inspected_at: i64,
+    recorded_at: i64,
+) -> Result<()> {
+    require!(valid_uuid_bytes(report_id), RegistryError::InvalidReportId);
+    require!(
+        valid_uuid_bytes(inspector_id),
+        RegistryError::InvalidInspectorId
+    );
+    require!(*report_hash != [0; 32], RegistryError::InvalidConditionHash);
+    require!(
+        inspected_at > 0 && inspected_at <= recorded_at,
+        RegistryError::InvalidInspectionTime
     );
     Ok(())
 }
@@ -387,6 +552,60 @@ pub struct MetadataRevision {
 
 impl MetadataRevision {
     pub const SPACE: usize = 8 + 32 + 4 + 32 + (4 + 200) + 32 + 8 + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum ConditionGrade {
+    Excellent,
+    Good,
+    Fair,
+    Poor,
+    Damaged,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum ConditionReason {
+    InitialVerification,
+    PreSale,
+    PostDelivery,
+    PreResale,
+    ReturnToCustody,
+    Insurance,
+}
+
+#[account]
+pub struct ConditionHead {
+    pub artwork: Pubkey,
+    pub version: u32,
+    pub current_report: Pubkey,
+    pub current_hash: [u8; 32],
+    pub bump: u8,
+}
+
+impl ConditionHead {
+    pub const SPACE: usize = 8 + 32 + 4 + 32 + 32 + 1;
+}
+
+#[account]
+pub struct ConditionAttestation {
+    pub artwork: Pubkey,
+    pub version: u32,
+    pub report_id: [u8; 16],
+    pub report_hash: [u8; 32],
+    pub grade: ConditionGrade,
+    pub reason: ConditionReason,
+    pub inspector_id: [u8; 16],
+    pub verifier: Pubkey,
+    pub inspected_at: i64,
+    pub recorded_at: i64,
+    pub owner_scope: Option<Pubkey>,
+    pub custody_revision_scope: Option<u64>,
+    pub bump: u8,
+}
+
+impl ConditionAttestation {
+    pub const SPACE: usize =
+        8 + 32 + 4 + 16 + 32 + 1 + 1 + 16 + 32 + 8 + 8 + (1 + 32) + (1 + 8) + 1;
 }
 
 #[derive(Accounts)]
@@ -513,6 +732,83 @@ pub struct ReviseUnmintedMetadata<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(report_id: [u8; 16])]
+pub struct InitializeCondition<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection,
+        constraint = artwork.core_asset.is_none() @ RegistryError::MintedConditionRequiresOwnerScope
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        seeds = [VERIFICATION_SEED, artwork.key().as_ref()],
+        bump = verification.bump,
+        constraint = verification.artwork == artwork.key() @ RegistryError::InvalidVerificationRelationship
+    )]
+    pub verification: Account<'info, ArtworkVerification>,
+    #[account(
+        init,
+        payer = verifier_authority,
+        space = ConditionHead::SPACE,
+        seeds = [CONDITION_HEAD_SEED, artwork.key().as_ref()],
+        bump
+    )]
+    pub head: Account<'info, ConditionHead>,
+    #[account(
+        init,
+        payer = verifier_authority,
+        space = ConditionAttestation::SPACE,
+        seeds = [CONDITION_REPORT_SEED, &report_id],
+        bump
+    )]
+    pub report: Account<'info, ConditionAttestation>,
+    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    pub verifier_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(expected_version: u32, next_version: u32, report_id: [u8; 16])]
+pub struct RecordUnmintedCondition<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection,
+        constraint = artwork.core_asset.is_none() @ RegistryError::MintedConditionRequiresOwnerScope
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        seeds = [VERIFICATION_SEED, artwork.key().as_ref()],
+        bump = verification.bump,
+        constraint = verification.artwork == artwork.key() @ RegistryError::InvalidVerificationRelationship
+    )]
+    pub verification: Account<'info, ArtworkVerification>,
+    #[account(
+        mut,
+        seeds = [CONDITION_HEAD_SEED, artwork.key().as_ref()],
+        bump = head.bump,
+        constraint = head.artwork == artwork.key() @ RegistryError::InvalidConditionRelationship
+    )]
+    pub head: Account<'info, ConditionHead>,
+    #[account(
+        init,
+        payer = verifier_authority,
+        space = ConditionAttestation::SPACE,
+        seeds = [CONDITION_REPORT_SEED, &report_id],
+        bump
+    )]
+    pub report: Account<'info, ConditionAttestation>,
+    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    pub verifier_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 #[event]
 pub struct PlatformInitialized {
     pub config: Pubkey,
@@ -558,6 +854,24 @@ pub struct MetadataCommitted {
     pub committed_at: i64,
 }
 
+#[event]
+pub struct ConditionRecorded {
+    pub artwork: Pubkey,
+    pub katha_id: String,
+    pub report: Pubkey,
+    pub report_id: [u8; 16],
+    pub version: u32,
+    pub report_hash: [u8; 32],
+    pub grade: ConditionGrade,
+    pub reason: ConditionReason,
+    pub inspector_id: [u8; 16],
+    pub verifier: Pubkey,
+    pub inspected_at: i64,
+    pub recorded_at: i64,
+    pub owner_scope: Option<Pubkey>,
+    pub custody_revision_scope: Option<u64>,
+}
+
 #[error_code]
 pub enum RegistryError {
     #[msg("Bootstrap signer is not the Registry upgrade authority")]
@@ -600,6 +914,28 @@ pub enum RegistryError {
     InvalidMetadataRelationship,
     #[msg("Minted metadata changes must synchronize Core URI atomically")]
     MintedMetadataRequiresCoreSync,
+    #[msg("Condition report ID must be a valid UUID")]
+    InvalidReportId,
+    #[msg("Inspector ID must be a valid UUID")]
+    InvalidInspectorId,
+    #[msg("Condition report hash must not be zero")]
+    InvalidConditionHash,
+    #[msg("Inspection time must be positive and no later than chain time")]
+    InvalidInspectionTime,
+    #[msg("Condition version is stale")]
+    StaleConditionVersion,
+    #[msg("Condition versions must advance by exactly one")]
+    InvalidConditionVersion,
+    #[msg("Verification does not belong to this artwork")]
+    InvalidVerificationRelationship,
+    #[msg("Condition head does not belong to this artwork")]
+    InvalidConditionRelationship,
+    #[msg("Minted inspections require validated ownership and custody scope")]
+    MintedConditionRequiresOwnerScope,
+    #[msg("The first condition report must be an initial verification inspection")]
+    InvalidInitialConditionReason,
+    #[msg("Unminted follow-up reports must be pre-sale or insurance inspections")]
+    InvalidUnmintedConditionReason,
 }
 
 #[cfg(feature = "core-cpi-test")]

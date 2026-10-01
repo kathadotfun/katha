@@ -9,11 +9,12 @@ The on-chain workspace contains two independent Anchor programs:
 
 Each program has its own crate, public development ID, and generated IDL. The
 Registry has a one-time [platform bootstrap](registry-bootstrap.md),
-[permanent artwork registration](registry-artwork.md), and
-[verifier authentication](registry-verification.md), and
-[pre-mint metadata commitments](registry-metadata.md). Condition, custody, and
-minting instructions come later. Marketplace has no instructions or account state
-yet. The Registry also has a feature-gated, local-only Core CPI probe for the
+[permanent artwork registration](registry-artwork.md),
+[verifier authentication](registry-verification.md),
+[pre-mint metadata commitments](registry-metadata.md), and
+[initial condition attestations](registry-condition.md). Custody, minting, and
+post-mint inspection rules come later. Marketplace has no instructions or account
+state yet. The Registry also has a feature-gated, local-only Core CPI probe for the
 [program test harness](program-testing.md).
 
 ## Pinned tools

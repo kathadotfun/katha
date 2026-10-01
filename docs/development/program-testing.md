@@ -37,14 +37,17 @@ LiteSVM's upgradeable ProgramData and Surfpool's program-authority cheatcode
 provide synthetic test authorities. The same LiteSVM suite registers a bounded
 artwork, rejects invalid identity inputs and duplicate registration, then tests
 verifier-only authentication, account/PDA and collection substitution, wrong
-evidence hash, and replay rejection. No existing wallet is read.
+evidence hash, and replay rejection. It also checks metadata versions and
+condition report history, including stale writes, forged account relationships,
+invalid hashes and inspection times, duplicate report IDs, and the post-mint
+boundary. No existing wallet is read.
 
 The probe instruction exists only with the `core-cpi-test` Cargo feature. The
 ordinary `NO_DNA=1 anchor build --ignore-keys` omits it; the normal Registry
 IDL contains platform initialization, artwork registration, authentication,
-and pre-mint metadata commitments.
+pre-mint metadata commitments, and initial condition attestations.
 The test binary lives in a separate ignored directory; do not deploy it.
-Condition, custody, and minting instructions come in later steps.
+Custody, minting, and post-mint inspection rules come in later steps.
 
 The underlying [Core CPI builder](https://www.metaplex.com/docs/smart-contracts/core/using-core-in-anchor),
 [LiteSVM program loading](https://www.anchor-lang.com/docs/testing/litesvm),
