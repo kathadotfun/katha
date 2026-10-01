@@ -29,6 +29,11 @@ Core program fail without creating a new collection. The Registry probe uses
 Core's standard Rust CPI interface; Core's optional older Anchor integration
 features are not enabled.
 
+The [complete Registry lifecycle guide](registry-lifecycle.md) describes the
+Surfpool RPC journey and its acceptance assertions. Every successful artwork
+operation in that journey is prepared by the unsigned client builders, simulated,
+then signed by temporary test identities and submitted locally.
+
 The Registry initialization suite uses a fresh Core collection whose update
 authority is the Registry PDA. It checks the program's upgrade authority, linked
 ProgramData, canonical PDAs, collection ownership and authority, role values,

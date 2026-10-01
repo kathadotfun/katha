@@ -41,7 +41,9 @@ PostgreSQL service. The Solana package includes Kit clients, a Core adapter,
 generated program clients, unsigned transaction builders, and simulation.
 Local tests cover Registry configuration, artwork registration and verification,
 condition and custody attestations, versioned metadata, Core minting, and atomic
-post-mint metadata updates. Artwork browsing, API and database behavior, and
+post-mint metadata updates. The complete Registry journey also runs through
+offline Surfpool RPC, checking historical commitments and one bound Core asset.
+Artwork browsing, API and database behavior, and
 Marketplace business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -74,6 +76,7 @@ outside the current scope.
 - [Solana package boundary](docs/development/solana-package.md)
 - [Anchor program workspace](docs/development/anchor-workspace.md)
 - [Local program testing](docs/development/program-testing.md)
+- [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)
 - [Registry artwork authentication](docs/development/registry-verification.md)

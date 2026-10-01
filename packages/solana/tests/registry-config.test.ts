@@ -16,7 +16,9 @@ import {
   getProgramDerivedAddress,
   lamports,
 } from "@solana/kit";
-import type { Address } from "@solana/kit";
+import { getCollectionV1AccountDataSerializer } from "@metaplex-foundation/mpl-core/dist/src/generated/types/collectionV1AccountData.js";
+import * as registry from "../src/generated/registry/index.js";
+import type { Address, TransactionSigner } from "@solana/kit";
 import { litesvm } from "@solana/kit-plugin-litesvm";
 import { solanaRpc } from "@solana/kit-plugin-rpc";
 import { signer } from "@solana/kit-plugin-signer";
@@ -2613,8 +2615,8 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
   });
 });
 
-describe("Registry platform initialization in Surfpool", () => {
-  it("accepts the upgrade authority and rejects another signer and duplicate initialization", async () => {
+describe("Complete Registry lifecycle in Surfpool", () => {
+  it("preserves attribution and history through registration, inspection, custody, minting, and revision", async () => {
     const rpcUrl = process.env.KATHA_TEST_SURFPOOL_RPC;
     const wsUrl = process.env.KATHA_TEST_SURFPOOL_WS;
     if (!rpcUrl || !wsUrl) throw new Error("Surfpool endpoints are required");
@@ -2731,5 +2733,320 @@ describe("Registry platform initialization in Surfpool", () => {
       pdas,
     );
     await expect(client.sendTransaction([init(bootstrap.address)])).rejects.toThrow();
+
+    // Only setup uses cheatcodes; every artwork state change runs the real programs.
+    for (const authority of [registration, verifier, custody]) {
+      await cheat("surfnet_setAccount", [
+        authority.address,
+        { lamports: 5_000_000_000 },
+      ]);
+    }
+    async function account(accountAddress: Address) {
+      const snapshot = await fetchEncodedAccount(client.rpc, accountAddress);
+      if (!snapshot.exists)
+        throw new Error(`Missing lifecycle account: ${accountAddress}`);
+      return snapshot;
+    }
+    async function context(authorityAddress: Address) {
+      return {
+        cluster: "localnet" as const,
+        feePayerAddress: bootstrap.address,
+        authorityAddress,
+        supportedTransactionVersions: new Set([0] as const),
+        lifetime: (await client.rpc.getLatestBlockhash().send()).value,
+        currentBlockHeight: await client.rpc.getBlockHeight().send(),
+      };
+    }
+    async function submit(
+      prepared: Parameters<typeof simulateRegistryTransaction>[1],
+      authority: TransactionSigner,
+    ) {
+      expect(
+        (await simulateRegistryTransaction(client.rpc, prepared)).value.err,
+      ).toBeNull();
+      await client.sendTransaction([
+        addSignersToInstruction([authority], prepared.instruction),
+      ]);
+    }
+    const kathaId = "KATHA-PAUBHA-000001";
+    const artistId = "123e4567-e89b-42d3-a456-426614174000";
+    const [artwork] = await registry.findArtworkPda({ kathaId });
+    const [verification] = await registry.findVerificationPda({ artwork });
+    const [metadataHead] = await registry.findInitializeMetadataHeadPda({ artwork });
+    const [revision1] = await registry.findRevisionPda({ artwork });
+    const [revision2] = await registry.findReviseMintedMetadataRevisionPda({
+      artwork,
+      nextVersion: 2,
+    });
+    const [conditionHead] = await registry.findHeadPda({ artwork });
+    const reportId = "123e4567-e89b-42d3-a456-426614174001";
+    const [conditionReport] = await registry.findReportPda({
+      reportId: Uint8Array.from(Buffer.from(reportId.replaceAll("-", ""), "hex")),
+    });
+    const [custodyHead] = await registry.findInitializeCustodyHeadPda({ artwork });
+    const [custodyTransition1] = await registry.findTransitionPda({ artwork });
+    const [asset] = await registry.findAssetPda({ artwork });
+    const preparedRegistration = await buildRegisterArtworkTransaction(
+      await context(registration.address),
+      config,
+      {
+        kathaId,
+        artistId,
+        creatorWallet: null,
+        category: "PAUBHA",
+        creationYear: 2025,
+        authorshipEvidenceHash: "07".repeat(32),
+      },
+    );
+    await submit(preparedRegistration, registration);
+    const originalRecord = await account(artwork);
+    const originalAttribution = registry
+      .getArtworkRecordDecoder()
+      .decode(originalRecord.data);
+    await expect(
+      simulateRegistryTransaction(client.rpc, preparedRegistration),
+    ).rejects.toMatchObject({ code: "SIMULATION_FAILED" });
+    await expect(
+      client.sendTransaction([
+        addSignersToInstruction([registration], preparedRegistration.instruction),
+      ]),
+    ).rejects.toThrow();
+    expect((await account(artwork)).data).toEqual(originalRecord.data);
+    const artworkAccounts = { configAccount: config, artworkAccount: originalRecord };
+    const preparedVerification = await buildVerifyArtworkTransaction(
+      await context(verifier.address),
+      artworkAccounts,
+      { kathaId, expectedAuthorshipEvidenceHash: "07".repeat(32) },
+    );
+    // Bypass the builder's role check to prove the program enforces it independently.
+    await expect(
+      client.sendTransaction([
+        addSignersToInstruction(
+          [wrongSigner],
+          verifyArtworkInstruction(
+            pdas.config,
+            artwork,
+            verification,
+            wrongSigner.address,
+            new Uint8Array(32).fill(7),
+          ),
+        ),
+      ]),
+    ).rejects.toThrow();
+    expect((await fetchEncodedAccount(client.rpc, verification)).exists).toBe(false);
+    await submit(preparedVerification, verifier);
+    const verificationSnapshot = await account(verification);
+    expect(
+      registry.getArtworkVerificationDecoder().decode(verificationSnapshot.data),
+    ).toMatchObject({
+      artwork,
+      verifier: verifier.address,
+      authorshipEvidenceHash: new Uint8Array(32).fill(7),
+    });
+
+    const clockAccount = await account(
+      address("SysvarC1ock11111111111111111111111111111111"),
+    );
+    expect(clockAccount.data.length).toBe(40);
+    // Clock has five 64-bit fields; unix_timestamp is the last one.
+    const clock = {
+      unixTimestamp: new DataView(
+        clockAccount.data.buffer,
+        clockAccount.data.byteOffset,
+        clockAccount.data.byteLength,
+      ).getBigInt64(32, true),
+    };
+    const document: ConditionReportDocument = {
+      reportId,
+      kathaId,
+      grade: "GOOD",
+      reason: "INITIAL_VERIFICATION",
+      inspectorId: "123e4567-e89b-42d3-a456-426614174009",
+      verifierWallet: verifier.address,
+      inspectedAt: new Date(Number(clock.unixTimestamp - 60n) * 1000).toISOString(),
+      reportedAt: new Date(Number(clock.unixTimestamp) * 1000).toISOString(),
+      notes: "Synthetic Surfpool inspection",
+      mediaHashes: ["09".repeat(32)],
+    };
+    const reportHash = await sha256Hex(canonicalDocumentBytes(document));
+    await submit(
+      await buildInitializeConditionTransaction(
+        await context(verifier.address),
+        { ...artworkAccounts, verificationAccount: verificationSnapshot },
+        {
+          document,
+          commitment: { reportId, kathaId, reportHash },
+          currentUnixTimestamp: clock.unixTimestamp,
+        },
+      ),
+      verifier,
+    );
+    const conditionSnapshot = await account(conditionReport);
+    expect(
+      registry.getConditionAttestationDecoder().decode(conditionSnapshot.data),
+    ).toMatchObject({
+      artwork,
+      version: 1,
+      verifier: verifier.address,
+      reportHash: Uint8Array.from(Buffer.from(reportHash, "hex")),
+    });
+
+    await submit(
+      await buildInitializeCustodyTransaction(
+        await context(custody.address),
+        artworkAccounts,
+        {
+          kathaId,
+          transition: {
+            action: "ATTEST_KATHA_CUSTODY",
+            from: "UNKNOWN",
+            to: "KATHA_HELD",
+          },
+          collector: null,
+        },
+      ),
+      custody,
+    );
+    const custodySnapshot = await account(custodyHead);
+    const custodyHistory = await account(custodyTransition1);
+    expect(registry.getCustodyHeadDecoder().decode(custodySnapshot.data)).toMatchObject(
+      {
+        artwork,
+        revision: 1n,
+        state: registry.CustodyState.KathaHeld,
+      },
+    );
+    const metadataBytes1 = canonicalDocumentBytes({
+      kathaId,
+      artistId,
+      title: "Synthetic Paubha",
+    });
+    const uri1 = "https://katha.fun/test/artwork-v1.json";
+    await submit(
+      await buildInitializeMetadataTransaction(
+        await context(registration.address),
+        artworkAccounts,
+        { kathaId, documentBytes: metadataBytes1, uri: uri1 },
+      ),
+      registration,
+    );
+    const firstRevision = await account(revision1);
+    expect(
+      registry.getMetadataRevisionDecoder().decode(firstRevision.data),
+    ).toMatchObject({
+      artwork,
+      version: 1,
+      uri: uri1,
+      documentHash: Uint8Array.from(
+        Buffer.from(await sha256Hex(metadataBytes1), "hex"),
+      ),
+    });
+    const mintAccounts = {
+      ...artworkAccounts,
+      verificationAccount: verificationSnapshot,
+      metadataHeadAccount: await account(metadataHead),
+      currentRevisionAccount: firstRevision,
+      conditionHeadAccount: await account(conditionHead),
+      initialConditionAccount: conditionSnapshot,
+      custodyHeadAccount: custodySnapshot,
+      collectionAccount: await account(collection.address),
+      assetAccount: await fetchEncodedAccount(client.rpc, asset),
+    };
+    const preparedMint = await buildMintArtworkTransaction(
+      await context(registration.address),
+      mintAccounts,
+      kathaId,
+    );
+    await submit(preparedMint, registration);
+    const mintedRecord = await account(artwork);
+    const mintedAsset = await account(asset);
+    const boundRecord = registry.getArtworkRecordDecoder().decode(mintedRecord.data);
+    expect(boundRecord).toEqual({
+      ...originalAttribution,
+      coreAsset: { __option: "Some", value: asset },
+    });
+    expect(readCoreAsset(mintedAsset, asset, collection.address)).toEqual({
+      address: asset,
+      owner: registration.address,
+      collection: collection.address,
+      name: kathaId,
+      uri: uri1,
+    });
+    const collectionBeforeReplay = await account(collection.address);
+    await expect(
+      simulateRegistryTransaction(client.rpc, preparedMint),
+    ).rejects.toMatchObject({ code: "SIMULATION_FAILED" });
+    await expect(
+      client.sendTransaction([
+        addSignersToInstruction([registration], preparedMint.instruction),
+      ]),
+    ).rejects.toThrow();
+    expect((await account(asset)).data).toEqual(mintedAsset.data);
+    expect((await account(artwork)).data).toEqual(mintedRecord.data);
+    expect((await account(collection.address)).data).toEqual(
+      collectionBeforeReplay.data,
+    );
+
+    const metadataBytes2 = canonicalDocumentBytes({
+      kathaId,
+      artistId,
+      title: "Synthetic Paubha",
+      notes: "Documented revision",
+    });
+    const uri2 = "https://katha.fun/test/artwork-v2.json";
+    const preparedRevision = await buildReviseMintedMetadataTransaction(
+      await context(registration.address),
+      {
+        configAccount: config,
+        artworkAccount: mintedRecord,
+        metadataHeadAccount: await account(metadataHead),
+        currentRevisionAccount: firstRevision,
+        collectionAccount: await account(collection.address),
+        assetAccount: mintedAsset,
+      },
+      { kathaId, expectedVersion: 1, documentBytes: metadataBytes2, uri: uri2 },
+    );
+    await submit(preparedRevision, registration);
+    const revisedHead = await account(metadataHead);
+    const revisedAsset = await account(asset);
+    const hash2 = await sha256Hex(metadataBytes2);
+    expect(registry.getMetadataHeadDecoder().decode(revisedHead.data)).toMatchObject({
+      artwork,
+      version: 2,
+      currentRevision: revision2,
+      currentHash: Uint8Array.from(Buffer.from(hash2, "hex")),
+    });
+    expect(
+      registry.getMetadataRevisionDecoder().decode((await account(revision2)).data),
+    ).toMatchObject({ artwork, version: 2, uri: uri2 });
+    expect(readCoreAsset(revisedAsset, asset, collection.address)).toMatchObject({
+      owner: registration.address,
+      uri: uri2,
+    });
+    await expect(
+      simulateRegistryTransaction(client.rpc, preparedRevision),
+    ).rejects.toMatchObject({ code: "SIMULATION_FAILED" });
+    await expect(
+      client.sendTransaction([
+        addSignersToInstruction([registration], preparedRevision.instruction),
+      ]),
+    ).rejects.toThrow();
+    expect((await account(metadataHead)).data).toEqual(revisedHead.data);
+    expect((await account(asset)).data).toEqual(revisedAsset.data);
+    expect((await account(artwork)).data).toEqual(mintedRecord.data);
+    for (const historical of [
+      verificationSnapshot,
+      conditionSnapshot,
+      custodySnapshot,
+      custodyHistory,
+      firstRevision,
+    ]) {
+      expect((await account(historical.address)).data).toEqual(historical.data);
+    }
+    const [coreCollection] = getCollectionV1AccountDataSerializer().deserialize(
+      Uint8Array.from((await account(collection.address)).data),
+    );
+    expect(coreCollection.numMinted).toBe(1);
+    expect(coreCollection.currentSize).toBe(1);
   });
 });
