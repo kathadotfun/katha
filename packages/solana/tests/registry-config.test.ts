@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCreateCoreCollectionInstruction,
   CORE_PROGRAM_ADDRESS,
+  readCoreAsset,
 } from "../src/core.js";
 
 const REGISTRY = address("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
@@ -284,6 +285,47 @@ function custodyInstruction(
       collector === undefined ? 0 : 1,
       ...(collector === undefined ? [] : getAddressEncoder().encode(collector)),
     ]),
+  };
+}
+
+function mintArtworkInstruction(
+  config: Address,
+  artwork: Address,
+  verification: Address,
+  metadataHead: Address,
+  metadataRevision: Address,
+  conditionHead: Address,
+  initialCondition: Address,
+  custodyHead: Address,
+  collection: Address,
+  collectionAuthority: Address,
+  asset: Address,
+  registration: Address,
+  coreProgram: Address = CORE_PROGRAM_ADDRESS,
+) {
+  const discriminator = createHash("sha256")
+    .update("global:mint_artwork")
+    .digest()
+    .subarray(0, 8);
+  return {
+    programAddress: REGISTRY,
+    accounts: [
+      { address: config, role: AccountRole.READONLY },
+      { address: artwork, role: AccountRole.WRITABLE },
+      { address: verification, role: AccountRole.READONLY },
+      { address: metadataHead, role: AccountRole.READONLY },
+      { address: metadataRevision, role: AccountRole.READONLY },
+      { address: conditionHead, role: AccountRole.READONLY },
+      { address: initialCondition, role: AccountRole.READONLY },
+      { address: custodyHead, role: AccountRole.READONLY },
+      { address: collection, role: AccountRole.WRITABLE },
+      { address: collectionAuthority, role: AccountRole.READONLY },
+      { address: asset, role: AccountRole.WRITABLE },
+      { address: registration, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM, role: AccountRole.READONLY },
+      { address: coreProgram, role: AccountRole.READONLY },
+    ],
+    data: Uint8Array.from(discriminator),
   };
 }
 
@@ -1764,6 +1806,214 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     expect(unchangedCondition.exists && Array.from(unchangedCondition.data)).toEqual(
       Array.from(secondConditionHead.data),
     );
+
+    const [coreAsset] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [
+        new TextEncoder().encode("core-asset"),
+        getAddressEncoder().encode(artwork),
+      ],
+    });
+    const [wrongCoreAsset] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [
+        new TextEncoder().encode("core-asset"),
+        getAddressEncoder().encode(otherArtwork),
+      ],
+    });
+    const mint = (
+      art = artwork,
+      asset = coreAsset,
+      registrationAddress = registration.address,
+      collectionAddress = collection.address,
+      conditionAddress = conditionReport1,
+      custodyAddress = custody1.head,
+      metadataRevision = revision3,
+      verificationAddress = verification,
+      metadataHeadAddress = head,
+      conditionHeadAddress = conditionHead,
+      collectionAuthorityAddress = pdas.collectionAuthority,
+      coreProgramAddress: Address = CORE_PROGRAM_ADDRESS,
+      configAddress = pdas.config,
+    ) =>
+      addSignersToInstruction(
+        [registrationAddress === registration.address ? registration : wrongSigner],
+        mintArtworkInstruction(
+          configAddress,
+          art,
+          verificationAddress,
+          metadataHeadAddress,
+          metadataRevision,
+          conditionHeadAddress,
+          conditionAddress,
+          custodyAddress,
+          collectionAddress,
+          collectionAuthorityAddress,
+          asset,
+          registrationAddress,
+          coreProgramAddress,
+        ),
+      );
+    const notMinted = () => {
+      expect(client.svm.getAccount(coreAsset).exists).toBe(false);
+      const current = client.svm.getAccount(artwork);
+      expect(current.exists && Array.from(current.data)).toEqual(
+        Array.from(record.data),
+      );
+    };
+    for (const invalid of [
+      mint(artwork, coreAsset, wrongSigner.address),
+      mint(artwork, coreAsset, registration.address, wrongAuthorityCollection.address),
+      mint(artwork, wrongCoreAsset),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport2,
+      ),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport1,
+        custody1.head,
+        revision2,
+      ),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport1,
+        custody1.head,
+        revision3,
+        wrongArtwork,
+      ),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport1,
+        custody1.head,
+        revision3,
+        verification,
+        wrongArtwork,
+      ),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport1,
+        custody1.head,
+        revision3,
+        verification,
+        head,
+        wrongArtwork,
+      ),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport1,
+        custody1.head,
+        revision3,
+        verification,
+        head,
+        conditionHead,
+        wrongSigner.address,
+      ),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport1,
+        custody1.head,
+        revision3,
+        verification,
+        head,
+        conditionHead,
+        pdas.collectionAuthority,
+        SYSTEM,
+      ),
+      mint(
+        artwork,
+        coreAsset,
+        registration.address,
+        collection.address,
+        conditionReport1,
+        custody1.head,
+        revision3,
+        verification,
+        head,
+        conditionHead,
+        pdas.collectionAuthority,
+        CORE_PROGRAM_ADDRESS,
+        wrongSigner.address,
+      ),
+    ]) {
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      notMinted();
+    }
+    client.svm.setAccount(head4);
+    await expect(client.sendTransaction([mint()])).rejects.toThrow();
+    client.svm.setAccount(head5);
+    notMinted();
+    const originalRegistrationAccount = client.svm.getAccount(registration.address);
+    if (!originalRegistrationAccount.exists)
+      throw new Error("Registration wallet missing");
+    client.svm.setAccount({
+      ...originalRegistrationAccount,
+      lamports: lamports(10_000n),
+    });
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([mint()])).rejects.toThrow();
+    client.svm.setAccount(originalRegistrationAccount);
+    notMinted();
+    client.svm.expireBlockhash();
+    await client.sendTransaction([mint()]);
+    const mintedArtwork = client.svm.getAccount(artwork);
+    const mintedAsset = client.svm.getAccount(coreAsset);
+    if (!mintedArtwork.exists || !mintedAsset.exists) {
+      throw new Error("Core creation and artwork binding must both succeed");
+    }
+    expect(mintedAsset.programAddress).toBe(CORE_PROGRAM_ADDRESS);
+    expect(readCoreAsset(mintedAsset, coreAsset, collection.address)).toEqual({
+      address: coreAsset,
+      owner: registration.address,
+      collection: collection.address,
+      name: kathaId,
+      uri: relocatedUri,
+    });
+    const mintedArtist = readBorshString(mintedArtwork.data, id.next);
+    const mintedAssetOption = mintedArtist.next + 68;
+    expect(mintedArtwork.data[mintedAssetOption]).toBe(1);
+    expect(
+      getAddressDecoder().decode(
+        mintedArtwork.data.subarray(mintedAssetOption + 1, mintedAssetOption + 33),
+      ),
+    ).toBe(coreAsset);
+    expect(readBorshString(mintedArtwork.data, 8).value).toBe(kathaId);
+    expect(mintedArtist.value).toBe(artistId);
+    const collectionAfterMint = client.svm.getAccount(collection.address);
+    expect(collectionAfterMint.exists && collectionAfterMint.programAddress).toBe(
+      CORE_PROGRAM_ADDRESS,
+    );
+    client.svm.expireBlockhash();
+    await expect(client.sendTransaction([mint()])).rejects.toThrow();
+    const afterDuplicateMint = client.svm.getAccount(artwork);
+    expect(afterDuplicateMint.exists && Array.from(afterDuplicateMint.data)).toEqual(
+      Array.from(mintedArtwork.data),
+    );
+    expect(client.svm.getAccount(coreAsset)).toEqual(mintedAsset);
+    expect(client.svm.getAccount(verification)).toEqual(attestation);
+    expect(client.svm.getAccount(conditionReport1)).toEqual(firstConditionReport);
+    expect(client.svm.getAccount(custody1.head)).toEqual(head5);
   });
 });
 

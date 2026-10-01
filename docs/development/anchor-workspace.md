@@ -13,8 +13,9 @@ Registry has a one-time [platform bootstrap](registry-bootstrap.md),
 [verifier authentication](registry-verification.md),
 [pre-mint metadata commitments](registry-metadata.md),
 [initial condition attestations](registry-condition.md), and
-[physical custody attestations](registry-custody.md). Minting and post-mint
-inspection rules come later. Marketplace has no instructions or account
+[physical custody attestations](registry-custody.md), and
+[Core asset minting](registry-mint.md). Post-mint metadata and inspection rules
+come later. Marketplace has no instructions or account
 state yet. The Registry also has a feature-gated, local-only Core CPI probe for the
 [program test harness](program-testing.md).
 

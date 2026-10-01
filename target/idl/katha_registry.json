@@ -639,6 +639,287 @@
       ]
     },
     {
+      "name": "mint_artwork",
+      "discriminator": [
+        123,
+        92,
+        56,
+        126,
+        10,
+        149,
+        154,
+        111
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "metadata_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "metadata_revision",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97,
+                  45,
+                  118,
+                  101,
+                  114,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              },
+              {
+                "kind": "account",
+                "path": "metadata_revision.version",
+                "account": "MetadataRevision"
+              }
+            ]
+          }
+        },
+        {
+          "name": "condition_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  100,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "initial_condition"
+        },
+        {
+          "name": "custody_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collection",
+          "writable": true
+        },
+        {
+          "name": "collection_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  114,
+                  101,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "registration_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "core_program",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "record_unminted_condition",
       "discriminator": [
         140,
@@ -1513,6 +1794,19 @@
   ],
   "events": [
     {
+      "name": "ArtworkMinted",
+      "discriminator": [
+        113,
+        140,
+        60,
+        34,
+        86,
+        124,
+        47,
+        39
+      ]
+    },
+    {
       "name": "ArtworkRegistered",
       "discriminator": [
         208,
@@ -1786,6 +2080,31 @@
       "code": 6038,
       "name": "InvalidCustodyRelationship",
       "msg": "Custody head does not belong to this artwork"
+    },
+    {
+      "code": 6039,
+      "name": "ArtworkAlreadyMinted",
+      "msg": "Artwork is already bound to a Core asset"
+    },
+    {
+      "code": 6040,
+      "name": "AssetAlreadyExists",
+      "msg": "The deterministic Core asset account already exists"
+    },
+    {
+      "code": 6041,
+      "name": "InitialConditionRequired",
+      "msg": "Initial verification condition report is required for minting"
+    },
+    {
+      "code": 6042,
+      "name": "InvalidMintCustody",
+      "msg": "Minting requires attested Katha or collector custody"
+    },
+    {
+      "code": 6043,
+      "name": "InvalidCoreProgram",
+      "msg": "The provided Core program ID is incorrect"
     }
   ],
   "types": [
@@ -1802,6 +2121,63 @@
           },
           {
             "name": "Thangka"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkMinted",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "katha_id",
+            "type": "string"
+          },
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "initial_owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "metadata_version",
+            "type": "u32"
+          },
+          {
+            "name": "metadata_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "condition_report",
+            "type": "pubkey"
+          },
+          {
+            "name": "custody_revision",
+            "type": "u64"
+          },
+          {
+            "name": "minted_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "minted_at",
+            "type": "i64"
           }
         ]
       }

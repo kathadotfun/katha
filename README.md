@@ -79,6 +79,7 @@ outside the current scope.
 - [Registry metadata commitments](docs/development/registry-metadata.md)
 - [Registry condition attestations](docs/development/registry-condition.md)
 - [Registry physical custody attestations](docs/development/registry-custody.md)
+- [Registry Core asset minting](docs/development/registry-mint.md)
 
 ## Repository policy
 

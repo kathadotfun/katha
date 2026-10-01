@@ -12,6 +12,7 @@ pub const CONDITION_HEAD_SEED: &[u8] = b"condition";
 pub const CONDITION_REPORT_SEED: &[u8] = b"condition-report";
 pub const CUSTODY_HEAD_SEED: &[u8] = b"custody";
 pub const CUSTODY_TRANSITION_SEED: &[u8] = b"custody-transition";
+pub const CORE_ASSET_SEED: &[u8] = b"core-asset";
 
 #[program]
 pub mod katha_registry {
@@ -487,6 +488,89 @@ pub mod katha_registry {
             to_subject: subject,
             attested_by: authority,
             recorded_at,
+        });
+        Ok(())
+    }
+
+    pub fn mint_artwork(ctx: Context<MintArtwork>) -> Result<()> {
+        use mpl_core::instructions::CreateV2CpiBuilder;
+
+        let artwork = &ctx.accounts.artwork;
+        require!(
+            ctx.accounts.verification.authorship_evidence_hash == artwork.authorship_evidence_hash,
+            RegistryError::AuthorshipHashMismatch
+        );
+        require!(
+            ctx.accounts.metadata_head.version == ctx.accounts.metadata_revision.version
+                && ctx.accounts.metadata_head.current_hash
+                    == ctx.accounts.metadata_revision.document_hash,
+            RegistryError::InvalidMetadataRelationship
+        );
+        require!(
+            ctx.accounts.condition_head.version >= 1
+                && ctx.accounts.initial_condition.version == 1
+                && ctx.accounts.initial_condition.reason == ConditionReason::InitialVerification,
+            RegistryError::InitialConditionRequired
+        );
+        require!(
+            matches!(
+                ctx.accounts.custody_head.state,
+                CustodyState::KathaHeld | CustodyState::CollectorHeld
+            ) && ctx.accounts.custody_head.subject.is_some(),
+            RegistryError::InvalidMintCustody
+        );
+
+        let collection_data = ctx.accounts.collection.try_borrow_data()?;
+        let collection = mpl_core::Collection::from_bytes(&collection_data)
+            .map_err(|_| error!(RegistryError::InvalidCollection))?;
+        require_keys_eq!(
+            collection.base.update_authority,
+            ctx.accounts.collection_authority.key(),
+            RegistryError::InvalidCollectionAuthority
+        );
+        drop(collection_data);
+
+        let asset_info = ctx.accounts.asset.to_account_info();
+        require!(
+            asset_info.data_is_empty() && asset_info.lamports() == 0,
+            RegistryError::AssetAlreadyExists
+        );
+        let collection_info = ctx.accounts.collection.to_account_info();
+        let collection_authority_info = ctx.accounts.collection_authority.to_account_info();
+        let registration_info = ctx.accounts.registration_authority.to_account_info();
+        let system_info = ctx.accounts.system_program.to_account_info();
+        let core_info = ctx.accounts.core_program.to_account_info();
+        let asset_bump = [ctx.bumps.asset];
+        let collection_bump = [ctx.accounts.config.collection_authority_bump];
+        let artwork_key = artwork.key();
+        let asset_seeds: &[&[u8]] = &[CORE_ASSET_SEED, artwork_key.as_ref(), &asset_bump];
+        let collection_seeds: &[&[u8]] = &[COLLECTION_AUTHORITY_SEED, &collection_bump];
+        let metadata = &ctx.accounts.metadata_revision;
+        CreateV2CpiBuilder::new(&core_info)
+            .asset(&asset_info)
+            .collection(Some(&collection_info))
+            .authority(Some(&collection_authority_info))
+            .payer(&registration_info)
+            .owner(Some(&registration_info))
+            .system_program(&system_info)
+            .name(artwork.katha_id.clone())
+            .uri(metadata.uri.clone())
+            .invoke_signed(&[asset_seeds, collection_seeds])?;
+
+        let artwork = &mut ctx.accounts.artwork;
+        artwork.core_asset = Some(ctx.accounts.asset.key());
+        emit!(ArtworkMinted {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            asset: ctx.accounts.asset.key(),
+            collection: artwork.collection,
+            initial_owner: ctx.accounts.registration_authority.key(),
+            metadata_version: metadata.version,
+            metadata_hash: metadata.document_hash,
+            condition_report: ctx.accounts.initial_condition.key(),
+            custody_revision: ctx.accounts.custody_head.revision,
+            minted_by: ctx.accounts.registration_authority.key(),
+            minted_at: Clock::get()?.unix_timestamp,
         });
         Ok(())
     }
@@ -1058,6 +1142,87 @@ pub struct TransitionCustody<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct MintArtwork<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        mut,
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection,
+        constraint = artwork.core_asset.is_none() @ RegistryError::ArtworkAlreadyMinted
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        seeds = [VERIFICATION_SEED, artwork.key().as_ref()],
+        bump = verification.bump,
+        constraint = verification.artwork == artwork.key() @ RegistryError::InvalidVerificationRelationship
+    )]
+    pub verification: Account<'info, ArtworkVerification>,
+    #[account(
+        seeds = [METADATA_HEAD_SEED, artwork.key().as_ref()],
+        bump = metadata_head.bump,
+        constraint = metadata_head.artwork == artwork.key() @ RegistryError::InvalidMetadataRelationship,
+        constraint = metadata_head.current_revision == metadata_revision.key() @ RegistryError::InvalidMetadataRelationship
+    )]
+    pub metadata_head: Account<'info, MetadataHead>,
+    #[account(
+        seeds = [METADATA_VERSION_SEED, artwork.key().as_ref(), &metadata_revision.version.to_le_bytes()],
+        bump = metadata_revision.bump,
+        constraint = metadata_revision.artwork == artwork.key() @ RegistryError::InvalidMetadataRelationship
+    )]
+    pub metadata_revision: Account<'info, MetadataRevision>,
+    #[account(
+        seeds = [CONDITION_HEAD_SEED, artwork.key().as_ref()],
+        bump = condition_head.bump,
+        constraint = condition_head.artwork == artwork.key() @ RegistryError::InvalidConditionRelationship
+    )]
+    pub condition_head: Account<'info, ConditionHead>,
+    #[account(
+        seeds = [CONDITION_REPORT_SEED, &initial_condition.report_id],
+        bump = initial_condition.bump,
+        constraint = initial_condition.artwork == artwork.key() @ RegistryError::InvalidConditionRelationship
+    )]
+    pub initial_condition: Account<'info, ConditionAttestation>,
+    #[account(
+        seeds = [CUSTODY_HEAD_SEED, artwork.key().as_ref()],
+        bump = custody_head.bump,
+        constraint = custody_head.artwork == artwork.key() @ RegistryError::InvalidCustodyRelationship
+    )]
+    pub custody_head: Account<'info, CustodyHead>,
+    /// CHECK: Core owns this account; the handler parses its collection type and update authority.
+    #[account(mut, address = config.collection @ RegistryError::InvalidArtworkCollection, owner = mpl_core::ID @ RegistryError::InvalidCollection)]
+    pub collection: UncheckedAccount<'info>,
+    /// CHECK: This canonical PDA signs for the collection when creating the asset.
+    #[account(seeds = [COLLECTION_AUTHORITY_SEED], bump = config.collection_authority_bump, address = config.collection_authority)]
+    pub collection_authority: UncheckedAccount<'info>,
+    /// CHECK: Core creates this uninitialized Registry-derived asset PDA through CPI.
+    #[account(mut, seeds = [CORE_ASSET_SEED, artwork.key().as_ref()], bump)]
+    pub asset: UncheckedAccount<'info>,
+    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    pub registration_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+    /// CHECK: The program ID is fixed; Core owns and validates the asset on CPI.
+    #[account(address = mpl_core::ID @ RegistryError::InvalidCoreProgram)]
+    pub core_program: UncheckedAccount<'info>,
+}
+
+#[event]
+pub struct ArtworkMinted {
+    pub artwork: Pubkey,
+    pub katha_id: String,
+    pub asset: Pubkey,
+    pub collection: Pubkey,
+    pub initial_owner: Pubkey,
+    pub metadata_version: u32,
+    pub metadata_hash: [u8; 32],
+    pub condition_report: Pubkey,
+    pub custody_revision: u64,
+    pub minted_by: Pubkey,
+    pub minted_at: i64,
+}
+
 #[event]
 pub struct CustodyUpdated {
     pub artwork: Pubkey,
@@ -1216,6 +1381,16 @@ pub enum RegistryError {
     UnexpectedCustodySubject,
     #[msg("Custody head does not belong to this artwork")]
     InvalidCustodyRelationship,
+    #[msg("Artwork is already bound to a Core asset")]
+    ArtworkAlreadyMinted,
+    #[msg("The deterministic Core asset account already exists")]
+    AssetAlreadyExists,
+    #[msg("Initial verification condition report is required for minting")]
+    InitialConditionRequired,
+    #[msg("Minting requires attested Katha or collector custody")]
+    InvalidMintCustody,
+    #[msg("The provided Core program ID is incorrect")]
+    InvalidCoreProgram,
 }
 
 #[cfg(feature = "core-cpi-test")]
