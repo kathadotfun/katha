@@ -161,7 +161,15 @@ async function main() {
     await loadProgram(url, registryProgram, registryBytes);
     await run(
       "pnpm",
-      ["--filter", "@katha/solana", "exec", "vitest", "run", "tests/core-cpi.test.ts"],
+      [
+        "--filter",
+        "@katha/solana",
+        "exec",
+        "vitest",
+        "run",
+        "tests/core-cpi.test.ts",
+        "tests/registry-config.test.ts",
+      ],
       root,
       {
         ...toolEnv,

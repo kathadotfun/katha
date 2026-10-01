@@ -6,5 +6,254 @@
     "spec": "0.1.0",
     "description": "Katha artwork registry program"
   },
-  "instructions": []
+  "instructions": [
+    {
+      "name": "initialize_platform",
+      "discriminator": [
+        119,
+        201,
+        101,
+        45,
+        75,
+        122,
+        89,
+        3
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "bootstrap_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program",
+          "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "collection"
+        },
+        {
+          "name": "collection_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  108,
+                  108,
+                  101,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "registration_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "verifier_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "custody_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "treasury",
+          "type": "pubkey"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "KathaConfig",
+      "discriminator": [
+        229,
+        38,
+        63,
+        178,
+        82,
+        15,
+        81,
+        140
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "PlatformInitialized",
+      "discriminator": [
+        16,
+        222,
+        212,
+        5,
+        213,
+        140,
+        112,
+        162
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "UnauthorizedBootstrap",
+      "msg": "Bootstrap signer is not the Registry upgrade authority"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidProgramData",
+      "msg": "ProgramData does not belong to this Registry program"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidRole",
+      "msg": "Platform role addresses must not be the default address"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidCollection",
+      "msg": "Core collection is invalid or not fresh"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidCollectionAuthority",
+      "msg": "Core collection must be controlled by the Registry authority PDA"
+    }
+  ],
+  "types": [
+    {
+      "name": "KathaConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "registration_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "verifier_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "custody_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "collection_authority_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlatformInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "registration_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "verifier_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "custody_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
 }

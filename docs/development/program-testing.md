@@ -1,4 +1,4 @@
-# Core CPI program test harness
+# Local program test harness
 
 Run from the repository root after the pinned Anchor 1.2.0, Solana CLI 4.1.2,
 Rust 1.95.0, pnpm, and Surfpool 1.6.0 tools are installed:
@@ -15,8 +15,8 @@ reviewed and pinned deliberately. No Core binary enters Git.
 
 The command builds Registry with `core-cpi-test` into ignored
 `target/core-cpi-test/`, typechecks the harness, starts an isolated offline
-Surfpool instance, loads that Registry probe and the verified Core binary, runs
-the test, and stops Surfpool. The test also loads both binaries into LiteSVM.
+Surfpool instance, loads the Registry and verified Core binaries, runs the
+integration suites, and stops Surfpool. Both binaries are also loaded into LiteSVM.
 The local fixtures generate temporary in-memory signers and use synthetic
 collection metadata. No existing wallet is read, no network transaction is
 sent, and no program is deployed to Devnet.
@@ -29,11 +29,18 @@ Core program fail without creating a new collection. The Registry probe uses
 Core's standard Rust CPI interface; Core's optional older Anchor integration
 features are not enabled.
 
+The Registry initialization suite uses a fresh Core collection whose update
+authority is the Registry PDA. It checks the program's upgrade authority, linked
+ProgramData, canonical PDAs, collection ownership and authority, role values,
+and duplicate initialization. Failed cases leave the config account absent.
+LiteSVM's upgradeable ProgramData and Surfpool's program-authority cheatcode
+provide synthetic test authorities. No existing wallet is read.
+
 The probe instruction exists only with the `core-cpi-test` Cargo feature. The
-ordinary `NO_DNA=1 anchor build --ignore-keys` omits it and keeps the normal
-Registry IDL empty. The test binary lives in a separate ignored directory; do
-not deploy it. Actual artwork Registry instructions, state, and lifecycle
-rules start in later steps.
+ordinary `NO_DNA=1 anchor build --ignore-keys` omits it; the normal Registry
+IDL contains `initialize_platform` only. The test binary lives in a separate
+ignored directory; do not deploy it. Artwork identity and lifecycle instructions
+start in later steps.
 
 The underlying [Core CPI builder](https://www.metaplex.com/docs/smart-contracts/core/using-core-in-anchor),
 [LiteSVM program loading](https://www.anchor-lang.com/docs/testing/litesvm),

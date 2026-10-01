@@ -38,8 +38,9 @@ orchestration, a minimal Next.js web scaffold, a bare Hono API service, an initi
 shared TypeScript package, a Node-only database package boundary, a Solana client
 package scaffold, empty Anchor Registry and Marketplace programs, and a
 local PostgreSQL service. The Kit client and Core adapter are in place, and a
-local Core CPI probe has passed in LiteSVM and Surfpool. Artwork browsing, API
-and database behavior, and Registry/Marketplace business instructions remain
+local Core CPI probe has passed in LiteSVM and Surfpool. The Registry now has
+a one-time, upgrade-authority-gated platform configuration. Artwork browsing,
+API and database behavior, and artwork/Marketplace business instructions remain
 planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -71,7 +72,8 @@ outside the current scope.
 - [Foundation CI](docs/development/ci.md)
 - [Solana package boundary](docs/development/solana-package.md)
 - [Anchor program workspace](docs/development/anchor-workspace.md)
-- [Local Core CPI program testing](docs/development/program-testing.md)
+- [Local program testing](docs/development/program-testing.md)
+- [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 
 ## Repository policy
 

@@ -7,10 +7,11 @@ The on-chain workspace contains two independent Anchor programs:
 | Registry    | `programs/katha_registry`    | Artwork identity, attribution, verification, and lifecycle records |
 | Marketplace | `programs/katha_marketplace` | Listings, sale eligibility, and settlement                         |
 
-Each program has its own crate, public development ID, and generated IDL. Both
-currently have no production instructions or account state; their behavior is added
-in later implementation steps. The Registry has a feature-gated, local-only
-Core CPI probe for the [program test harness](program-testing.md).
+Each program has its own crate, public development ID, and generated IDL. The
+Registry has a one-time [platform bootstrap](registry-bootstrap.md), with artwork
+behavior added in later steps. Marketplace has no instructions or account state yet.
+The Registry also has a feature-gated, local-only Core CPI probe for the
+[program test harness](program-testing.md).
 
 ## Pinned tools
 
@@ -19,7 +20,7 @@ The workspace pins Anchor CLI 1.2.0, Solana CLI 4.1.2, and Rust 1.95.0.
 back to a globally selected Solana version. Rust's `rust-toolchain.toml` selects
 the host toolchain used to build the workspace.
 
-From the repository root, verify the active toolchain and build both empty programs:
+From the repository root, verify the active toolchain and build both programs:
 
 ```bash
 NO_DNA=1 anchor --version
@@ -53,5 +54,6 @@ cargo metadata --no-deps --format-version 1
 cargo fmt --all -- --check
 ```
 
-The normal `anchor build` omits the `core-cpi-test` feature, so its Registry
-IDL remains empty. Run `pnpm program:test` for the isolated Core CPI gate.
+The normal `anchor build` omits the `core-cpi-test` probe. Its Registry IDL
+contains only `initialize_platform`; the Marketplace IDL remains empty. Run
+`pnpm program:test` for the Core CPI and Registry bootstrap integration gates.
