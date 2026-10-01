@@ -216,6 +216,166 @@
       ]
     },
     {
+      "name": "initialize_custody",
+      "discriminator": [
+        229,
+        218,
+        228,
+        120,
+        208,
+        239,
+        223,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "head",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "transition",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121,
+                  45,
+                  116,
+                  114,
+                  97,
+                  110,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  1,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "custody_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "action",
+          "type": {
+            "defined": {
+              "name": "CustodyAction"
+            }
+          }
+        },
+        {
+          "name": "collector",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
       "name": "initialize_metadata",
       "discriminator": [
         35,
@@ -961,6 +1121,165 @@
       ]
     },
     {
+      "name": "transition_custody",
+      "discriminator": [
+        96,
+        221,
+        253,
+        81,
+        87,
+        151,
+        241,
+        153
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "head",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "transition",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121,
+                  45,
+                  116,
+                  114,
+                  97,
+                  110,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              },
+              {
+                "kind": "arg",
+                "path": "next_revision"
+              }
+            ]
+          }
+        },
+        {
+          "name": "custody_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        },
+        {
+          "name": "next_revision",
+          "type": "u64"
+        },
+        {
+          "name": "action",
+          "type": {
+            "defined": {
+              "name": "CustodyAction"
+            }
+          }
+        },
+        {
+          "name": "collector",
+          "type": {
+            "option": "pubkey"
+          }
+        }
+      ]
+    },
+    {
       "name": "verify_artwork",
       "discriminator": [
         114,
@@ -1127,6 +1446,32 @@
       ]
     },
     {
+      "name": "CustodyHead",
+      "discriminator": [
+        31,
+        203,
+        124,
+        181,
+        196,
+        254,
+        36,
+        112
+      ]
+    },
+    {
+      "name": "CustodyTransition",
+      "discriminator": [
+        169,
+        51,
+        74,
+        33,
+        206,
+        184,
+        60,
+        94
+      ]
+    },
+    {
       "name": "KathaConfig",
       "discriminator": [
         229,
@@ -1204,6 +1549,19 @@
         162,
         1,
         250
+      ]
+    },
+    {
+      "name": "CustodyUpdated",
+      "discriminator": [
+        0,
+        214,
+        131,
+        119,
+        191,
+        91,
+        9,
+        167
       ]
     },
     {
@@ -1388,6 +1746,46 @@
       "code": 6030,
       "name": "InvalidUnmintedConditionReason",
       "msg": "Unminted follow-up reports must be pre-sale or insurance inspections"
+    },
+    {
+      "code": 6031,
+      "name": "UnauthorizedCustody",
+      "msg": "Signer is not the configured custody authority"
+    },
+    {
+      "code": 6032,
+      "name": "StaleCustodyRevision",
+      "msg": "Custody revision is stale"
+    },
+    {
+      "code": 6033,
+      "name": "InvalidCustodyRevision",
+      "msg": "Custody revisions must advance by exactly one"
+    },
+    {
+      "code": 6034,
+      "name": "InvalidCustodyTransition",
+      "msg": "Custody transition is not allowed from the current state"
+    },
+    {
+      "code": 6035,
+      "name": "MissingCustodySubject",
+      "msg": "Collector custody requires an actual custodian address"
+    },
+    {
+      "code": 6036,
+      "name": "InvalidCustodySubject",
+      "msg": "Custodian address must be nonzero and distinct from Katha custody authority"
+    },
+    {
+      "code": 6037,
+      "name": "UnexpectedCustodySubject",
+      "msg": "This transition does not accept a collector custodian address"
+    },
+    {
+      "code": 6038,
+      "name": "InvalidCustodyRelationship",
+      "msg": "Custody head does not belong to this artwork"
     }
   ],
   "types": [
@@ -1854,6 +2252,222 @@
             "type": {
               "option": "u64"
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustodyAction",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "AttestKathaCustody"
+          },
+          {
+            "name": "AttestCollectorCustody"
+          },
+          {
+            "name": "DispatchFromKatha"
+          },
+          {
+            "name": "DispatchFromCollector"
+          },
+          {
+            "name": "ReceiveAtKatha"
+          },
+          {
+            "name": "ReceiveByCollector"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustodyHead",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": {
+                "name": "CustodyState"
+              }
+            }
+          },
+          {
+            "name": "subject",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "latest_transition",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustodyState",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Unknown"
+          },
+          {
+            "name": "KathaHeld"
+          },
+          {
+            "name": "CollectorHeld"
+          },
+          {
+            "name": "InTransit"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustodyTransition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "action",
+            "type": {
+              "defined": {
+                "name": "CustodyAction"
+              }
+            }
+          },
+          {
+            "name": "from_state",
+            "type": {
+              "defined": {
+                "name": "CustodyState"
+              }
+            }
+          },
+          {
+            "name": "to_state",
+            "type": {
+              "defined": {
+                "name": "CustodyState"
+              }
+            }
+          },
+          {
+            "name": "from_subject",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "to_subject",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "attested_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "recorded_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustodyUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "katha_id",
+            "type": "string"
+          },
+          {
+            "name": "transition",
+            "type": "pubkey"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "action",
+            "type": {
+              "defined": {
+                "name": "CustodyAction"
+              }
+            }
+          },
+          {
+            "name": "from_state",
+            "type": {
+              "defined": {
+                "name": "CustodyState"
+              }
+            }
+          },
+          {
+            "name": "to_state",
+            "type": {
+              "defined": {
+                "name": "CustodyState"
+              }
+            }
+          },
+          {
+            "name": "from_subject",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "to_subject",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "attested_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "recorded_at",
+            "type": "i64"
           }
         ]
       }

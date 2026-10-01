@@ -248,6 +248,45 @@ function conditionInstruction(
   };
 }
 
+function custodyInstruction(
+  action: "initialize_custody" | "transition_custody",
+  config: Address,
+  artwork: Address,
+  head: Address,
+  transition: Address,
+  authority: Address,
+  custodyAction: number,
+  collector?: Address,
+  expectedRevision = 0n,
+  nextRevision = 0n,
+) {
+  const discriminator = createHash("sha256")
+    .update(`global:${action}`)
+    .digest()
+    .subarray(0, 8);
+  const revisions = new Uint8Array(16);
+  new DataView(revisions.buffer).setBigUint64(0, expectedRevision, true);
+  new DataView(revisions.buffer).setBigUint64(8, nextRevision, true);
+  return {
+    programAddress: REGISTRY,
+    accounts: [
+      { address: config, role: AccountRole.READONLY },
+      { address: artwork, role: AccountRole.READONLY },
+      { address: head, role: AccountRole.WRITABLE },
+      { address: transition, role: AccountRole.WRITABLE },
+      { address: authority, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM, role: AccountRole.READONLY },
+    ],
+    data: Uint8Array.from([
+      ...discriminator,
+      ...(action === "transition_custody" ? revisions : []),
+      custodyAction,
+      collector === undefined ? 0 : 1,
+      ...(collector === undefined ? [] : getAddressEncoder().encode(collector)),
+    ]),
+  };
+}
+
 function readBorshString(data: Uint8Array, offset: number) {
   const length = new DataView(data.buffer, data.byteOffset).getUint32(offset, true);
   return {
@@ -1432,6 +1471,299 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     expect(
       afterDuplicateCondition.exists && Array.from(afterDuplicateCondition.data),
     ).toEqual(Array.from(secondConditionHead.data));
+
+    client.svm.airdrop(custody.address, lamports(2_000_000_000n));
+    const collectorA = (await generateKeyPairSigner()).address;
+    const collectorB = (await generateKeyPairSigner()).address;
+    const custodyPdas = async (art: Address, revision: bigint) => {
+      const [head] = await getProgramDerivedAddress({
+        programAddress: REGISTRY,
+        seeds: [new TextEncoder().encode("custody"), getAddressEncoder().encode(art)],
+      });
+      const revisionBytes = new Uint8Array(8);
+      new DataView(revisionBytes.buffer).setBigUint64(0, revision, true);
+      const [transition] = await getProgramDerivedAddress({
+        programAddress: REGISTRY,
+        seeds: [
+          new TextEncoder().encode("custody-transition"),
+          getAddressEncoder().encode(art),
+          revisionBytes,
+        ],
+      });
+      return { head, transition };
+    };
+    const custody1 = await custodyPdas(artwork, 1n);
+    const custody2 = await custodyPdas(artwork, 2n);
+    const custody3 = await custodyPdas(artwork, 3n);
+    const custody4 = await custodyPdas(artwork, 4n);
+    const custody5 = await custodyPdas(artwork, 5n);
+    const otherCustody1 = await custodyPdas(otherArtwork, 1n);
+    const custodyTx = (
+      action: "initialize_custody" | "transition_custody",
+      custodyAction: number,
+      collector?: Address,
+      expectedRevision = 0n,
+      nextRevision = 0n,
+      art = artwork,
+      head = custody1.head,
+      transition = custody1.transition,
+      authority = custody.address,
+      configAddress = pdas.config,
+    ) =>
+      addSignersToInstruction(
+        [authority === custody.address ? custody : wrongSigner],
+        custodyInstruction(
+          action,
+          configAddress,
+          art,
+          head,
+          transition,
+          authority,
+          custodyAction,
+          collector,
+          expectedRevision,
+          nextRevision,
+        ),
+      );
+    const initialCustody = (
+      custodyAction = 0,
+      collector?: Address,
+      art = artwork,
+      head = custody1.head,
+      transition = custody1.transition,
+      authority = custody.address,
+      configAddress = pdas.config,
+    ) =>
+      custodyTx(
+        "initialize_custody",
+        custodyAction,
+        collector,
+        0n,
+        0n,
+        art,
+        head,
+        transition,
+        authority,
+        configAddress,
+      );
+    const moveCustody = (
+      expectedRevision: bigint,
+      nextRevision: bigint,
+      custodyAction: number,
+      transition: Address,
+      collector?: Address,
+      art = artwork,
+      head = custody1.head,
+      authority = custody.address,
+      configAddress = pdas.config,
+    ) =>
+      custodyTx(
+        "transition_custody",
+        custodyAction,
+        collector,
+        expectedRevision,
+        nextRevision,
+        art,
+        head,
+        transition,
+        authority,
+        configAddress,
+      );
+    const custodyAbsent = () => {
+      expect(client.svm.getAccount(custody1.head).exists).toBe(false);
+      expect(client.svm.getAccount(custody1.transition).exists).toBe(false);
+    };
+    for (const invalid of [
+      initialCustody(
+        0,
+        undefined,
+        artwork,
+        custody1.head,
+        custody1.transition,
+        wrongSigner.address,
+      ),
+      initialCustody(
+        0,
+        undefined,
+        artwork,
+        custody1.head,
+        custody1.transition,
+        custody.address,
+        wrongSigner.address,
+      ),
+      initialCustody(0, undefined, wrongArtwork),
+      initialCustody(2),
+      initialCustody(0, collectorA),
+      initialCustody(1),
+      initialCustody(1, SYSTEM),
+      initialCustody(1, custody.address),
+      initialCustody(0, undefined, artwork, custody1.head, custody2.transition),
+    ]) {
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      custodyAbsent();
+    }
+    client.svm.setAccount({ ...record, data: wrongCollectionData });
+    await expect(client.sendTransaction([initialCustody()])).rejects.toThrow();
+    custodyAbsent();
+    client.svm.setAccount(record);
+    client.svm.expireBlockhash();
+    await client.sendTransaction([initialCustody()]);
+    const head1 = client.svm.getAccount(custody1.head);
+    const event1 = client.svm.getAccount(custody1.transition);
+    if (!head1.exists || !event1.exists) throw new Error("Initial custody missing");
+    expect(head1.data.length).toBe(115);
+    expect(event1.data.length).toBe(158);
+    expect(getAddressDecoder().decode(head1.data.subarray(8, 40))).toBe(artwork);
+    expect(
+      new DataView(head1.data.buffer, head1.data.byteOffset).getBigUint64(40, true),
+    ).toBe(1n);
+    expect(head1.data[48]).toBe(1); // Katha held.
+    expect(head1.data[49]).toBe(1); // Named custodian.
+    expect(getAddressDecoder().decode(head1.data.subarray(50, 82))).toBe(
+      custody.address,
+    );
+    expect(getAddressDecoder().decode(head1.data.subarray(82, 114))).toBe(
+      custody1.transition,
+    );
+    expect(event1.data[48]).toBe(0); // Initial Katha custody action.
+    expect(event1.data[49]).toBe(0); // Unknown before first attestation.
+    expect(event1.data[50]).toBe(1); // Katha held after attestation.
+    await expect(client.sendTransaction([initialCustody()])).rejects.toThrow();
+    const unchangedAt = (expected: typeof head1, transition: Address) => {
+      const current = client.svm.getAccount(custody1.head);
+      expect(current.exists && Array.from(current.data)).toEqual(
+        Array.from(expected.data),
+      );
+      expect(client.svm.getAccount(transition).exists).toBe(false);
+    };
+    for (const invalid of [
+      moveCustody(1n, 2n, 3, custody2.transition), // Collector dispatch from Katha is invalid.
+      moveCustody(1n, 2n, 4, custody2.transition), // Receipt requires transit.
+      moveCustody(1n, 2n, 2, custody2.transition, collectorA),
+      moveCustody(0n, 2n, 2, custody2.transition),
+      moveCustody(1n, 3n, 2, custody2.transition),
+      moveCustody(
+        1n,
+        2n,
+        2,
+        custody2.transition,
+        undefined,
+        artwork,
+        custody1.head,
+        wrongSigner.address,
+      ),
+      moveCustody(
+        1n,
+        2n,
+        2,
+        custody2.transition,
+        undefined,
+        artwork,
+        custody1.head,
+        custody.address,
+        wrongSigner.address,
+      ),
+      moveCustody(1n, 2n, 2, custody2.transition, undefined, otherArtwork),
+      moveCustody(1n, 2n, 2, custody3.transition),
+    ]) {
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      unchangedAt(head1, custody2.transition);
+    }
+    const forgedCustodyHead = Uint8Array.from(head1.data);
+    forgedCustodyHead.set(getAddressEncoder().encode(otherArtwork), 8);
+    client.svm.setAccount({ ...head1, data: forgedCustodyHead });
+    await expect(
+      client.sendTransaction([moveCustody(1n, 2n, 2, custody2.transition)]),
+    ).rejects.toThrow();
+    client.svm.setAccount(head1);
+    unchangedAt(head1, custody2.transition);
+    client.svm.expireBlockhash();
+    await client.sendTransaction([moveCustody(1n, 2n, 2, custody2.transition)]);
+    const head2 = client.svm.getAccount(custody1.head);
+    const event2 = client.svm.getAccount(custody2.transition);
+    if (!head2.exists || !event2.exists) throw new Error("Dispatch missing");
+    expect(
+      new DataView(head2.data.buffer, head2.data.byteOffset).getBigUint64(40, true),
+    ).toBe(2n);
+    expect(head2.data[48]).toBe(3); // Transit, with no asserted custodian.
+    expect(head2.data[49]).toBe(0);
+    expect(event2.data[48]).toBe(2); // Dispatch from Katha.
+    expect(event2.data[49]).toBe(1);
+    expect(event2.data[50]).toBe(3);
+    expect(event2.data[51]).toBe(1); // Preserved previous Katha subject.
+    expect(getAddressDecoder().decode(event2.data.subarray(52, 84))).toBe(
+      custody.address,
+    );
+    for (const invalid of [
+      moveCustody(2n, 3n, 5, custody3.transition),
+      moveCustody(2n, 3n, 5, custody3.transition, SYSTEM),
+      moveCustody(2n, 3n, 5, custody3.transition, custody.address),
+      moveCustody(2n, 3n, 4, custody3.transition, collectorA),
+      moveCustody(2n, 3n, 2, custody3.transition),
+    ]) {
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      unchangedAt(head2, custody3.transition);
+    }
+    await client.sendTransaction([
+      moveCustody(2n, 3n, 5, custody3.transition, collectorA),
+    ]);
+    const head3 = client.svm.getAccount(custody1.head);
+    if (!head3.exists) throw new Error("Collector receipt missing");
+    expect(head3.data[48]).toBe(2);
+    expect(getAddressDecoder().decode(head3.data.subarray(50, 82))).toBe(collectorA);
+    await client.sendTransaction([moveCustody(3n, 4n, 3, custody4.transition)]);
+    const head4 = client.svm.getAccount(custody1.head);
+    if (!head4.exists) throw new Error("Collector dispatch missing");
+    expect(head4.data[48]).toBe(3);
+    const event4 = client.svm.getAccount(custody4.transition);
+    if (!event4.exists) throw new Error("Collector dispatch event missing");
+    expect(getAddressDecoder().decode(event4.data.subarray(52, 84))).toBe(collectorA);
+    await client.sendTransaction([moveCustody(4n, 5n, 4, custody5.transition)]);
+    const head5 = client.svm.getAccount(custody1.head);
+    if (!head5.exists) throw new Error("Katha receipt missing");
+    expect(head5.data[48]).toBe(1);
+    expect(getAddressDecoder().decode(head5.data.subarray(50, 82))).toBe(
+      custody.address,
+    );
+    expect(client.svm.getAccount(custody1.transition)).toEqual(event1);
+    expect(client.svm.getAccount(custody2.transition)).toEqual(event2);
+    client.svm.expireBlockhash();
+    await expect(
+      client.sendTransaction([moveCustody(4n, 5n, 4, custody5.transition)]),
+    ).rejects.toThrow();
+    const custodyAfterReplay = client.svm.getAccount(custody1.head);
+    expect(custodyAfterReplay.exists && Array.from(custodyAfterReplay.data)).toEqual(
+      Array.from(head5.data),
+    );
+
+    // The other registered artwork can start in collector custody independently.
+    await client.sendTransaction([
+      initialCustody(
+        1,
+        collectorB,
+        otherArtwork,
+        otherCustody1.head,
+        otherCustody1.transition,
+      ),
+    ]);
+    const otherHead = client.svm.getAccount(otherCustody1.head);
+    if (!otherHead.exists) throw new Error("Other artwork custody missing");
+    expect(otherHead.data[48]).toBe(2);
+    expect(getAddressDecoder().decode(otherHead.data.subarray(50, 82))).toBe(
+      collectorB,
+    );
+    const unchangedArtwork = client.svm.getAccount(artwork);
+    expect(unchangedArtwork.exists && Array.from(unchangedArtwork.data)).toEqual(
+      Array.from(record.data),
+    );
+    const unchangedVerification = client.svm.getAccount(verification);
+    expect(
+      unchangedVerification.exists && Array.from(unchangedVerification.data),
+    ).toEqual(Array.from(attestation.data));
+    const unchangedCondition = client.svm.getAccount(conditionHead);
+    expect(unchangedCondition.exists && Array.from(unchangedCondition.data)).toEqual(
+      Array.from(secondConditionHead.data),
+    );
   });
 });
 

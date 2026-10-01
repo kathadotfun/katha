@@ -40,14 +40,16 @@ verifier-only authentication, account/PDA and collection substitution, wrong
 evidence hash, and replay rejection. It also checks metadata versions and
 condition report history, including stale writes, forged account relationships,
 invalid hashes and inspection times, duplicate report IDs, and the post-mint
-boundary. No existing wallet is read.
+boundary. The suite also checks all custody transitions, wrong authorities,
+invalid subjects, stale revisions, and rollback. No existing wallet is read.
 
 The probe instruction exists only with the `core-cpi-test` Cargo feature. The
 ordinary `NO_DNA=1 anchor build --ignore-keys` omits it; the normal Registry
 IDL contains platform initialization, artwork registration, authentication,
-pre-mint metadata commitments, and initial condition attestations.
-The test binary lives in a separate ignored directory; do not deploy it.
-Custody, minting, and post-mint inspection rules come in later steps.
+pre-mint metadata commitments, initial condition attestations, and
+physical custody transitions. The test binary lives in a separate ignored
+directory; do not deploy it. Minting and post-mint inspection rules come in
+later steps.
 
 The underlying [Core CPI builder](https://www.metaplex.com/docs/smart-contracts/core/using-core-in-anchor),
 [LiteSVM program loading](https://www.anchor-lang.com/docs/testing/litesvm),

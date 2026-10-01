@@ -10,6 +10,8 @@ pub const METADATA_HEAD_SEED: &[u8] = b"metadata";
 pub const METADATA_VERSION_SEED: &[u8] = b"metadata-version";
 pub const CONDITION_HEAD_SEED: &[u8] = b"condition";
 pub const CONDITION_REPORT_SEED: &[u8] = b"condition-report";
+pub const CUSTODY_HEAD_SEED: &[u8] = b"custody";
+pub const CUSTODY_TRANSITION_SEED: &[u8] = b"custody-transition";
 
 #[program]
 pub mod katha_registry {
@@ -387,6 +389,108 @@ pub mod katha_registry {
         Ok(())
     }
 
+    pub fn initialize_custody(
+        ctx: Context<InitializeCustody>,
+        action: CustodyAction,
+        collector: Option<Pubkey>,
+    ) -> Result<()> {
+        let artwork = &ctx.accounts.artwork;
+        let authority = ctx.accounts.custody_authority.key();
+        let (state, subject) =
+            custody_destination(action, CustodyState::Unknown, collector, authority)?;
+        let recorded_at = Clock::get()?.unix_timestamp;
+        let transition = &mut ctx.accounts.transition;
+        transition.artwork = artwork.key();
+        transition.revision = 1;
+        transition.action = action;
+        transition.from_state = CustodyState::Unknown;
+        transition.to_state = state;
+        transition.from_subject = None;
+        transition.to_subject = subject;
+        transition.attested_by = authority;
+        transition.recorded_at = recorded_at;
+        transition.bump = ctx.bumps.transition;
+
+        let head = &mut ctx.accounts.head;
+        head.artwork = artwork.key();
+        head.revision = 1;
+        head.state = state;
+        head.subject = subject;
+        head.latest_transition = transition.key();
+        head.bump = ctx.bumps.head;
+
+        emit!(CustodyUpdated {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            transition: transition.key(),
+            revision: 1,
+            action,
+            from_state: CustodyState::Unknown,
+            to_state: state,
+            from_subject: None,
+            to_subject: subject,
+            attested_by: authority,
+            recorded_at,
+        });
+        Ok(())
+    }
+
+    pub fn transition_custody(
+        ctx: Context<TransitionCustody>,
+        expected_revision: u64,
+        next_revision: u64,
+        action: CustodyAction,
+        collector: Option<Pubkey>,
+    ) -> Result<()> {
+        let head = &mut ctx.accounts.head;
+        require!(
+            head.revision == expected_revision,
+            RegistryError::StaleCustodyRevision
+        );
+        require!(
+            expected_revision.checked_add(1) == Some(next_revision),
+            RegistryError::InvalidCustodyRevision
+        );
+        let from_state = head.state;
+        let from_subject = head.subject;
+        let artwork = &ctx.accounts.artwork;
+        let authority = ctx.accounts.custody_authority.key();
+        let (state, subject) = custody_destination(action, from_state, collector, authority)?;
+        let recorded_at = Clock::get()?.unix_timestamp;
+
+        let transition = &mut ctx.accounts.transition;
+        transition.artwork = artwork.key();
+        transition.revision = next_revision;
+        transition.action = action;
+        transition.from_state = from_state;
+        transition.to_state = state;
+        transition.from_subject = from_subject;
+        transition.to_subject = subject;
+        transition.attested_by = authority;
+        transition.recorded_at = recorded_at;
+        transition.bump = ctx.bumps.transition;
+
+        head.revision = next_revision;
+        head.state = state;
+        head.subject = subject;
+        head.latest_transition = transition.key();
+
+        emit!(CustodyUpdated {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            transition: transition.key(),
+            revision: next_revision,
+            action,
+            from_state,
+            to_state: state,
+            from_subject,
+            to_subject: subject,
+            attested_by: authority,
+            recorded_at,
+        });
+        Ok(())
+    }
+
     // Compiled only into the local harness binary, never the normal Registry build.
     #[cfg(feature = "core-cpi-test")]
     pub fn probe_create_core_collection(
@@ -456,6 +560,39 @@ fn validate_condition_report(
         RegistryError::InvalidInspectionTime
     );
     Ok(())
+}
+
+fn custody_destination(
+    action: CustodyAction,
+    from: CustodyState,
+    collector: Option<Pubkey>,
+    authority: Pubkey,
+) -> Result<(CustodyState, Option<Pubkey>)> {
+    let destination = match (from, action) {
+        (CustodyState::Unknown, CustodyAction::AttestKathaCustody)
+        | (CustodyState::InTransit, CustodyAction::ReceiveAtKatha) => {
+            require!(collector.is_none(), RegistryError::UnexpectedCustodySubject);
+            (CustodyState::KathaHeld, Some(authority))
+        }
+        (CustodyState::Unknown, CustodyAction::AttestCollectorCustody)
+        | (CustodyState::InTransit, CustodyAction::ReceiveByCollector) => {
+            let subject = collector.ok_or(RegistryError::MissingCustodySubject)?;
+            require_keys_neq!(
+                subject,
+                Pubkey::default(),
+                RegistryError::InvalidCustodySubject
+            );
+            require_keys_neq!(subject, authority, RegistryError::InvalidCustodySubject);
+            (CustodyState::CollectorHeld, Some(subject))
+        }
+        (CustodyState::KathaHeld, CustodyAction::DispatchFromKatha)
+        | (CustodyState::CollectorHeld, CustodyAction::DispatchFromCollector) => {
+            require!(collector.is_none(), RegistryError::UnexpectedCustodySubject);
+            (CustodyState::InTransit, None)
+        }
+        _ => return err!(RegistryError::InvalidCustodyTransition),
+    };
+    Ok(destination)
 }
 
 #[account]
@@ -606,6 +743,56 @@ pub struct ConditionAttestation {
 impl ConditionAttestation {
     pub const SPACE: usize =
         8 + 32 + 4 + 16 + 32 + 1 + 1 + 16 + 32 + 8 + 8 + (1 + 32) + (1 + 8) + 1;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum CustodyState {
+    Unknown,
+    KathaHeld,
+    CollectorHeld,
+    InTransit,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum CustodyAction {
+    AttestKathaCustody,
+    AttestCollectorCustody,
+    DispatchFromKatha,
+    DispatchFromCollector,
+    ReceiveAtKatha,
+    ReceiveByCollector,
+}
+
+#[account]
+pub struct CustodyHead {
+    pub artwork: Pubkey,
+    pub revision: u64,
+    pub state: CustodyState,
+    pub subject: Option<Pubkey>,
+    pub latest_transition: Pubkey,
+    pub bump: u8,
+}
+
+impl CustodyHead {
+    pub const SPACE: usize = 8 + 32 + 8 + 1 + (1 + 32) + 32 + 1;
+}
+
+#[account]
+pub struct CustodyTransition {
+    pub artwork: Pubkey,
+    pub revision: u64,
+    pub action: CustodyAction,
+    pub from_state: CustodyState,
+    pub to_state: CustodyState,
+    pub from_subject: Option<Pubkey>,
+    pub to_subject: Option<Pubkey>,
+    pub attested_by: Pubkey,
+    pub recorded_at: i64,
+    pub bump: u8,
+}
+
+impl CustodyTransition {
+    pub const SPACE: usize = 8 + 32 + 8 + 1 + 1 + 1 + (1 + 32) + (1 + 32) + 32 + 8 + 1;
 }
 
 #[derive(Accounts)]
@@ -809,6 +996,83 @@ pub struct RecordUnmintedCondition<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct InitializeCustody<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        init,
+        payer = custody_authority,
+        space = CustodyHead::SPACE,
+        seeds = [CUSTODY_HEAD_SEED, artwork.key().as_ref()],
+        bump
+    )]
+    pub head: Account<'info, CustodyHead>,
+    #[account(
+        init,
+        payer = custody_authority,
+        space = CustodyTransition::SPACE,
+        seeds = [CUSTODY_TRANSITION_SEED, artwork.key().as_ref(), &1_u64.to_le_bytes()],
+        bump
+    )]
+    pub transition: Account<'info, CustodyTransition>,
+    #[account(mut, address = config.custody_authority @ RegistryError::UnauthorizedCustody)]
+    pub custody_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(expected_revision: u64, next_revision: u64)]
+pub struct TransitionCustody<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        mut,
+        seeds = [CUSTODY_HEAD_SEED, artwork.key().as_ref()],
+        bump = head.bump,
+        constraint = head.artwork == artwork.key() @ RegistryError::InvalidCustodyRelationship
+    )]
+    pub head: Account<'info, CustodyHead>,
+    #[account(
+        init,
+        payer = custody_authority,
+        space = CustodyTransition::SPACE,
+        seeds = [CUSTODY_TRANSITION_SEED, artwork.key().as_ref(), &next_revision.to_le_bytes()],
+        bump
+    )]
+    pub transition: Account<'info, CustodyTransition>,
+    #[account(mut, address = config.custody_authority @ RegistryError::UnauthorizedCustody)]
+    pub custody_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[event]
+pub struct CustodyUpdated {
+    pub artwork: Pubkey,
+    pub katha_id: String,
+    pub transition: Pubkey,
+    pub revision: u64,
+    pub action: CustodyAction,
+    pub from_state: CustodyState,
+    pub to_state: CustodyState,
+    pub from_subject: Option<Pubkey>,
+    pub to_subject: Option<Pubkey>,
+    pub attested_by: Pubkey,
+    pub recorded_at: i64,
+}
+
 #[event]
 pub struct PlatformInitialized {
     pub config: Pubkey,
@@ -936,6 +1200,22 @@ pub enum RegistryError {
     InvalidInitialConditionReason,
     #[msg("Unminted follow-up reports must be pre-sale or insurance inspections")]
     InvalidUnmintedConditionReason,
+    #[msg("Signer is not the configured custody authority")]
+    UnauthorizedCustody,
+    #[msg("Custody revision is stale")]
+    StaleCustodyRevision,
+    #[msg("Custody revisions must advance by exactly one")]
+    InvalidCustodyRevision,
+    #[msg("Custody transition is not allowed from the current state")]
+    InvalidCustodyTransition,
+    #[msg("Collector custody requires an actual custodian address")]
+    MissingCustodySubject,
+    #[msg("Custodian address must be nonzero and distinct from Katha custody authority")]
+    InvalidCustodySubject,
+    #[msg("This transition does not accept a collector custodian address")]
+    UnexpectedCustodySubject,
+    #[msg("Custody head does not belong to this artwork")]
+    InvalidCustodyRelationship,
 }
 
 #[cfg(feature = "core-cpi-test")]
