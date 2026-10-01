@@ -115,9 +115,131 @@
           "type": "pubkey"
         }
       ]
+    },
+    {
+      "name": "register_artwork",
+      "discriminator": [
+        211,
+        48,
+        220,
+        65,
+        174,
+        16,
+        158,
+        168
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "katha_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "registration_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "katha_id",
+          "type": "string"
+        },
+        {
+          "name": "artist_id",
+          "type": "string"
+        },
+        {
+          "name": "creator_wallet",
+          "type": {
+            "option": "pubkey"
+          }
+        },
+        {
+          "name": "category",
+          "type": {
+            "defined": {
+              "name": "ArtworkCategory"
+            }
+          }
+        },
+        {
+          "name": "creation_year",
+          "type": "u16"
+        },
+        {
+          "name": "authorship_evidence_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
     }
   ],
   "accounts": [
+    {
+      "name": "ArtworkRecord",
+      "discriminator": [
+        130,
+        197,
+        216,
+        147,
+        208,
+        82,
+        241,
+        254
+      ]
+    },
     {
       "name": "KathaConfig",
       "discriminator": [
@@ -133,6 +255,19 @@
     }
   ],
   "events": [
+    {
+      "name": "ArtworkRegistered",
+      "discriminator": [
+        208,
+        137,
+        180,
+        69,
+        29,
+        66,
+        44,
+        228
+      ]
+    },
     {
       "name": "PlatformInitialized",
       "discriminator": [
@@ -172,9 +307,180 @@
       "code": 6004,
       "name": "InvalidCollectionAuthority",
       "msg": "Core collection must be controlled by the Registry authority PDA"
+    },
+    {
+      "code": 6005,
+      "name": "UnauthorizedRegistration",
+      "msg": "Only the configured registration authority can register artwork"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidArtworkId",
+      "msg": "Katha ID must match its category and have a nonzero six-digit serial"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidArtistId",
+      "msg": "Artist ID must be a canonical lowercase UUID"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidCreationYear",
+      "msg": "Creation year must be between 1 and 9999"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidAuthorshipHash",
+      "msg": "Authorship evidence hash must not be zero"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidCreatorWallet",
+      "msg": "Creator wallet must not be the default address"
     }
   ],
   "types": [
+    {
+      "name": "ArtworkCategory",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Mandala"
+          },
+          {
+            "name": "Paubha"
+          },
+          {
+            "name": "Thangka"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "katha_id",
+            "type": "string"
+          },
+          {
+            "name": "artist_id",
+            "type": "string"
+          },
+          {
+            "name": "creator_wallet",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "category",
+            "type": {
+              "defined": {
+                "name": "ArtworkCategory"
+              }
+            }
+          },
+          {
+            "name": "creation_year",
+            "type": "u16"
+          },
+          {
+            "name": "authorship_evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "core_asset",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "registered_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "registered_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "katha_id",
+            "type": "string"
+          },
+          {
+            "name": "artist_id",
+            "type": "string"
+          },
+          {
+            "name": "creator_wallet",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "category",
+            "type": {
+              "defined": {
+                "name": "ArtworkCategory"
+              }
+            }
+          },
+          {
+            "name": "creation_year",
+            "type": "u16"
+          },
+          {
+            "name": "authorship_evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "registered_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "registered_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
     {
       "name": "KathaConfig",
       "type": {

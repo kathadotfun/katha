@@ -4,6 +4,7 @@ declare_id!("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
 
 pub const CONFIG_SEED: &[u8] = b"katha-config";
 pub const COLLECTION_AUTHORITY_SEED: &[u8] = b"collection-authority";
+pub const ARTWORK_SEED: &[u8] = b"artwork";
 
 #[program]
 pub mod katha_registry {
@@ -64,6 +65,79 @@ pub mod katha_registry {
         Ok(())
     }
 
+    pub fn register_artwork(
+        ctx: Context<RegisterArtwork>,
+        katha_id: String,
+        artist_id: String,
+        creator_wallet: Option<Pubkey>,
+        category: ArtworkCategory,
+        creation_year: u16,
+        authorship_evidence_hash: [u8; 32],
+    ) -> Result<()> {
+        let serial = katha_id
+            .strip_prefix(category.id_prefix())
+            .ok_or(RegistryError::InvalidArtworkId)?;
+        require!(
+            serial.len() == 6
+                && serial.bytes().all(|byte| byte.is_ascii_digit())
+                && serial != "000000",
+            RegistryError::InvalidArtworkId
+        );
+        let uuid = artist_id.as_bytes();
+        require!(
+            uuid.len() == 36
+                && uuid.iter().enumerate().all(|(index, byte)| match index {
+                    8 | 13 | 18 | 23 => *byte == b'-',
+                    _ => byte.is_ascii_digit() || (b'a'..=b'f').contains(byte),
+                })
+                && (b'1'..=b'8').contains(&uuid[14])
+                && (b'8'..=b'b').contains(&uuid[19]),
+            RegistryError::InvalidArtistId
+        );
+        require!(
+            (1..=9999).contains(&creation_year),
+            RegistryError::InvalidCreationYear
+        );
+        require!(
+            authorship_evidence_hash != [0; 32],
+            RegistryError::InvalidAuthorshipHash
+        );
+        if let Some(wallet) = creator_wallet {
+            require_keys_neq!(
+                wallet,
+                Pubkey::default(),
+                RegistryError::InvalidCreatorWallet
+            );
+        }
+
+        let artwork = &mut ctx.accounts.artwork;
+        artwork.katha_id = katha_id;
+        artwork.artist_id = artist_id;
+        artwork.creator_wallet = creator_wallet;
+        artwork.category = category;
+        artwork.creation_year = creation_year;
+        artwork.authorship_evidence_hash = authorship_evidence_hash;
+        artwork.collection = ctx.accounts.config.collection;
+        artwork.core_asset = None;
+        artwork.registered_by = ctx.accounts.registration_authority.key();
+        artwork.registered_at = Clock::get()?.unix_timestamp;
+        artwork.bump = ctx.bumps.artwork;
+
+        emit!(ArtworkRegistered {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            artist_id: artwork.artist_id.clone(),
+            creator_wallet,
+            category,
+            creation_year,
+            authorship_evidence_hash,
+            collection: artwork.collection,
+            registered_by: artwork.registered_by,
+            registered_at: artwork.registered_at,
+        });
+        Ok(())
+    }
+
     // Compiled only into the local harness binary, never the normal Registry build.
     #[cfg(feature = "core-cpi-test")]
     pub fn probe_create_core_collection(
@@ -102,6 +176,44 @@ impl KathaConfig {
     pub const SPACE: usize = 8 + 32 * 7 + 2;
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
+pub enum ArtworkCategory {
+    Mandala,
+    Paubha,
+    Thangka,
+}
+
+impl ArtworkCategory {
+    fn id_prefix(self) -> &'static str {
+        match self {
+            Self::Mandala => "KATHA-MANDALA-",
+            Self::Paubha => "KATHA-PAUBHA-",
+            Self::Thangka => "KATHA-THANGKA-",
+        }
+    }
+}
+
+#[account]
+pub struct ArtworkRecord {
+    pub katha_id: String,
+    pub artist_id: String,
+    pub creator_wallet: Option<Pubkey>,
+    pub category: ArtworkCategory,
+    pub creation_year: u16,
+    pub authorship_evidence_hash: [u8; 32],
+    pub collection: Pubkey,
+    pub core_asset: Option<Pubkey>,
+    pub registered_by: Pubkey,
+    pub registered_at: i64,
+    pub bump: u8,
+}
+
+impl ArtworkRecord {
+    // String lengths are bytes; IDs are restricted to ASCII before serialization.
+    pub const SPACE: usize =
+        8 + (4 + 20) + (4 + 36) + (1 + 32) + 1 + 2 + 32 + 32 + (1 + 32) + 32 + 8 + 1;
+}
+
 #[derive(Accounts)]
 pub struct InitializePlatform<'info> {
     #[account(init, payer = bootstrap_authority, space = KathaConfig::SPACE, seeds = [CONFIG_SEED], bump)]
@@ -121,6 +233,24 @@ pub struct InitializePlatform<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(katha_id: String)]
+pub struct RegisterArtwork<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        init,
+        payer = registration_authority,
+        space = ArtworkRecord::SPACE,
+        seeds = [ARTWORK_SEED, katha_id.as_bytes()],
+        bump
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    pub registration_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
 #[event]
 pub struct PlatformInitialized {
     pub config: Pubkey,
@@ -130,6 +260,20 @@ pub struct PlatformInitialized {
     pub verifier_authority: Pubkey,
     pub custody_authority: Pubkey,
     pub treasury: Pubkey,
+}
+
+#[event]
+pub struct ArtworkRegistered {
+    pub artwork: Pubkey,
+    pub katha_id: String,
+    pub artist_id: String,
+    pub creator_wallet: Option<Pubkey>,
+    pub category: ArtworkCategory,
+    pub creation_year: u16,
+    pub authorship_evidence_hash: [u8; 32],
+    pub collection: Pubkey,
+    pub registered_by: Pubkey,
+    pub registered_at: i64,
 }
 
 #[error_code]
@@ -144,6 +288,18 @@ pub enum RegistryError {
     InvalidCollection,
     #[msg("Core collection must be controlled by the Registry authority PDA")]
     InvalidCollectionAuthority,
+    #[msg("Only the configured registration authority can register artwork")]
+    UnauthorizedRegistration,
+    #[msg("Katha ID must match its category and have a nonzero six-digit serial")]
+    InvalidArtworkId,
+    #[msg("Artist ID must be a canonical lowercase UUID")]
+    InvalidArtistId,
+    #[msg("Creation year must be between 1 and 9999")]
+    InvalidCreationYear,
+    #[msg("Authorship evidence hash must not be zero")]
+    InvalidAuthorshipHash,
+    #[msg("Creator wallet must not be the default address")]
+    InvalidCreatorWallet,
 }
 
 #[cfg(feature = "core-cpi-test")]

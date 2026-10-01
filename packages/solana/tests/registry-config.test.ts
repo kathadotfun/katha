@@ -87,6 +87,58 @@ function initializeInstruction(
   };
 }
 
+function registerArtworkInstruction(
+  config: Address,
+  artwork: Address,
+  authority: Address,
+  kathaId: string,
+  artistId = "123e4567-e89b-42d3-a456-426614174000",
+  category = 1,
+  creationYear = 2025,
+  hash = new Uint8Array(32).fill(7),
+  creatorWallet?: Address,
+) {
+  const discriminator = createHash("sha256")
+    .update("global:register_artwork")
+    .digest()
+    .subarray(0, 8);
+  const string = (value: string) => {
+    const bytes = new TextEncoder().encode(value);
+    const length = new Uint8Array(4);
+    new DataView(length.buffer).setUint32(0, bytes.length, true);
+    return [...length, ...bytes];
+  };
+  const year = new Uint8Array(2);
+  new DataView(year.buffer).setUint16(0, creationYear, true);
+  return {
+    programAddress: REGISTRY,
+    accounts: [
+      { address: config, role: AccountRole.READONLY },
+      { address: artwork, role: AccountRole.WRITABLE },
+      { address: authority, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM, role: AccountRole.READONLY },
+    ],
+    data: Uint8Array.from([
+      ...discriminator,
+      ...string(kathaId),
+      ...string(artistId),
+      creatorWallet ? 1 : 0,
+      ...(creatorWallet ? getAddressEncoder().encode(creatorWallet) : []),
+      category,
+      ...year,
+      ...hash,
+    ]),
+  };
+}
+
+function readBorshString(data: Uint8Array, offset: number) {
+  const length = new DataView(data.buffer, data.byteOffset).getUint32(offset, true);
+  return {
+    value: new TextDecoder().decode(data.subarray(offset + 4, offset + 4 + length)),
+    next: offset + 4 + length,
+  };
+}
+
 function programDataAddress(programData: Uint8Array): Address {
   if (programData.length < 36 || programData[0] !== 2) {
     throw new Error("Registry fixture is not an upgradeable program");
@@ -125,7 +177,7 @@ function assertConfigData(
   expect(data.length).toBe(234);
 }
 
-describe("Registry platform initialization in LiteSVM", () => {
+describe("Registry platform and artwork identity in LiteSVM", () => {
   it("binds a fresh Core collection once and rejects forged bootstrap relationships", async () => {
     const bootstrap = await generateKeyPairSigner();
     const wrongSigner = await generateKeyPairSigner();
@@ -320,6 +372,149 @@ describe("Registry platform initialization in LiteSVM", () => {
     const unchanged = client.svm.getAccount(pdas.config);
     expect(unchanged.exists && Array.from(unchanged.data)).toEqual(
       Array.from(config.data),
+    );
+
+    client.svm.airdrop(registration.address, lamports(2_000_000_000n));
+    client.svm.airdrop(wrongSigner.address, lamports(2_000_000_000n));
+    const kathaId = "KATHA-PAUBHA-000001";
+    const artistId = "123e4567-e89b-42d3-a456-426614174000";
+    const [artwork, artworkBump] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [new TextEncoder().encode("artwork"), new TextEncoder().encode(kathaId)],
+    });
+    const [wrongArtwork] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [
+        new TextEncoder().encode("artwork"),
+        new TextEncoder().encode("KATHA-PAUBHA-999999"),
+      ],
+    });
+    const [zeroSerialArtwork] = await getProgramDerivedAddress({
+      programAddress: REGISTRY,
+      seeds: [
+        new TextEncoder().encode("artwork"),
+        new TextEncoder().encode("KATHA-PAUBHA-000000"),
+      ],
+    });
+    const register = (
+      id = kathaId,
+      artist = artistId,
+      category = 1,
+      year = 2025,
+      hash = new Uint8Array(32).fill(7),
+      account = artwork,
+      authority = registration.address,
+      configAddress = pdas.config,
+      wallet?: Address,
+    ) =>
+      addSignersToInstruction(
+        [authority === registration.address ? registration : wrongSigner],
+        registerArtworkInstruction(
+          configAddress,
+          account,
+          authority,
+          id,
+          artist,
+          category,
+          year,
+          hash,
+          wallet,
+        ),
+      );
+    const absent = () => expect(client.svm.getAccount(artwork).exists).toBe(false);
+    await expect(
+      client.sendTransaction([
+        register(kathaId, artistId, 1, 2025, undefined, artwork, wrongSigner.address),
+      ]),
+    ).rejects.toThrow();
+    absent();
+    await expect(
+      client.sendTransaction([
+        register(
+          kathaId,
+          artistId,
+          1,
+          2025,
+          undefined,
+          artwork,
+          registration.address,
+          wrongSigner.address,
+        ),
+      ]),
+    ).rejects.toThrow();
+    absent();
+    await expect(
+      client.sendTransaction([
+        register(kathaId, artistId, 1, 2025, undefined, wrongArtwork),
+      ]),
+    ).rejects.toThrow();
+    absent();
+    for (const invalid of [
+      register("KATHA-PAUBHA-000000", artistId, 1, 2025, undefined, zeroSerialArtwork),
+      register(kathaId, artistId, 0),
+      register(kathaId, "invalid-artist-id"),
+      register(kathaId, artistId, 1, 0),
+      register(kathaId, artistId, 1, 2025, new Uint8Array(32)),
+      register(
+        kathaId,
+        artistId,
+        1,
+        2025,
+        undefined,
+        artwork,
+        registration.address,
+        pdas.config,
+        SYSTEM,
+      ),
+    ]) {
+      await expect(client.sendTransaction([invalid])).rejects.toThrow();
+      absent();
+    }
+    await client.sendTransaction([register()]);
+    const record = client.svm.getAccount(artwork);
+    if (!record.exists) throw new Error("ArtworkRecord was not created");
+    expect(record.programAddress).toBe(REGISTRY);
+    expect(record.data.length).toBe(246);
+    expect(Array.from(record.data.subarray(0, 8))).toEqual(
+      Array.from(
+        createHash("sha256").update("account:ArtworkRecord").digest().subarray(0, 8),
+      ),
+    );
+    const id = readBorshString(record.data, 8);
+    const artist = readBorshString(record.data, id.next);
+    expect(id.value).toBe(kathaId);
+    expect(artist.value).toBe(artistId);
+    expect(record.data[artist.next]).toBe(0); // Creator wallet is optional.
+    expect(record.data[artist.next + 1]).toBe(1); // Paubha category.
+    expect(
+      new DataView(record.data.buffer, record.data.byteOffset).getUint16(
+        artist.next + 2,
+        true,
+      ),
+    ).toBe(2025);
+    expect(Array.from(record.data.subarray(artist.next + 4, artist.next + 36))).toEqual(
+      Array(32).fill(7),
+    );
+    expect(
+      getAddressDecoder().decode(
+        record.data.subarray(artist.next + 36, artist.next + 68),
+      ),
+    ).toBe(collection.address);
+    expect(record.data[artist.next + 68]).toBe(0); // Core asset is unbound until minting.
+    expect(
+      getAddressDecoder().decode(
+        record.data.subarray(artist.next + 69, artist.next + 101),
+      ),
+    ).toBe(registration.address);
+    expect(record.data[artist.next + 109]).toBe(artworkBump);
+    await expect(
+      client.sendTransaction([
+        register(kathaId, "123e4567-e89b-42d3-a456-426614174001", 1, 2024),
+      ]),
+    ).rejects.toThrow();
+    const afterDuplicate = client.svm.getAccount(artwork);
+    expect(afterDuplicate.exists && Array.from(afterDuplicate.data)).toEqual(
+      Array.from(record.data),
     );
   });
 });
