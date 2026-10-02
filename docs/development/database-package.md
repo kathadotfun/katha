@@ -3,7 +3,7 @@
 `packages/db` is the Node-only PostgreSQL boundary. It pins Drizzle ORM 0.45.3,
 Postgres.js 3.4.9 and Drizzle Kit 0.31.11. Postgres.js supplies the connection pool;
 Drizzle supplies typed queries and transactions. Package imports neither read
-configuration nor open connections. Domain tables begin in the next database step.
+configuration nor open connections. The first domain table stores [artist profiles](artist-profiles.md).
 
 ## Local configuration
 
@@ -27,10 +27,10 @@ can run without a database URL or server. Applying migrations requires
 `DATABASE_URL`. There is no fallback connection to a default or remote database.
 
 `drizzle.config.ts` selects PostgreSQL, `src/schema/index.ts` and `drizzle/`.
-The empty schema currently produces no SQL changes. Its generated empty journal
-is tracked so migration commands can run before the first domain table exists;
-Drizzle may create its own migration log schema/table. No application tables are
-created by this step.
+The schema now includes artist profiles. The first generated migration creates
+the artist verification enum, table and constraints. Review the SQL, snapshot
+and journal before applying; Drizzle records applied versions in its migration
+log schema/table.
 
 ## Connection ownership
 
@@ -88,7 +88,7 @@ The unit suite needs no database. `db:test` requires Docker Engine and the exist
 with `docker pull postgres:18.6` before running the tests. It starts a uniquely named
 container on a random loopback-only port, with synthetic credentials and no
 project data volume or root `.env`. It runs the real migration CLI against the
-empty application journal and a generated synthetic fixture, checks replay,
+application migration history and a generated synthetic fixture, checks replay,
 transaction commit/rollback, failed migration rollback and closed connections,
 then removes its own container and temporary files. It never targets your
 Compose development database. Migration fixtures remain separate from the

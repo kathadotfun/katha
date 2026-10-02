@@ -1,0 +1,189 @@
+{
+  "id": "2ed5d59b-fef1-4070-8bfd-712e00a33788",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.artists": {
+      "name": "artists",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "biography": {
+          "name": "biography",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "region": {
+          "name": "region",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "traditions": {
+          "name": "traditions",
+          "type": "varchar(120)[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_links": {
+          "name": "public_links",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "ARRAY[]::text[]"
+        },
+        "profile_image_url": {
+          "name": "profile_image_url",
+          "type": "varchar(2048)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creator_wallet": {
+          "name": "creator_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_wallet": {
+          "name": "payout_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verification_status": {
+          "name": "verification_status",
+          "type": "artist_verification_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'UNVERIFIED'"
+        },
+        "verified_by_wallet": {
+          "name": "verified_by_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artists_slug_unique": {
+          "name": "artists_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artists_slug_format": {
+          "name": "artists_slug_format",
+          "value": "\"artists\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+        },
+        "artists_display_name_nonblank": {
+          "name": "artists_display_name_nonblank",
+          "value": "\"artists\".\"display_name\" ~ '[^[:space:]]'"
+        },
+        "artists_biography_nonblank": {
+          "name": "artists_biography_nonblank",
+          "value": "\"artists\".\"biography\" ~ '[^[:space:]]'"
+        },
+        "artists_region_nonblank": {
+          "name": "artists_region_nonblank",
+          "value": "\"artists\".\"region\" ~ '[^[:space:]]'"
+        },
+        "artists_traditions_valid": {
+          "name": "artists_traditions_valid",
+          "value": "cardinality(\"artists\".\"traditions\") BETWEEN 1 AND 20 AND array_ndims(\"artists\".\"traditions\") = 1 AND array_position(\"artists\".\"traditions\", NULL) IS NULL AND array_to_string(\"artists\".\"traditions\", chr(31)) !~ ('(^|' || chr(31) || ')[[:space:]]*(' || chr(31) || '|$)')"
+        },
+        "artists_public_links_valid": {
+          "name": "artists_public_links_valid",
+          "value": "cardinality(\"artists\".\"public_links\") <= 10 AND coalesce(array_ndims(\"artists\".\"public_links\"), 1) = 1 AND array_position(\"artists\".\"public_links\", NULL) IS NULL AND (cardinality(\"artists\".\"public_links\") = 0 OR array_to_string(\"artists\".\"public_links\", chr(31)) ~ ('^https?://[^[:space:]' || chr(31) || ']+(' || chr(31) || 'https?://[^[:space:]' || chr(31) || ']+)*$'))"
+        },
+        "artists_profile_image_url_format": {
+          "name": "artists_profile_image_url_format",
+          "value": "\"artists\".\"profile_image_url\" IS NULL OR \"artists\".\"profile_image_url\" ~ '^https?://[^[:space:]]+$'"
+        },
+        "artists_creator_wallet_format": {
+          "name": "artists_creator_wallet_format",
+          "value": "\"artists\".\"creator_wallet\" IS NULL OR \"artists\".\"creator_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_payout_wallet_format": {
+          "name": "artists_payout_wallet_format",
+          "value": "\"artists\".\"payout_wallet\" IS NULL OR \"artists\".\"payout_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_verifier_wallet_format": {
+          "name": "artists_verifier_wallet_format",
+          "value": "\"artists\".\"verified_by_wallet\" IS NULL OR \"artists\".\"verified_by_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_manual_verification_complete": {
+          "name": "artists_manual_verification_complete",
+          "value": "(\"artists\".\"verification_status\" = 'UNVERIFIED' AND \"artists\".\"verified_by_wallet\" IS NULL AND \"artists\".\"verified_at\" IS NULL) OR (\"artists\".\"verification_status\" = 'VERIFIED' AND \"artists\".\"verified_by_wallet\" IS NOT NULL AND \"artists\".\"verified_at\" IS NOT NULL)"
+        },
+        "artists_timestamp_order": {
+          "name": "artists_timestamp_order",
+          "value": "\"artists\".\"updated_at\" >= \"artists\".\"created_at\" AND (\"artists\".\"verified_at\" IS NULL OR \"artists\".\"verified_at\" BETWEEN \"artists\".\"created_at\" AND \"artists\".\"updated_at\")"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.artist_verification_status": {
+      "name": "artist_verification_status",
+      "schema": "public",
+      "values": ["UNVERIFIED", "VERIFIED"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

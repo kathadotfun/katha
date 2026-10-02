@@ -44,7 +44,8 @@ condition and custody attestations, versioned metadata, Core minting, and atomic
 post-mint metadata updates. The complete Registry journey also runs through
 offline Surfpool RPC, checking historical commitments and one bound Core asset.
 The database package now provides explicit PostgreSQL connections and forward
-migration commands. Artwork browsing, API behavior, domain tables, and Marketplace
+migration commands, with an artist-profile table and relational constraints.
+Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -72,6 +73,7 @@ outside the current scope.
 - [Hono API service](docs/development/api.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
+- [Artist profiles and database constraints](docs/development/artist-profiles.md)
 - [Local PostgreSQL service](docs/development/local-services.md)
 - [Foundation CI](docs/development/ci.md)
 - [Solana package boundary](docs/development/solana-package.md)
