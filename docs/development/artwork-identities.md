@@ -52,7 +52,8 @@ positive integer millimetres, with optional positive depth. Partial dimensions,
 depth alone and nonpositive measurements fail the database constraint. Publication
 will require the complete shared artwork contract at its later API boundary.
 Wallet constraints check base58 text shape; full address decoding belongs at
-the chain boundary. Ordered media and material relations are added separately.
+the chain boundary. [Ordered media and materials](artwork-media-materials.md)
+live in related tables.
 
 ## Migration and verification
 

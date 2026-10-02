@@ -15,6 +15,13 @@
       "when": 1790929159258,
       "tag": "0001_artwork_identities",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790929994389,
+      "tag": "0002_artwork_media_materials",
+      "breakpoints": true
     }
   ]
 }

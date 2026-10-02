@@ -3,11 +3,14 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
 import {
   artists,
+  artworkMedia,
+  artworkMaterials,
+  type NewArtworkMediaRecord,
   createDatabase,
   artworks,
   type NewArtworkRecord,
@@ -40,7 +43,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(2);
+    expect(applicationCount).toBe(3);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -56,7 +59,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(3);
+    expect(result[0]?.count).toBe(4);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -111,7 +114,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(3);
+    ).toBe(4);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -476,5 +479,298 @@ it("allocates permanent artwork identities concurrently and enforces attribution
   } finally {
     await first.close();
     await second.close();
+  }
+}, 30_000);
+
+it("stores ordered media privately by default and distinct relational materials", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const db = connection.db;
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "media-artist",
+        displayName: "Synthetic Media Artist",
+        biography: "Synthetic biography",
+        region: "Patan",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const rows = await db
+      .insert(artworks)
+      .values([
+        {
+          artistId: artist.id,
+          category: "MANDALA",
+          title: "Synthetic media work",
+          creationYear: 2026,
+        },
+        {
+          artistId: artist.id,
+          category: "MANDALA",
+          title: "Other synthetic work",
+          creationYear: 2026,
+        },
+      ])
+      .returning();
+    const [work, other] = rows;
+    if (!work || !other) throw new Error("Artwork missing");
+    const input: NewArtworkMediaRecord = {
+      artworkId: work.id,
+      position: 0,
+      kind: "IMAGE",
+      role: "HERO",
+      storageKey: "synthetic/front.jpg",
+      contentHash: "09".repeat(32),
+      mimeType: "image/jpeg",
+      byteSize: 1024n,
+    };
+    const [hero] = await db.insert(artworkMedia).values(input).returning();
+    if (!hero) throw new Error("Media missing");
+    expect(hero.visibility).toBe("PRIVATE");
+    expect(hero.byteSize).toBe(1024n);
+    const [detail] = await db
+      .insert(artworkMedia)
+      .values({
+        ...input,
+        position: 1,
+        role: "DETAIL",
+        visibility: "PUBLIC",
+        altText: "Synthetic pigment detail",
+        storageKey: "synthetic/detail.jpg",
+        contentHash: "0a".repeat(32),
+      })
+      .returning();
+    if (!detail) throw new Error("Detail missing");
+    await db.insert(artworkMedia).values([
+      {
+        ...input,
+        position: 2,
+        kind: "DOCUMENT",
+        role: "CERTIFICATE",
+        mimeType: "application/pdf",
+        storageKey: "synthetic/evidence.pdf",
+      },
+      {
+        ...input,
+        position: 3,
+        kind: "VIDEO",
+        role: "DOCUMENTARY",
+        mimeType: "video/mp4",
+        storageKey: "synthetic/process.mp4",
+        visibility: "PUBLIC",
+      },
+      { ...input, artworkId: other.id },
+    ]);
+    const publicMedia = () =>
+      db
+        .select()
+        .from(artworkMedia)
+        .where(
+          and(
+            eq(artworkMedia.artworkId, work.id),
+            eq(artworkMedia.visibility, "PUBLIC"),
+          ),
+        )
+        .orderBy(asc(artworkMedia.position));
+    expect((await publicMedia()).map((row) => row.role)).toEqual([
+      "DETAIL",
+      "DOCUMENTARY",
+    ]);
+    await expect(
+      db.insert(artworkMedia).values({ ...input, role: "BACK" }),
+    ).rejects.toMatchObject({
+      cause: { code: "23505", constraint_name: "artwork_media_position_unique" },
+    });
+    await expect(
+      db.insert(artworkMedia).values({ ...input, position: 4 }),
+    ).rejects.toMatchObject({
+      cause: { code: "23505", constraint_name: "artwork_media_hero_unique" },
+    });
+    const invalidMedia: {
+      change: Partial<NewArtworkMediaRecord>;
+      constraint: string;
+    }[] = [
+      { change: { position: -1 }, constraint: "artwork_media_position_valid" },
+      {
+        change: { contentHash: "ZZ".repeat(32) },
+        constraint: "artwork_media_hash_format",
+      },
+      { change: { byteSize: 0n }, constraint: "artwork_media_size_positive" },
+      {
+        change: { mimeType: "image/svg+xml" },
+        constraint: "artwork_media_mime_kind_valid",
+      },
+      {
+        change: { kind: "VIDEO", mimeType: "image/jpeg" },
+        constraint: "artwork_media_mime_kind_valid",
+      },
+      {
+        change: { kind: "VIDEO", role: "HERO", mimeType: "video/webm" },
+        constraint: "artwork_media_hero_image",
+      },
+      { change: { visibility: "PUBLIC" }, constraint: "artwork_media_alt_text_valid" },
+      { change: { altText: " " }, constraint: "artwork_media_alt_text_valid" },
+      { change: { caption: " " }, constraint: "artwork_media_caption_nonblank" },
+      ...[
+        "/tmp/private.jpg",
+        "../evidence.jpg",
+        "synthetic/../evidence.jpg",
+        "synthetic/./front.jpg",
+        "https://example.invalid/a?token=secret",
+        "synthetic//front.jpg",
+        "synthetic/",
+      ].map((storageKey) => ({
+        change: { storageKey },
+        constraint: "artwork_media_storage_key_valid",
+      })),
+    ];
+    for (const { change, constraint } of invalidMedia) {
+      await expect(
+        db
+          .insert(artworkMedia)
+          .values({ ...input, position: 4, role: "OTHER", ...change }),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint_name: constraint },
+      });
+    }
+    await expect(
+      db
+        .insert(artworkMedia)
+        .values({ ...input, artworkId: "123e4567-e89b-42d3-a456-426614174000" }),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    // Immediate unique positions require a spare slot during a transactional swap.
+    await db.transaction(async (tx) => {
+      await tx
+        .update(artworkMedia)
+        .set({ position: 10 })
+        .where(eq(artworkMedia.id, hero.id));
+      await tx
+        .update(artworkMedia)
+        .set({ position: 0 })
+        .where(eq(artworkMedia.id, detail.id));
+      await tx
+        .update(artworkMedia)
+        .set({
+          position: 1,
+          visibility: "PUBLIC",
+          altText: "Synthetic front view",
+          updatedAt: new Date(),
+        })
+        .where(eq(artworkMedia.id, hero.id));
+    });
+    expect((await publicMedia()).map((row) => row.id)).toEqual([
+      detail.id,
+      hero.id,
+      expect.any(String),
+    ]);
+    await expect(
+      db.transaction(async (tx) => {
+        await tx
+          .update(artworkMedia)
+          .set({ visibility: "PUBLIC" })
+          .where(
+            and(eq(artworkMedia.artworkId, work.id), eq(artworkMedia.position, 2)),
+          );
+        await tx
+          .update(artworkMedia)
+          .set({ position: 0 })
+          .where(eq(artworkMedia.id, hero.id));
+      }),
+    ).rejects.toMatchObject({ cause: { code: "23505" } });
+    expect((await publicMedia()).map((row) => row.role)).toEqual([
+      "DETAIL",
+      "HERO",
+      "DOCUMENTARY",
+    ]);
+
+    const materials = await db
+      .insert(artworkMaterials)
+      .values([
+        { artworkId: work.id, name: "Natural mineral pigments", position: 1 },
+        { artworkId: work.id, name: "Cotton canvas", position: 0 },
+        { artworkId: other.id, name: "Cotton canvas", position: 0 },
+      ])
+      .returning();
+    expect(
+      (
+        await db
+          .select()
+          .from(artworkMaterials)
+          .where(eq(artworkMaterials.artworkId, work.id))
+          .orderBy(asc(artworkMaterials.position))
+      ).map((row) => row.name),
+    ).toEqual(["Cotton canvas", "Natural mineral pigments"]);
+    for (const name of [
+      "",
+      " ",
+      " cotton canvas",
+      "cotton canvas ",
+      "canvas,pigments",
+    ]) {
+      await expect(
+        db.insert(artworkMaterials).values({ artworkId: work.id, name, position: 2 }),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint_name: "artwork_materials_name_valid" },
+      });
+    }
+    await expect(
+      db
+        .insert(artworkMaterials)
+        .values({ artworkId: work.id, name: "COTTON CANVAS", position: 2 }),
+    ).rejects.toMatchObject({
+      cause: { code: "23505", constraint_name: "artwork_materials_name_unique" },
+    });
+    await expect(
+      db
+        .insert(artworkMaterials)
+        .values({ artworkId: work.id, name: "Gold", position: 0 }),
+    ).rejects.toMatchObject({
+      cause: { code: "23505", constraint_name: "artwork_materials_position_unique" },
+    });
+    await expect(
+      db
+        .insert(artworkMaterials)
+        .values({ artworkId: work.id, name: "Gold", position: -1 }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_materials_position_valid" },
+    });
+    await expect(
+      db
+        .insert(artworkMaterials)
+        .values({ artworkId: work.id, name: "x".repeat(121), position: 2 }),
+    ).rejects.toMatchObject({ cause: { code: "22001" } });
+    await expect(
+      db.insert(artworkMaterials).values({
+        artworkId: "123e4567-e89b-42d3-a456-426614174000",
+        name: "Gold",
+        position: 0,
+      }),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    await expect(
+      db
+        .update(artworkMedia)
+        .set({ artworkId: "123e4567-e89b-42d3-a456-426614174000" })
+        .where(eq(artworkMedia.id, hero.id)),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    const material = materials[0];
+    if (!material) throw new Error("Material missing");
+    await expect(
+      db
+        .update(artworkMaterials)
+        .set({ artworkId: "123e4567-e89b-42d3-a456-426614174000" })
+        .where(eq(artworkMaterials.id, material.id)),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    await db.delete(artworkMedia).where(eq(artworkMedia.id, detail.id));
+    await db.delete(artworkMaterials).where(eq(artworkMaterials.id, material.id));
+    expect(
+      (await db.select().from(artworks).where(eq(artworks.id, work.id)))[0]?.kathaId,
+    ).toBe(work.kathaId);
+  } finally {
+    await connection.close();
   }
 }, 30_000);

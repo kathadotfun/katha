@@ -45,7 +45,8 @@ post-mint metadata updates. The complete Registry journey also runs through
 offline Surfpool RPC, checking historical commitments and one bound Core asset.
 The database package now provides explicit PostgreSQL connections and forward
 migration commands, artist profiles, and artwork records with concurrent permanent
-Katha ID allocation and immutable attribution.
+Katha ID allocation and immutable attribution, ordered media with explicit
+visibility, and separate material records.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -76,6 +77,7 @@ outside the current scope.
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)
 - [Artwork identities and ID allocation](docs/development/artwork-identities.md)
+- [Artwork media and materials](docs/development/artwork-media-materials.md)
 - [Local PostgreSQL service](docs/development/local-services.md)
 - [Foundation CI](docs/development/ci.md)
 - [Solana package boundary](docs/development/solana-package.md)

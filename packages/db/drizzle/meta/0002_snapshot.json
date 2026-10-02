@@ -1,0 +1,733 @@
+{
+  "id": "ff9e638c-53df-455d-8179-feef5b8f89ef",
+  "prevId": "3d9ade12-5af2-459e-ab1d-fbde47f0c0bc",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.artists": {
+      "name": "artists",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "biography": {
+          "name": "biography",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "region": {
+          "name": "region",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "traditions": {
+          "name": "traditions",
+          "type": "varchar(120)[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_links": {
+          "name": "public_links",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "ARRAY[]::text[]"
+        },
+        "profile_image_url": {
+          "name": "profile_image_url",
+          "type": "varchar(2048)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creator_wallet": {
+          "name": "creator_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_wallet": {
+          "name": "payout_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verification_status": {
+          "name": "verification_status",
+          "type": "artist_verification_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'UNVERIFIED'"
+        },
+        "verified_by_wallet": {
+          "name": "verified_by_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artists_slug_unique": {
+          "name": "artists_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artists_slug_format": {
+          "name": "artists_slug_format",
+          "value": "\"artists\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+        },
+        "artists_display_name_nonblank": {
+          "name": "artists_display_name_nonblank",
+          "value": "\"artists\".\"display_name\" ~ '[^[:space:]]'"
+        },
+        "artists_biography_nonblank": {
+          "name": "artists_biography_nonblank",
+          "value": "\"artists\".\"biography\" ~ '[^[:space:]]'"
+        },
+        "artists_region_nonblank": {
+          "name": "artists_region_nonblank",
+          "value": "\"artists\".\"region\" ~ '[^[:space:]]'"
+        },
+        "artists_traditions_valid": {
+          "name": "artists_traditions_valid",
+          "value": "cardinality(\"artists\".\"traditions\") BETWEEN 1 AND 20 AND array_ndims(\"artists\".\"traditions\") = 1 AND array_position(\"artists\".\"traditions\", NULL) IS NULL AND array_to_string(\"artists\".\"traditions\", chr(31)) !~ ('(^|' || chr(31) || ')[[:space:]]*(' || chr(31) || '|$)')"
+        },
+        "artists_public_links_valid": {
+          "name": "artists_public_links_valid",
+          "value": "cardinality(\"artists\".\"public_links\") <= 10 AND coalesce(array_ndims(\"artists\".\"public_links\"), 1) = 1 AND array_position(\"artists\".\"public_links\", NULL) IS NULL AND (cardinality(\"artists\".\"public_links\") = 0 OR array_to_string(\"artists\".\"public_links\", chr(31)) ~ ('^https?://[^[:space:]' || chr(31) || ']+(' || chr(31) || 'https?://[^[:space:]' || chr(31) || ']+)*$'))"
+        },
+        "artists_profile_image_url_format": {
+          "name": "artists_profile_image_url_format",
+          "value": "\"artists\".\"profile_image_url\" IS NULL OR \"artists\".\"profile_image_url\" ~ '^https?://[^[:space:]]+$'"
+        },
+        "artists_creator_wallet_format": {
+          "name": "artists_creator_wallet_format",
+          "value": "\"artists\".\"creator_wallet\" IS NULL OR \"artists\".\"creator_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_payout_wallet_format": {
+          "name": "artists_payout_wallet_format",
+          "value": "\"artists\".\"payout_wallet\" IS NULL OR \"artists\".\"payout_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_verifier_wallet_format": {
+          "name": "artists_verifier_wallet_format",
+          "value": "\"artists\".\"verified_by_wallet\" IS NULL OR \"artists\".\"verified_by_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_manual_verification_complete": {
+          "name": "artists_manual_verification_complete",
+          "value": "(\"artists\".\"verification_status\" = 'UNVERIFIED' AND \"artists\".\"verified_by_wallet\" IS NULL AND \"artists\".\"verified_at\" IS NULL) OR (\"artists\".\"verification_status\" = 'VERIFIED' AND \"artists\".\"verified_by_wallet\" IS NOT NULL AND \"artists\".\"verified_at\" IS NOT NULL)"
+        },
+        "artists_timestamp_order": {
+          "name": "artists_timestamp_order",
+          "value": "\"artists\".\"updated_at\" >= \"artists\".\"created_at\" AND (\"artists\".\"verified_at\" IS NULL OR \"artists\".\"verified_at\" BETWEEN \"artists\".\"created_at\" AND \"artists\".\"updated_at\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artwork_id_counters": {
+      "name": "artwork_id_counters",
+      "schema": "",
+      "columns": {
+        "category": {
+          "name": "category",
+          "type": "artwork_category",
+          "typeSchema": "public",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "last_value": {
+          "name": "last_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "artwork_id_counters_range": {
+          "name": "artwork_id_counters_range",
+          "value": "\"artwork_id_counters\".\"last_value\" BETWEEN 1 AND 999999"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artwork_materials": {
+      "name": "artwork_materials",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "artwork_materials_name_unique": {
+          "name": "artwork_materials_name_unique",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"name\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "artwork_materials_artwork_id_artworks_id_fk": {
+          "name": "artwork_materials_artwork_id_artworks_id_fk",
+          "tableFrom": "artwork_materials",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artwork_materials_position_unique": {
+          "name": "artwork_materials_position_unique",
+          "nullsNotDistinct": false,
+          "columns": ["artwork_id", "position"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artwork_materials_position_valid": {
+          "name": "artwork_materials_position_valid",
+          "value": "\"artwork_materials\".\"position\" >= 0"
+        },
+        "artwork_materials_name_valid": {
+          "name": "artwork_materials_name_valid",
+          "value": "\"artwork_materials\".\"name\" ~ '[^[:space:]]' AND \"artwork_materials\".\"name\" = btrim(\"artwork_materials\".\"name\") AND position(',' in \"artwork_materials\".\"name\") = 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artwork_media": {
+      "name": "artwork_media",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "artwork_media_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "artwork_media_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OTHER'"
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "media_visibility",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PRIVATE'"
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_key": {
+          "name": "storage_key",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alt_text": {
+          "name": "alt_text",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "artwork_media_hero_unique": {
+          "name": "artwork_media_hero_unique",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"artwork_media\".\"role\" = 'HERO'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "artwork_media_artwork_id_artworks_id_fk": {
+          "name": "artwork_media_artwork_id_artworks_id_fk",
+          "tableFrom": "artwork_media",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artwork_media_position_unique": {
+          "name": "artwork_media_position_unique",
+          "nullsNotDistinct": false,
+          "columns": ["artwork_id", "position"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artwork_media_position_valid": {
+          "name": "artwork_media_position_valid",
+          "value": "\"artwork_media\".\"position\" >= 0"
+        },
+        "artwork_media_hash_format": {
+          "name": "artwork_media_hash_format",
+          "value": "\"artwork_media\".\"content_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "artwork_media_size_positive": {
+          "name": "artwork_media_size_positive",
+          "value": "\"artwork_media\".\"byte_size\" > 0"
+        },
+        "artwork_media_storage_key_valid": {
+          "name": "artwork_media_storage_key_valid",
+          "value": "\"artwork_media\".\"storage_key\" ~ '^[A-Za-z0-9][A-Za-z0-9._/-]*$' AND \"artwork_media\".\"storage_key\" !~ '(^|/)\\.\\.?(/|$)' AND \"artwork_media\".\"storage_key\" !~ '//|/$'"
+        },
+        "artwork_media_mime_kind_valid": {
+          "name": "artwork_media_mime_kind_valid",
+          "value": "(\"artwork_media\".\"kind\" = 'IMAGE' AND \"artwork_media\".\"mime_type\" IN ('image/jpeg', 'image/png', 'image/webp', 'image/avif')) OR (\"artwork_media\".\"kind\" = 'VIDEO' AND \"artwork_media\".\"mime_type\" IN ('video/mp4', 'video/webm')) OR (\"artwork_media\".\"kind\" = 'DOCUMENT' AND \"artwork_media\".\"mime_type\" = 'application/pdf')"
+        },
+        "artwork_media_hero_image": {
+          "name": "artwork_media_hero_image",
+          "value": "\"artwork_media\".\"role\" <> 'HERO' OR \"artwork_media\".\"kind\" = 'IMAGE'"
+        },
+        "artwork_media_alt_text_valid": {
+          "name": "artwork_media_alt_text_valid",
+          "value": "(\"artwork_media\".\"alt_text\" IS NULL OR \"artwork_media\".\"alt_text\" ~ '[^[:space:]]') AND (\"artwork_media\".\"visibility\" <> 'PUBLIC' OR \"artwork_media\".\"kind\" <> 'IMAGE' OR \"artwork_media\".\"alt_text\" IS NOT NULL)"
+        },
+        "artwork_media_caption_nonblank": {
+          "name": "artwork_media_caption_nonblank",
+          "value": "\"artwork_media\".\"caption\" IS NULL OR \"artwork_media\".\"caption\" ~ '[^[:space:]]'"
+        },
+        "artwork_media_timestamp_order": {
+          "name": "artwork_media_timestamp_order",
+          "value": "\"artwork_media\".\"updated_at\" >= \"artwork_media\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artworks": {
+      "name": "artworks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "katha_id": {
+          "name": "katha_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "artist_id": {
+          "name": "artist_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "artwork_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creator_wallet": {
+          "name": "creator_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creation_year": {
+          "name": "creation_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "authorship_evidence_hash": {
+          "name": "authorship_evidence_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height_mm": {
+          "name": "height_mm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "width_mm": {
+          "name": "width_mm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "depth_mm": {
+          "name": "depth_mm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin_country_code": {
+          "name": "origin_country_code",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'NP'"
+        },
+        "origin_region": {
+          "name": "origin_region",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin_locality": {
+          "name": "origin_locality",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "technique": {
+          "name": "technique",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "story": {
+          "name": "story",
+          "type": "varchar(10000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meaning": {
+          "name": "meaning",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cultural_context": {
+          "name": "cultural_context",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creation_process": {
+          "name": "creation_process",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "artworks_artist_id_artists_id_fk": {
+          "name": "artworks_artist_id_artists_id_fk",
+          "tableFrom": "artworks",
+          "tableTo": "artists",
+          "columnsFrom": ["artist_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artworks_katha_id_unique": {
+          "name": "artworks_katha_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["katha_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artworks_katha_id_format": {
+          "name": "artworks_katha_id_format",
+          "value": "\"artworks\".\"katha_id\" ~ ('^KATHA-' || \"artworks\".\"category\"::text || '-[0-9]{6}$') AND right(\"artworks\".\"katha_id\", 6) <> '000000'"
+        },
+        "artworks_title_nonblank": {
+          "name": "artworks_title_nonblank",
+          "value": "\"artworks\".\"title\" ~ '[^[:space:]]'"
+        },
+        "artworks_creation_year_range": {
+          "name": "artworks_creation_year_range",
+          "value": "\"artworks\".\"creation_year\" BETWEEN 1 AND 9999"
+        },
+        "artworks_creator_wallet_format": {
+          "name": "artworks_creator_wallet_format",
+          "value": "\"artworks\".\"creator_wallet\" IS NULL OR \"artworks\".\"creator_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artworks_authorship_hash_format": {
+          "name": "artworks_authorship_hash_format",
+          "value": "\"artworks\".\"authorship_evidence_hash\" IS NULL OR \"artworks\".\"authorship_evidence_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "artworks_dimensions_valid": {
+          "name": "artworks_dimensions_valid",
+          "value": "(\"artworks\".\"height_mm\" IS NULL AND \"artworks\".\"width_mm\" IS NULL AND \"artworks\".\"depth_mm\" IS NULL) OR (\"artworks\".\"height_mm\" IS NOT NULL AND \"artworks\".\"width_mm\" IS NOT NULL AND \"artworks\".\"height_mm\" > 0 AND \"artworks\".\"width_mm\" > 0 AND (\"artworks\".\"depth_mm\" IS NULL OR \"artworks\".\"depth_mm\" > 0))"
+        },
+        "artworks_country_code_format": {
+          "name": "artworks_country_code_format",
+          "value": "\"artworks\".\"origin_country_code\" ~ '^[A-Z]{2}$'"
+        },
+        "artworks_origin_region_nonblank": {
+          "name": "artworks_origin_region_nonblank",
+          "value": "\"artworks\".\"origin_region\" IS NULL OR \"artworks\".\"origin_region\" ~ '[^[:space:]]'"
+        },
+        "artworks_origin_locality_nonblank": {
+          "name": "artworks_origin_locality_nonblank",
+          "value": "\"artworks\".\"origin_locality\" IS NULL OR \"artworks\".\"origin_locality\" ~ '[^[:space:]]'"
+        },
+        "artworks_technique_nonblank": {
+          "name": "artworks_technique_nonblank",
+          "value": "\"artworks\".\"technique\" IS NULL OR \"artworks\".\"technique\" ~ '[^[:space:]]'"
+        },
+        "artworks_story_nonblank": {
+          "name": "artworks_story_nonblank",
+          "value": "\"artworks\".\"story\" IS NULL OR \"artworks\".\"story\" ~ '[^[:space:]]'"
+        },
+        "artworks_meaning_nonblank": {
+          "name": "artworks_meaning_nonblank",
+          "value": "\"artworks\".\"meaning\" IS NULL OR \"artworks\".\"meaning\" ~ '[^[:space:]]'"
+        },
+        "artworks_cultural_context_nonblank": {
+          "name": "artworks_cultural_context_nonblank",
+          "value": "\"artworks\".\"cultural_context\" IS NULL OR \"artworks\".\"cultural_context\" ~ '[^[:space:]]'"
+        },
+        "artworks_creation_process_nonblank": {
+          "name": "artworks_creation_process_nonblank",
+          "value": "\"artworks\".\"creation_process\" IS NULL OR \"artworks\".\"creation_process\" ~ '[^[:space:]]'"
+        },
+        "artworks_timestamp_order": {
+          "name": "artworks_timestamp_order",
+          "value": "\"artworks\".\"updated_at\" >= \"artworks\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.artist_verification_status": {
+      "name": "artist_verification_status",
+      "schema": "public",
+      "values": ["UNVERIFIED", "VERIFIED"]
+    },
+    "public.artwork_category": {
+      "name": "artwork_category",
+      "schema": "public",
+      "values": ["MANDALA", "PAUBHA", "THANGKA"]
+    },
+    "public.artwork_media_kind": {
+      "name": "artwork_media_kind",
+      "schema": "public",
+      "values": ["IMAGE", "VIDEO", "DOCUMENT"]
+    },
+    "public.artwork_media_role": {
+      "name": "artwork_media_role",
+      "schema": "public",
+      "values": [
+        "HERO",
+        "FRONT",
+        "BACK",
+        "DETAIL",
+        "ARTIST",
+        "PROCESS",
+        "CERTIFICATE",
+        "CONDITION",
+        "DOCUMENTARY",
+        "OTHER"
+      ]
+    },
+    "public.media_visibility": {
+      "name": "media_visibility",
+      "schema": "public",
+      "values": ["PRIVATE", "PUBLIC"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

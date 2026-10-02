@@ -11,3 +11,16 @@ export {
   type ArtworkRecord,
   type NewArtworkRecord,
 } from "./schema/artworks.js";
+export {
+  artworkMedia,
+  artworkMediaKind,
+  artworkMediaRole,
+  mediaVisibility,
+  type ArtworkMediaRecord,
+  type NewArtworkMediaRecord,
+} from "./schema/artwork-media.js";
+export {
+  artworkMaterials,
+  type ArtworkMaterialRecord,
+  type NewArtworkMaterialRecord,
+} from "./schema/artwork-materials.js";
