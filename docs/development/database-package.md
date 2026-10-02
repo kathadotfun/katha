@@ -3,7 +3,8 @@
 `packages/db` is the Node-only PostgreSQL boundary. It pins Drizzle ORM 0.45.3,
 Postgres.js 3.4.9 and Drizzle Kit 0.31.11. Postgres.js supplies the connection pool;
 Drizzle supplies typed queries and transactions. Package imports neither read
-configuration nor open connections. The first domain table stores [artist profiles](artist-profiles.md).
+configuration nor open connections. Domain tables store [artist profiles](artist-profiles.md)
+and [artwork identities](artwork-identities.md).
 
 ## Local configuration
 
@@ -27,10 +28,11 @@ can run without a database URL or server. Applying migrations requires
 `DATABASE_URL`. There is no fallback connection to a default or remote database.
 
 `drizzle.config.ts` selects PostgreSQL, `src/schema/index.ts` and `drizzle/`.
-The schema now includes artist profiles. The first generated migration creates
-the artist verification enum, table and constraints. Review the SQL, snapshot
-and journal before applying; Drizzle records applied versions in its migration
-log schema/table.
+The first migration creates artist profiles; the second creates artwork records
+and category counters. The artwork migration also contains reviewed SQL functions
+and triggers for allocation and permanence, which the table snapshot does not
+represent. Review the SQL, snapshot and journal before applying; Drizzle records
+applied versions in its migration log schema/table.
 
 ## Connection ownership
 

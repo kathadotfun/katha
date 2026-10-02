@@ -6,7 +6,13 @@ import { fileURLToPath } from "node:url";
 import { eq, sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
-import { artists, createDatabase, type NewArtistRecord } from "../src/index.js";
+import {
+  artists,
+  createDatabase,
+  artworks,
+  type NewArtworkRecord,
+  type NewArtistRecord,
+} from "../src/index.js";
 
 it("generates forward migrations, applies them once, and rolls back failed transactions and migrations", async () => {
   const url = process.env.KATHA_TEST_DATABASE_URL;
@@ -34,7 +40,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(1);
+    expect(applicationCount).toBe(2);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -50,7 +56,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(2);
+    expect(result[0]?.count).toBe(3);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -105,7 +111,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(2);
+    ).toBe(3);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -267,3 +273,208 @@ it("enforces artist identity, optional wallets, profile content and manual verif
     await connection.close();
   }
 });
+
+it("allocates permanent artwork identities concurrently and enforces attribution and dimensions", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const first = createDatabase(url);
+  const second = createDatabase(url);
+  const db = first.db;
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "artwork-artist",
+        displayName: "Synthetic Artist",
+        biography: "Synthetic biography",
+        region: "Lalitpur",
+        traditions: ["Paubha"],
+        creatorWallet: "Vote111111111111111111111111111111111111111",
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const input: NewArtworkRecord = {
+      artistId: artist.id,
+      category: "PAUBHA",
+      title: "Synthetic Paubha",
+      creationYear: 2026,
+    };
+    const rows = (
+      await Promise.all(
+        Array.from({ length: 24 }, (_, index) =>
+          (index % 2 ? db : second.db)
+            .insert(artworks)
+            .values({ ...input, title: `Synthetic ${index}` })
+            .returning(),
+        ),
+      )
+    ).flat();
+    expect(rows).toHaveLength(24);
+    expect(new Set(rows.map((row) => row.kathaId)).size).toBe(24);
+    expect(rows.map((row) => row.kathaId).sort()).toEqual(
+      Array.from(
+        { length: 24 },
+        (_, i) => `KATHA-PAUBHA-${String(i + 1).padStart(6, "0")}`,
+      ),
+    );
+    expect(rows.every((row) => row.creatorWallet === artist.creatorWallet)).toBe(true);
+    expect(rows.every((row) => row.heightMm === null && row.widthMm === null)).toBe(
+      true,
+    );
+    const [mandala] = await db
+      .insert(artworks)
+      .values({ ...input, category: "MANDALA" })
+      .returning();
+    expect(mandala?.kathaId).toBe("KATHA-MANDALA-000001");
+    const [sample] = rows;
+    if (!sample) throw new Error("Artwork missing");
+    const invalid: { change: Partial<NewArtworkRecord>; constraint: string }[] = [
+      {
+        change: { heightMm: 0, widthMm: 100 },
+        constraint: "artworks_dimensions_valid",
+      },
+      { change: { heightMm: 100 }, constraint: "artworks_dimensions_valid" },
+      { change: { depthMm: 10 }, constraint: "artworks_dimensions_valid" },
+      {
+        change: { heightMm: 100, widthMm: -1 },
+        constraint: "artworks_dimensions_valid",
+      },
+      {
+        change: { heightMm: 100, widthMm: 100, depthMm: 0 },
+        constraint: "artworks_dimensions_valid",
+      },
+      { change: { creationYear: 0 }, constraint: "artworks_creation_year_range" },
+      { change: { creationYear: 10000 }, constraint: "artworks_creation_year_range" },
+      { change: { title: " " }, constraint: "artworks_title_nonblank" },
+      {
+        change: { originCountryCode: "np" },
+        constraint: "artworks_country_code_format",
+      },
+      {
+        change: { authorshipEvidenceHash: "ZZ".repeat(32) },
+        constraint: "artworks_authorship_hash_format",
+      },
+    ];
+    for (const { change, constraint } of invalid) {
+      await expect(
+        db.insert(artworks).values({ ...input, ...change }),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint_name: constraint },
+      });
+    }
+    await expect(
+      db
+        .insert(artworks)
+        .values({ ...input, artistId: "123e4567-e89b-42d3-a456-426614174000" }),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    await expect(
+      db.insert(artworks).values({ ...input, kathaId: sample.kathaId }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artworks_id_database_allocated" },
+    });
+    await expect(
+      db
+        .insert(artworks)
+        .values({ ...input, creatorWallet: "11111111111111111111111111111111" }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artworks_creator_attribution" },
+    });
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.insert(artworks).values(input);
+        throw new Error("Synthetic rollback");
+      }),
+    ).rejects.toThrow("Synthetic rollback");
+    const [next] = await db
+      .insert(artworks)
+      .values({ ...input, heightMm: 720, widthMm: 510, depthMm: 10 })
+      .returning();
+    expect(next?.kathaId).toBe("KATHA-PAUBHA-000025");
+    for (const change of [
+      { kathaId: "KATHA-PAUBHA-999999" },
+      { category: "THANGKA" as const },
+      { artistId: "123e4567-e89b-42d3-a456-426614174000" },
+      { creatorWallet: null },
+      { creationYear: 2025 },
+    ]) {
+      await expect(
+        db.update(artworks).set(change).where(eq(artworks.id, sample.id)),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint_name: "artworks_identity_immutable" },
+      });
+    }
+    await db
+      .update(artworks)
+      .set({
+        title: "Updated synthetic title",
+        story: "Synthetic story",
+        heightMm: 720,
+        widthMm: 510,
+        authorshipEvidenceHash: "07".repeat(32),
+        updatedAt: new Date(),
+      })
+      .where(eq(artworks.id, sample.id));
+    await expect(
+      db
+        .update(artworks)
+        .set({ authorshipEvidenceHash: "08".repeat(32) })
+        .where(eq(artworks.id, sample.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artworks_identity_immutable" },
+    });
+    await expect(
+      db.delete(artworks).where(eq(artworks.id, sample.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artworks_identity_immutable" },
+    });
+    await expect(
+      db.delete(artists).where(eq(artists.id, artist.id)),
+    ).rejects.toMatchObject({ cause: { code: "23001" } });
+    await expect(
+      db
+        .update(artists)
+        .set({ id: "123e4567-e89b-42d3-a456-426614174000" })
+        .where(eq(artists.id, artist.id)),
+    ).rejects.toMatchObject({ cause: { code: "23001" } });
+    await db
+      .update(artists)
+      .set({ creatorWallet: null })
+      .where(eq(artists.id, artist.id));
+    const [preserved] = await db
+      .select()
+      .from(artworks)
+      .where(eq(artworks.id, sample.id));
+    expect(preserved?.kathaId).toBe(sample.kathaId);
+    expect(preserved?.creatorWallet).toBe(artist.creatorWallet);
+    const [walletless] = await db
+      .insert(artworks)
+      .values({ ...input, category: "THANGKA" })
+      .returning();
+    expect(walletless?.creatorWallet).toBeNull();
+    expect(walletless?.kathaId).toBe("KATHA-THANGKA-000001");
+    await db.execute(
+      sql`update artwork_id_counters set last_value = 999999 where category = 'THANGKA'`,
+    );
+    await expect(
+      db.insert(artworks).values({ ...input, category: "THANGKA" }),
+    ).rejects.toMatchObject({
+      cause: { code: "22003", constraint_name: "artwork_id_counters_range" },
+    });
+    await expect(
+      db.execute(
+        sql`update artwork_id_counters set last_value = 1 where category = 'THANGKA'`,
+      ),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_id_counters_monotonic" },
+    });
+    await expect(
+      db.execute(sql`delete from artwork_id_counters where category = 'THANGKA'`),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_id_counters_monotonic" },
+    });
+  } finally {
+    await first.close();
+    await second.close();
+  }
+}, 30_000);

@@ -8,6 +8,13 @@
       "when": 1790928616610,
       "tag": "0000_artist_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790929159258,
+      "tag": "0001_artwork_identities",
+      "breakpoints": true
     }
   ]
 }

@@ -5,3 +5,9 @@ export {
   type ArtistRecord,
   type NewArtistRecord,
 } from "./schema/artists.js";
+export {
+  artworks,
+  artworkCategory,
+  type ArtworkRecord,
+  type NewArtworkRecord,
+} from "./schema/artworks.js";
