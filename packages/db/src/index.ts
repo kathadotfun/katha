@@ -1,2 +1,1 @@
-// Database connections, schema, and query exports are introduced in later steps.
-export {};
+export { createDatabase, validateDatabaseUrl, type Database } from "./connection.js";

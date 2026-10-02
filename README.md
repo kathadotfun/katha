@@ -35,7 +35,7 @@ Katha is under active development. This repository currently contains the public
 product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
 orchestration, a minimal Next.js web scaffold, a bare Hono API service, an initial
-shared TypeScript package, a Node-only database package boundary, a Solana client
+shared TypeScript package, a Node-only Drizzle database package, a Solana client
 package, an Anchor Registry, an empty Marketplace program, and a local
 PostgreSQL service. The Solana package includes Kit clients, a Core adapter,
 generated program clients, unsigned transaction builders, and simulation.
@@ -43,8 +43,9 @@ Local tests cover Registry configuration, artwork registration and verification,
 condition and custody attestations, versioned metadata, Core minting, and atomic
 post-mint metadata updates. The complete Registry journey also runs through
 offline Surfpool RPC, checking historical commitments and one bound Core asset.
-Artwork browsing, API and database behavior, and
-Marketplace business instructions remain planned.
+The database package now provides explicit PostgreSQL connections and forward
+migration commands. Artwork browsing, API behavior, domain tables, and Marketplace
+business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,

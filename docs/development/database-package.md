@@ -1,20 +1,103 @@
-# Database package boundary
+# Database connection and forward migrations
 
-`packages/db` is the Node-only workspace boundary for PostgreSQL access. The
-package currently contains only a buildable entrypoint; it defines no connection,
-ORM, tables, migrations, or query behavior. Those arrive in their planned steps.
-The [local PostgreSQL service](local-services.md) can run now; this package does
-not connect to it yet.
+`packages/db` is the Node-only PostgreSQL boundary. It pins Drizzle ORM 0.45.3,
+Postgres.js 3.4.9 and Drizzle Kit 0.31.11. Postgres.js supplies the connection pool;
+Drizzle supplies typed queries and transactions. Package imports neither read
+configuration nor open connections. Domain tables begin in the next database step.
 
-## Build and check
+## Local configuration
+
+Follow the [local service guide](local-services.md). Copy the safe `.env.example`
+to ignored root `.env` if you have not already done so. Set `DATABASE_URL` to match
+your Compose database user, password, database name and port. Percent-encode
+special characters in the username/password. The example URL has disposable values.
+Keep real URLs server-side and outside Git; do not use `NEXT_PUBLIC_` variables.
+Changing Compose initialization values does not change an existing volume's user
+or password.
+
+```bash
+pnpm db:start
+pnpm db:generate
+pnpm db:migrate
+```
+
+The CLI commands run from `packages/db`, load the root `.env` with Node's native
+`--env-file-if-exists`, and respect existing shell environment overrides. Generation
+can run without a database URL or server. Applying migrations requires
+`DATABASE_URL`. There is no fallback connection to a default or remote database.
+
+`drizzle.config.ts` selects PostgreSQL, `src/schema/index.ts` and `drizzle/`.
+The empty schema currently produces no SQL changes. Its generated empty journal
+is tracked so migration commands can run before the first domain table exists;
+Drizzle may create its own migration log schema/table. No application tables are
+created by this step.
+
+## Connection ownership
+
+Server code explicitly creates and closes a connection:
+
+```ts
+import { createDatabase, validateDatabaseUrl } from "@katha/db";
+import { sql } from "drizzle-orm";
+
+const connection = createDatabase(validateDatabaseUrl(process.env.DATABASE_URL));
+try {
+  await connection.db.execute(sql`select 1`);
+  await connection.db.transaction(async (tx) => {
+    // Execute related writes through tx so they commit or roll back together.
+    await tx.execute(sql`select 1`);
+  });
+} finally {
+  await connection.close();
+}
+```
+
+The pool opens lazily, permits ten connections, uses a ten-second connect timeout
+and a twenty-second idle timeout. Close drains connections with a five-second
+shutdown timeout. Configuration errors omit the URL; caller error/log handling
+must also avoid publishing driver errors or credentials. The browser runtime
+export remains unavailable. API environment validation and readiness are later steps.
+
+## Review migrations before applying
+
+After adding a domain table, run `pnpm db:generate`, inspect its SQL and snapshot,
+and commit the complete migration artifacts alongside the schema. Run
+`pnpm db:migrate` explicitly against the intended local database. Applied migrations
+are historical records: add a forward migration for later changes instead of
+editing applied SQL or journals. Do not use schema push or automatic startup
+migrations. Serialize migration commands; concurrent migration runners are not
+part of this workflow.
+
+Drizzle records applied migrations in `drizzle.__drizzle_migrations`; rerunning
+migrate applies only pending entries. See the official
+[Drizzle migration documentation](https://orm.drizzle.team/docs/drizzle-kit-migrate)
+and [Postgres.js connection documentation](https://github.com/porsager/postgres).
+
+## Verification
 
 ```bash
 pnpm --filter @katha/db lint
 pnpm --filter @katha/db typecheck
+pnpm --filter @katha/db test
 pnpm --filter @katha/db build
+pnpm db:test
 ```
 
-Build output and declarations are emitted to the ignored `packages/db/dist`
-directory. The package export map provides types to tooling and a runtime entry
-only under the Node.js export condition. Browser-targeted bundlers cannot resolve
-the package's runtime entrypoint.
+The unit suite needs no database. `db:test` requires Docker Engine and the existing
+`postgres:18.6` image cached during preparation. If absent, fetch it explicitly
+with `docker pull postgres:18.6` before running the tests. It starts a uniquely named
+container on a random loopback-only port, with synthetic credentials and no
+project data volume or root `.env`. It runs the real migration CLI against the
+empty application journal and a generated synthetic fixture, checks replay,
+transaction commit/rollback, failed migration rollback and closed connections,
+then removes its own container and temporary files. It never targets your
+Compose development database. Migration fixtures remain separate from the
+application schema. Database integration checks run explicitly; ordinary
+`pnpm test` runs only database unit tests and needs no Docker.
+
+Build output and declarations remain ignored under `packages/db/dist`.
+
+The main `packages/db/tsconfig.json` includes source, tests and the Drizzle config
+with Node types, so editor diagnostics and command-line type checking share the
+same project. `tsconfig.build.json` emits only `src/`; tests and CLI config never
+enter `dist`.

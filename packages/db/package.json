@@ -15,11 +15,22 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run tests/connection.test.ts",
+    "test:integration": "vitest run tests/postgres.test.ts",
+    "db:generate": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs generate",
+    "db:migrate": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs migrate"
   },
   "devDependencies": {
-    "typescript": "6.0.3"
+    "@types/node": "24.19.0",
+    "drizzle-kit": "0.31.11",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.45.3",
+    "postgres": "3.4.9"
   }
 }

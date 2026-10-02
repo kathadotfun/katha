@@ -5,12 +5,12 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "lib": ["ES2024"],
-    "types": [],
-    "rootDir": "src",
+    "types": ["node"],
+    "rootDir": ".",
     "outDir": "dist",
     "declaration": true,
-    "noEmit": false
+    "noEmit": true
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.ts", "drizzle.config.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -34,6 +34,9 @@
     "program:test": "node scripts/test-core-cpi.mjs",
     "db:start": "docker compose up --detach --wait",
     "db:status": "docker compose ps",
-    "db:stop": "docker compose down"
+    "db:stop": "docker compose down",
+    "db:generate": "pnpm --filter @katha/db db:generate",
+    "db:migrate": "pnpm --filter @katha/db db:migrate",
+    "db:test": "node scripts/test-database.mjs"
   }
 }

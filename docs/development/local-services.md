@@ -3,8 +3,8 @@
 Katha uses the official PostgreSQL 18.6 image for local development. The Compose
 service is named `db`, binds only to `127.0.0.1`, and stores database files in a
 named volume mounted at `/var/lib/postgresql`. PostgreSQL 18 uses a versioned
-`PGDATA` directory under that mount. The Node database package gains a connection
-and migrations in later steps; it does not connect yet.
+`PGDATA` directory under that mount. The [database package](database-package.md)
+provides explicit connections and forward migrations.
 
 ## Start and inspect
 
