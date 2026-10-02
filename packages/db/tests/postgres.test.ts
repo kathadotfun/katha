@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +9,10 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
 import {
   artists,
+  artworkMetadataVersions,
+  verifications,
+  conditionReports,
+  type NewConditionReportRecord,
   artworkMedia,
   artworkMaterials,
   type NewArtworkMediaRecord,
@@ -43,7 +48,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(3);
+    expect(applicationCount).toBe(4);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -59,7 +64,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(4);
+    expect(result[0]?.count).toBe(5);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -114,7 +119,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(4);
+    ).toBe(5);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -770,6 +775,439 @@ it("stores ordered media privately by default and distinct relational materials"
     expect(
       (await db.select().from(artworks).where(eq(artworks.id, work.id)))[0]?.kathaId,
     ).toBe(work.kathaId);
+  } finally {
+    await connection.close();
+  }
+}, 30_000);
+
+it("preserves prepared and finalized metadata, verification and condition documents", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const db = connection.db;
+  const wallet = "Vote111111111111111111111111111111111111111";
+  const inspectedAt = new Date("2026-09-30T10:00:00.000Z");
+  const reportedAt = new Date("2026-09-30T10:01:00.000Z");
+  const finalizedAt = new Date("2026-09-30T10:03:00.000Z");
+  const receipt = {
+    status: "FINALIZED" as const,
+    chainCluster: "LOCALNET" as const,
+    chainSignature: "1".repeat(64),
+    chainSlot: 42n,
+    chainRecordedAt: new Date("2026-09-30T10:02:00.000Z"),
+    finalizedAt,
+  };
+  const versionedReceipt = { ...receipt, chainVersion: 1 };
+  const commitment = (value: unknown) => {
+    const canonicalDocument = JSON.stringify(value);
+    return {
+      canonicalDocument,
+      documentHash: createHash("sha256")
+        .update(canonicalDocument, "utf8")
+        .digest("hex"),
+    };
+  };
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "attestation-artist",
+        displayName: "Synthetic inspector artist",
+        biography: "Synthetic biography",
+        region: "Patan",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic attestation artwork",
+        creationYear: 2026,
+      })
+      .returning();
+    if (!artwork) throw new Error("Artwork missing");
+    const firstDocument = commitment({
+      kathaId: artwork.kathaId,
+      story: "Synthetic कथा",
+    });
+    const metadataInput = {
+      artworkId: artwork.id,
+      authorityWallet: wallet,
+      version: 1,
+      uri: "https://example.invalid/metadata/1.json",
+      ...firstDocument,
+    };
+    const [metadata] = await db
+      .insert(artworkMetadataVersions)
+      .values(metadataInput)
+      .returning();
+    if (!metadata) throw new Error("Metadata missing");
+    expect(metadata.status).toBe("DRAFT");
+    expect(metadata.canonicalDocument).toBe(firstDocument.canonicalDocument);
+    expect(metadata.documentHash).toBe(firstDocument.documentHash);
+    await expect(
+      db
+        .update(artworkMetadataVersions)
+        .set({ ...versionedReceipt })
+        .where(eq(artworkMetadataVersions.id, metadata.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_attestation_transition" },
+    });
+    await expect(
+      db
+        .insert(artworkMetadataVersions)
+        .values({ ...metadataInput, version: 2, ...versionedReceipt }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_attestation_transition" },
+    });
+    await expect(
+      db
+        .insert(artworkMetadataVersions)
+        .values({ ...metadataInput, version: 2, documentHash: "00".repeat(32) }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "metadata_versions_document_integrity" },
+    });
+    await expect(
+      db.insert(artworkMetadataVersions).values({
+        ...metadataInput,
+        version: 2,
+        canonicalDocument: `${firstDocument.canonicalDocument}\n`,
+      }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "metadata_versions_document_integrity" },
+    });
+    await expect(
+      db
+        .insert(artworkMetadataVersions)
+        .values({ ...metadataInput, version: 2, chainSlot: 1n }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "metadata_versions_receipt_complete" },
+    });
+    await expect(
+      db.insert(artworkMetadataVersions).values({ ...metadataInput, version: 0 }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "metadata_versions_version_valid" },
+    });
+    await expect(
+      db.insert(artworkMetadataVersions).values({
+        ...metadataInput,
+        version: 2,
+        uri: "https://user:password@example.invalid/a",
+      }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "metadata_versions_uri_valid" },
+    });
+    await expect(
+      db.insert(artworkMetadataVersions).values({
+        ...metadataInput,
+        version: 2,
+        status: "PREPARED",
+        ...commitment({ kathaId: "KATHA-PAUBHA-999999" }),
+      }),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23514",
+        constraint_name: "artwork_attestation_document_identity",
+      },
+    });
+    await expect(
+      db.insert(artworkMetadataVersions).values(metadataInput),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23505",
+        constraint_name: "metadata_versions_artwork_version_unique",
+      },
+    });
+    await db
+      .update(artworkMetadataVersions)
+      .set({ status: "PREPARED" })
+      .where(eq(artworkMetadataVersions.id, metadata.id));
+    for (const change of [
+      { status: "DRAFT" as const },
+      { uri: "https://example.invalid/changed.json" },
+      { ...commitment({ kathaId: artwork.kathaId, story: "Tampered" }) },
+    ]) {
+      await expect(
+        db
+          .update(artworkMetadataVersions)
+          .set(change)
+          .where(eq(artworkMetadataVersions.id, metadata.id)),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint_name: "artwork_attestation_immutable" },
+      });
+    }
+    await expect(
+      db
+        .delete(artworkMetadataVersions)
+        .where(eq(artworkMetadataVersions.id, metadata.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_attestation_immutable" },
+    });
+    await expect(
+      db
+        .update(artworkMetadataVersions)
+        .set({ status: "FINALIZED", chainVersion: 1 })
+        .where(eq(artworkMetadataVersions.id, metadata.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "metadata_versions_receipt_complete" },
+    });
+    await db
+      .update(artworkMetadataVersions)
+      .set(versionedReceipt)
+      .where(eq(artworkMetadataVersions.id, metadata.id));
+    await expect(
+      db
+        .update(artworkMetadataVersions)
+        .set({ chainSlot: 43n })
+        .where(eq(artworkMetadataVersions.id, metadata.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_attestation_immutable" },
+    });
+    await db.insert(artworkMetadataVersions).values({
+      ...metadataInput,
+      version: 2,
+      status: "PREPARED",
+      uri: "https://example.invalid/metadata/2.json",
+      ...commitment({ kathaId: artwork.kathaId, story: "New version" }),
+    });
+    expect(
+      (
+        await db
+          .select()
+          .from(artworkMetadataVersions)
+          .where(eq(artworkMetadataVersions.artworkId, artwork.id))
+          .orderBy(asc(artworkMetadataVersions.version))
+      ).map((row) => row.documentHash),
+    ).toEqual([
+      firstDocument.documentHash,
+      commitment({ kathaId: artwork.kathaId, story: "New version" }).documentHash,
+    ]);
+
+    // Local version 2 stays prepared after an abandoned attempt; chain version 2
+    // can commit a later immutable document without rewriting that attempt.
+    const [retry] = await db
+      .insert(artworkMetadataVersions)
+      .values({
+        ...metadataInput,
+        version: 3,
+        status: "PREPARED",
+        ...commitment({ kathaId: artwork.kathaId, story: "Reviewed retry" }),
+      })
+      .returning();
+    if (!retry) throw new Error("Retry missing");
+    await db
+      .update(artworkMetadataVersions)
+      .set({ ...versionedReceipt, chainVersion: 2 })
+      .where(eq(artworkMetadataVersions.id, retry.id));
+    const [duplicateRevision] = await db
+      .insert(artworkMetadataVersions)
+      .values({
+        ...metadataInput,
+        version: 4,
+        status: "PREPARED",
+      })
+      .returning();
+    if (!duplicateRevision) throw new Error("Duplicate revision missing");
+    await expect(
+      db
+        .update(artworkMetadataVersions)
+        .set({ ...versionedReceipt, chainVersion: 2 })
+        .where(eq(artworkMetadataVersions.id, duplicateRevision.id)),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23505",
+        constraint_name: "metadata_versions_chain_version_unique",
+      },
+    });
+
+    const evidenceHash = "12".repeat(32);
+    const verificationInput = {
+      artworkId: artwork.id,
+      authorityWallet: wallet,
+      inspectedAt,
+      evidenceHash,
+      ...commitment({
+        kathaId: artwork.kathaId,
+        verifierWallet: wallet,
+        evidenceHash,
+        inspectedAt: inspectedAt.toISOString(),
+      }),
+    };
+    const [verification] = await db
+      .insert(verifications)
+      .values({ ...verificationInput, status: "PREPARED" })
+      .returning();
+    if (!verification) throw new Error("Verification missing");
+    await expect(
+      db.insert(verifications).values({
+        ...verificationInput,
+        evidenceHash: "13".repeat(32),
+        status: "PREPARED",
+      }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "verifications_document_fields" },
+    });
+    await db
+      .update(verifications)
+      .set(receipt)
+      .where(eq(verifications.id, verification.id));
+    const [duplicate] = await db
+      .insert(verifications)
+      .values({ ...verificationInput, status: "PREPARED" })
+      .returning();
+    if (!duplicate) throw new Error("Duplicate missing");
+    await expect(
+      db.update(verifications).set(receipt).where(eq(verifications.id, duplicate.id)),
+    ).rejects.toMatchObject({
+      cause: {
+        code: "23505",
+        constraint_name: "verifications_finalized_artwork_unique",
+      },
+    });
+    expect(
+      (
+        await db.select().from(verifications).where(eq(verifications.id, duplicate.id))
+      )[0]?.status,
+    ).toBe("PREPARED");
+    await expect(
+      db.delete(verifications).where(eq(verifications.id, verification.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_attestation_immutable" },
+    });
+
+    const reportId = randomUUID();
+    const inspectorId = randomUUID();
+    const mediaHashes = ["14".repeat(32)];
+    const reportInput: NewConditionReportRecord = {
+      id: reportId,
+      artworkId: artwork.id,
+      version: 1,
+      authorityWallet: wallet,
+      inspectorId,
+      grade: "EXCELLENT",
+      reason: "INITIAL_VERIFICATION",
+      inspectedAt,
+      reportedAt,
+      notes: "Synthetic inspection notes",
+      mediaHashes,
+    };
+    const reportDocument = (id: string, notes: string, hashes = mediaHashes) =>
+      commitment({
+        reportId: id,
+        kathaId: artwork.kathaId,
+        inspectorId,
+        verifierWallet: wallet,
+        grade: "EXCELLENT",
+        reason: "INITIAL_VERIFICATION",
+        inspectedAt: inspectedAt.toISOString(),
+        reportedAt: reportedAt.toISOString(),
+        notes,
+        mediaHashes: hashes,
+      });
+    await db.insert(conditionReports).values(reportInput);
+    await db
+      .update(conditionReports)
+      .set({ notes: "Updated synthetic inspection" })
+      .where(eq(conditionReports.id, reportId));
+    await expect(
+      db
+        .update(conditionReports)
+        .set({ status: "PREPARED", ...reportDocument(reportId, "Wrong notes") })
+        .where(eq(conditionReports.id, reportId)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "condition_reports_document_fields" },
+    });
+    await db
+      .update(conditionReports)
+      .set({
+        status: "PREPARED",
+        ...reportDocument(reportId, "Updated synthetic inspection"),
+      })
+      .where(eq(conditionReports.id, reportId));
+    await expect(
+      db
+        .update(conditionReports)
+        .set({ notes: "Overwrite" })
+        .where(eq(conditionReports.id, reportId)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_attestation_immutable" },
+    });
+    await expect(
+      db
+        .update(conditionReports)
+        .set({ ...versionedReceipt, chainSlot: -1n })
+        .where(eq(conditionReports.id, reportId)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "condition_reports_receipt_complete" },
+    });
+    await expect(
+      db
+        .update(conditionReports)
+        .set({ ...versionedReceipt, chainCluster: null })
+        .where(eq(conditionReports.id, reportId)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "condition_reports_receipt_complete" },
+    });
+    await db
+      .update(conditionReports)
+      .set(versionedReceipt)
+      .where(eq(conditionReports.id, reportId));
+    await expect(
+      db.delete(conditionReports).where(eq(conditionReports.id, reportId)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artwork_attestation_immutable" },
+    });
+    for (const change of [
+      { mediaHashes: [] },
+      { mediaHashes: ["ZZ".repeat(32)] },
+      { mediaHashes: ["14".repeat(32), "14".repeat(32)] },
+      { ownerWallet: wallet },
+      { reportedAt: new Date("2026-09-29T10:00:00.000Z") },
+    ]) {
+      await expect(
+        db
+          .insert(conditionReports)
+          .values({ ...reportInput, id: randomUUID(), version: 2, ...change }),
+      ).rejects.toMatchObject({ cause: { code: "23514" } });
+    }
+    const draftId = randomUUID();
+    await db
+      .insert(conditionReports)
+      .values({ ...reportInput, id: draftId, version: 2 });
+    await db.delete(conditionReports).where(eq(conditionReports.id, draftId));
+    for (const table of [artworkMetadataVersions, verifications, conditionReports]) {
+      await expect(
+        db
+          .update(table)
+          .set({ artworkId: "123e4567-e89b-42d3-a456-426614174000" })
+          .where(eq(table.artworkId, artwork.id)),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint_name: "artwork_attestation_identity" },
+      });
+    }
+    await expect(
+      db.insert(conditionReports).values({
+        ...reportInput,
+        id: randomUUID(),
+        artworkId: "123e4567-e89b-42d3-a456-426614174000",
+        version: 2,
+      }),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    expect(
+      (
+        await db
+          .select()
+          .from(conditionReports)
+          .where(eq(conditionReports.id, reportId))
+      )[0]?.mediaHashes,
+    ).toEqual(mediaHashes);
+    expect(
+      (await db.select().from(artworks).where(eq(artworks.id, artwork.id)))[0]?.kathaId,
+    ).toBe(artwork.kathaId);
   } finally {
     await connection.close();
   }

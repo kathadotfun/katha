@@ -24,3 +24,18 @@ export {
   type ArtworkMaterialRecord,
   type NewArtworkMaterialRecord,
 } from "./schema/artwork-materials.js";
+export {
+  attestationStatus,
+  attestationCluster,
+  artworkMetadataVersions,
+  verifications,
+  conditionReports,
+  conditionGrade,
+  conditionReason,
+  type ArtworkMetadataVersionRecord,
+  type NewArtworkMetadataVersionRecord,
+  type VerificationRecord,
+  type NewVerificationRecord,
+  type ConditionReportRecord,
+  type NewConditionReportRecord,
+} from "./schema/artwork-attestations.js";

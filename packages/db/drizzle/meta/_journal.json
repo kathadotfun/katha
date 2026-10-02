@@ -22,6 +22,13 @@
       "when": 1790929994389,
       "tag": "0002_artwork_media_materials",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790933311933,
+      "tag": "0003_artwork_attestations",
+      "breakpoints": true
     }
   ]
 }

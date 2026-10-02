@@ -64,8 +64,9 @@ The table constraints use Drizzle's
 [unique constraints, indexes and foreign keys](https://orm.drizzle.team/docs/indexes-constraints).
 
 Draft media/material rows can be removed or edited without deleting the artwork.
-These tables hold current editable documentation; later immutable metadata and
-condition document versions preserve historical commitments separately.
+These tables hold current editable documentation;
+[immutable metadata and condition documents](artwork-attestations.md) preserve
+historical commitments separately.
 
 ## Migration and verification
 

@@ -46,7 +46,8 @@ offline Surfpool RPC, checking historical commitments and one bound Core asset.
 The database package now provides explicit PostgreSQL connections and forward
 migration commands, artist profiles, and artwork records with concurrent permanent
 Katha ID allocation and immutable attribution, ordered media with explicit
-visibility, and separate material records.
+visibility, separate material records, and preserved metadata, verification and
+condition documents with explicit preparation and finalization states.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -78,6 +79,7 @@ outside the current scope.
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)
 - [Artwork identities and ID allocation](docs/development/artwork-identities.md)
 - [Artwork media and materials](docs/development/artwork-media-materials.md)
+- [Preserved artwork attestations](docs/development/artwork-attestations.md)
 - [Local PostgreSQL service](docs/development/local-services.md)
 - [Foundation CI](docs/development/ci.md)
 - [Solana package boundary](docs/development/solana-package.md)
