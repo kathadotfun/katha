@@ -9,7 +9,8 @@ and [artwork identities](artwork-identities.md), with related
 [preserved attestations](artwork-attestations.md),
 [manual custody and private fulfillment](custody-fulfillment.md), and
 [wallet challenges and sessions](wallet-sessions.md), plus
-[pending blockchain operations and receipts](blockchain-operations.md).
+[pending blockchain operations and receipts](blockchain-operations.md), and
+[blockchain events and query projections](blockchain-read-models.md).
 
 ## Local configuration
 
@@ -38,8 +39,9 @@ and category counters. The third adds ordered media and material tables; the
 fourth adds metadata versions, verifications and condition reports. The fifth
 adds manual custody history and private fulfillment requests. The sixth adds
 wallets, single-use challenges and hashed sessions. The seventh adds immutable
-blockchain operations and retained transaction receipts. The
-artwork identity, attestation, custody, wallet-session and blockchain-operation migrations also contain reviewed SQL functions
+blockchain operations and retained transaction receipts. The eighth adds events,
+checkpoints and ownership/marketplace projections. The
+artwork identity, attestation, custody, wallet-session, blockchain-operation and read-model migrations also contain reviewed SQL functions
 and triggers for allocation and permanence, which the table snapshot does not
 represent. Review the SQL, snapshot and journal before applying; Drizzle records
 applied versions in its migration log schema/table.

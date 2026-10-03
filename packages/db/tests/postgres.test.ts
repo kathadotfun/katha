@@ -9,6 +9,12 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
 import {
   artists,
+  indexedEvents,
+  indexerCheckpoints,
+  artworkOwnership,
+  artworkListings,
+  artworkSales,
+  type NewIndexedEventRecord,
   blockchainOperations,
   transactionReceipts,
   type NewBlockchainOperationRecord,
@@ -57,7 +63,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(7);
+    expect(applicationCount).toBe(8);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -73,7 +79,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(8);
+    expect(result[0]?.count).toBe(9);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -128,7 +134,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(8);
+    ).toBe(9);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -2101,6 +2107,431 @@ it("preserves idempotent operation expectations and reconciles immutable transac
         .from(custodyEvents)
         .where(eq(custodyEvents.artworkId, artwork.id)),
     ).toHaveLength(0);
+  } finally {
+    await connection.close();
+    await second.close();
+  }
+}, 30_000);
+
+it("deduplicates indexed events and guards checkpoints, ownership, listings and sale projections", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const second = createDatabase(url);
+  const db = connection.db;
+  const address = "Vote111111111111111111111111111111111111111";
+  const buyer = "11111111111111111111111111111111";
+  const rejection = (constraint: string, code = "23514") => ({
+    cause: { code, constraint_name: constraint },
+  });
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "index-artist",
+        displayName: "Synthetic Artist",
+        biography: "Synthetic biography",
+        region: "Lalitpur",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic indexed artwork",
+        creationYear: 2026,
+      })
+      .returning();
+    if (!artwork) throw new Error("Artwork missing");
+    const eventInput = (
+      signature: string,
+      slot: bigint,
+      payload: Record<string, unknown>,
+      kind: NewIndexedEventRecord["kind"] = "OWNERSHIP",
+    ): NewIndexedEventRecord => ({
+      cluster: "LOCALNET",
+      programAddress: address,
+      signature: signature.repeat(64),
+      slot,
+      transactionIndex: 0,
+      outerInstructionIndex: 0,
+      kind,
+      artworkId: artwork.id,
+      assetAddress: address,
+      payload,
+      chainRecordedAt: new Date(Date.now() - 60_000),
+    });
+    const sourceInput = eventInput("6", 100n, { ownerWallet: address });
+    const race = await Promise.allSettled(
+      [db, second.db].map((pool) =>
+        pool.insert(indexedEvents).values(sourceInput).returning(),
+      ),
+    );
+    expect(race.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const failed = race.find((r) => r.status === "rejected");
+    if (failed?.status !== "rejected")
+      throw new Error("Expected event duplicate rejection");
+    expect(failed.reason).toMatchObject(
+      rejection("indexed_events_identity_unique", "23505"),
+    );
+    const [source] = await db
+      .select()
+      .from(indexedEvents)
+      .where(eq(indexedEvents.signature, sourceInput.signature));
+    if (!source) throw new Error("Source event missing");
+    // Same signature can contain multiple CPI instructions and decoded events.
+    await db.insert(indexedEvents).values([
+      { ...sourceInput, innerInstructionIndex: 0 },
+      { ...sourceInput, eventIndex: 1 },
+      { ...sourceInput, cluster: "DEVNET" },
+    ]);
+    await expect(
+      db
+        .update(indexedEvents)
+        .set({ slot: 101n })
+        .where(eq(indexedEvents.id, source.id)),
+    ).rejects.toMatchObject(rejection("indexed_events_immutable"));
+    await expect(
+      db.delete(indexedEvents).where(eq(indexedEvents.id, source.id)),
+    ).rejects.toMatchObject(rejection("indexed_events_immutable"));
+    const invalid: { change: Partial<NewIndexedEventRecord>; constraint: string }[] = [
+      { change: { slot: -1n }, constraint: "indexed_events_position_valid" },
+      {
+        change: { innerInstructionIndex: -2 },
+        constraint: "indexed_events_position_valid",
+      },
+      { change: { signature: "bad" }, constraint: "indexed_events_signature_valid" },
+      {
+        change: { programAddress: "bad" },
+        constraint: "indexed_events_addresses_valid",
+      },
+      { change: { assetAddress: null }, constraint: "indexed_events_scope_valid" },
+      {
+        change: { payload: { text: "x".repeat(65536) } },
+        constraint: "indexed_events_payload_valid",
+      },
+    ];
+    for (const { change, constraint } of invalid) {
+      await expect(
+        db.insert(indexedEvents).values({ ...eventInput("7", 102n, {}), ...change }),
+      ).rejects.toMatchObject(rejection(constraint));
+    }
+    const ownerInput = {
+      cluster: "LOCALNET" as const,
+      artworkId: artwork.id,
+      assetAddress: address,
+      ownerWallet: address,
+      sourceEventId: source.id,
+    };
+    await db.insert(artworkOwnership).values(ownerInput);
+    await expect(
+      db.insert(artworkOwnership).values({ ...ownerInput, cluster: "DEVNET" }),
+    ).rejects.toMatchObject(rejection("chain_projections_event_scope"));
+    await expect(
+      db
+        .update(artworkOwnership)
+        .set({ ownerWallet: buyer })
+        .where(eq(artworkOwnership.artworkId, artwork.id)),
+    ).rejects.toMatchObject(rejection("chain_projections_owner_binding"));
+    const [nextOwner] = await db
+      .insert(indexedEvents)
+      .values(eventInput("7", 103n, { ownerWallet: buyer }))
+      .returning();
+    if (!nextOwner) throw new Error("New owner event missing");
+    await db
+      .update(artworkOwnership)
+      .set({ ownerWallet: buyer, sourceEventId: nextOwner.id })
+      .where(eq(artworkOwnership.artworkId, artwork.id));
+    await expect(
+      db
+        .update(artworkOwnership)
+        .set({ ownerWallet: address, sourceEventId: source.id })
+        .where(eq(artworkOwnership.artworkId, artwork.id)),
+    ).rejects.toMatchObject(rejection("chain_projections_stale_event"));
+    const checkpoint = {
+      cluster: "LOCALNET" as const,
+      programAddress: address,
+      fromSlot: 0n,
+      scannedThroughSlot: 103n,
+      lastSignature: nextOwner.signature,
+      lastSignatureSlot: 103n,
+    };
+    await db.insert(indexerCheckpoints).values(checkpoint);
+    await expect(
+      db
+        .update(indexerCheckpoints)
+        .set({ scannedThroughSlot: 102n })
+        .where(eq(indexerCheckpoints.programAddress, address)),
+    ).rejects.toMatchObject(rejection("indexer_checkpoints_monotonic"));
+    await expect(
+      db
+        .update(indexerCheckpoints)
+        .set({ fromSlot: 1n })
+        .where(eq(indexerCheckpoints.programAddress, address)),
+    ).rejects.toMatchObject(rejection("indexer_checkpoints_identity"));
+    await expect(
+      db
+        .update(indexerCheckpoints)
+        .set({ gapFromSlot: 110n })
+        .where(eq(indexerCheckpoints.programAddress, address)),
+    ).rejects.toMatchObject(rejection("indexer_checkpoints_gap_valid"));
+    await db
+      .update(indexerCheckpoints)
+      .set({ gapFromSlot: 104n, gapThroughSlot: 110n })
+      .where(eq(indexerCheckpoints.programAddress, address));
+    const expiresAt = new Date(Date.now() + 60_000);
+    const listingPayload = {
+      listingAddress: address,
+      sellerWallet: buyer,
+      paymentMint: address,
+      price: "18446744073709551615",
+      status: "ACTIVE",
+      expiresAt: expiresAt.toISOString(),
+    };
+    const [listingEvent] = await db
+      .insert(indexedEvents)
+      .values(eventInput("8", 104n, listingPayload, "LISTING"))
+      .returning();
+    if (!listingEvent) throw new Error("Listing event missing");
+    const listingInput = {
+      cluster: "LOCALNET" as const,
+      artworkId: artwork.id,
+      assetAddress: address,
+      sourceEventId: listingEvent.id,
+      listingAddress: address,
+      sellerWallet: buyer,
+      paymentMint: address,
+      price: 18446744073709551615n,
+      status: "ACTIVE" as const,
+      expiresAt,
+    };
+    const [listing] = await db.insert(artworkListings).values(listingInput).returning();
+    if (!listing) throw new Error("Listing missing");
+    expect(listing.price).toBe(18446744073709551615n);
+    await expect(db.insert(artworkListings).values(listingInput)).rejects.toMatchObject(
+      { cause: { code: "23505" } },
+    );
+    await expect(
+      db.insert(artworkListings).values({ ...listingInput, price: 1n }),
+    ).rejects.toMatchObject(rejection("chain_projections_listing_binding"));
+    // Numeric storage rejects fractional base units instead of rounding them.
+    const [fractionEvent] = await db
+      .insert(indexedEvents)
+      .values(eventInput("9", 105n, { ...listingPayload, price: "1.5" }, "LISTING"))
+      .returning();
+    if (!fractionEvent) throw new Error("Fractional fixture missing");
+    await expect(
+      db.execute(
+        sql`insert into artwork_listings (cluster, artwork_id, asset_address, source_event_id, listing_address, seller_wallet, payment_mint, price, status, expires_at) values ('LOCALNET', ${artwork.id}, ${address}, ${fractionEvent.id}, ${address}, ${buyer}, ${address}, 1.5, 'ACTIVE', ${expiresAt.toISOString()}::timestamptz)`,
+      ),
+    ).rejects.toMatchObject(rejection("artwork_listings_price_valid"));
+    const [competingListingEvent] = await db
+      .insert(indexedEvents)
+      .values(
+        eventInput("D", 105n, { ...listingPayload, listingAddress: buyer }, "LISTING"),
+      )
+      .returning();
+    if (!competingListingEvent) throw new Error("Competing listing fixture missing");
+    await expect(
+      db.insert(artworkListings).values({
+        ...listingInput,
+        listingAddress: buyer,
+        sourceEventId: competingListingEvent.id,
+      }),
+    ).rejects.toMatchObject(rejection("artwork_listings_active_unique", "23505"));
+    const [overflowEvent] = await db
+      .insert(indexedEvents)
+      .values(
+        eventInput(
+          "E",
+          105n,
+          { ...listingPayload, price: "18446744073709551616" },
+          "LISTING",
+        ),
+      )
+      .returning();
+    if (!overflowEvent) throw new Error("Overflow fixture missing");
+    await expect(
+      db.insert(artworkListings).values({
+        ...listingInput,
+        price: 18446744073709551616n,
+        sourceEventId: overflowEvent.id,
+      }),
+    ).rejects.toMatchObject(rejection("artwork_listings_price_valid"));
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.insert(indexedEvents).values(eventInput("F", 105n, {}, "REGISTRY"));
+        await tx
+          .update(indexerCheckpoints)
+          .set({ scannedThroughSlot: 105n })
+          .where(eq(indexerCheckpoints.programAddress, address));
+        throw new Error("Synthetic event checkpoint rollback");
+      }),
+    ).rejects.toThrow("Synthetic event checkpoint rollback");
+    expect(
+      await db
+        .select()
+        .from(indexedEvents)
+        .where(eq(indexedEvents.signature, "F".repeat(64))),
+    ).toHaveLength(0);
+    const salePayload = {
+      ...listingPayload,
+      status: "PURCHASED",
+      buyerWallet: address,
+      isPrimary: false,
+      proceedsWallet: buyer,
+      proceedsAmount: "18446744073709551615",
+      artistWallet: address,
+      royaltyAmount: "0",
+      treasuryWallet: address,
+      platformFee: "0",
+    };
+    const [saleEvent] = await db
+      .insert(indexedEvents)
+      .values(eventInput("A", 106n, salePayload, "SALE"))
+      .returning();
+    if (!saleEvent) throw new Error("Sale event missing");
+    const saleInput = {
+      cluster: "LOCALNET" as const,
+      artworkId: artwork.id,
+      assetAddress: address,
+      sourceEventId: saleEvent.id,
+      listingId: listing.id,
+      buyerWallet: address,
+      sellerWallet: buyer,
+      paymentMint: address,
+      price: listing.price,
+      isPrimary: false,
+      proceedsWallet: buyer,
+      proceedsAmount: listing.price,
+      artistWallet: address,
+      royaltyAmount: 0n,
+      treasuryWallet: address,
+      platformFee: 0n,
+    };
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.insert(artworkSales).values(saleInput);
+        await tx
+          .update(artworkListings)
+          .set({ status: "PURCHASED", sourceEventId: saleEvent.id })
+          .where(eq(artworkListings.id, listing.id));
+        await tx
+          .update(indexerCheckpoints)
+          .set({ scannedThroughSlot: 106n })
+          .where(eq(indexerCheckpoints.programAddress, address));
+        throw new Error("Synthetic index batch rollback");
+      }),
+    ).rejects.toThrow("Synthetic index batch rollback");
+    expect(
+      await db
+        .select()
+        .from(artworkSales)
+        .where(eq(artworkSales.listingId, listing.id)),
+    ).toHaveLength(0);
+    expect(
+      (
+        await db
+          .select()
+          .from(artworkListings)
+          .where(eq(artworkListings.id, listing.id))
+      )[0]?.status,
+    ).toBe("ACTIVE");
+    expect((await db.select().from(indexerCheckpoints))[0]?.scannedThroughSlot).toBe(
+      103n,
+    );
+    await db.transaction(async (tx) => {
+      await tx.insert(artworkSales).values(saleInput);
+      await tx
+        .update(artworkListings)
+        .set({ status: "PURCHASED", sourceEventId: saleEvent.id })
+        .where(eq(artworkListings.id, listing.id));
+      await tx
+        .update(artworkOwnership)
+        .set({ ownerWallet: address, sourceEventId: saleEvent.id })
+        .where(eq(artworkOwnership.artworkId, artwork.id));
+      await tx
+        .update(indexerCheckpoints)
+        .set({ scannedThroughSlot: 106n, gapFromSlot: null, gapThroughSlot: null })
+        .where(eq(indexerCheckpoints.programAddress, address));
+    });
+    await expect(db.insert(artworkSales).values(saleInput)).rejects.toMatchObject({
+      cause: { code: "23505" },
+    });
+    await expect(
+      db.update(artworkSales).set({ buyerWallet: buyer }),
+    ).rejects.toMatchObject(rejection("chain_projections_sale_immutable"));
+    await expect(
+      db.insert(artworkSales).values({ ...saleInput, paymentMint: buyer }),
+    ).rejects.toMatchObject(rejection("chain_projections_sale_listing"));
+    await expect(
+      db.insert(artworkSales).values({ ...saleInput, platformFee: 1n }),
+    ).rejects.toMatchObject(rejection("chain_projections_sale_binding"));
+    // Check sum and primary-recipient constraints using a decoded event with matching invalid fields.
+    const [invalidSaleEvent] = await db
+      .insert(indexedEvents)
+      .values(
+        eventInput(
+          "B",
+          107n,
+          { ...salePayload, proceedsAmount: "18446744073709551614" },
+          "SALE",
+        ),
+      )
+      .returning();
+    if (!invalidSaleEvent) throw new Error("Invalid sale fixture missing");
+    await expect(
+      db.insert(artworkSales).values({
+        ...saleInput,
+        sourceEventId: invalidSaleEvent.id,
+        proceedsAmount: listing.price - 1n,
+      }),
+    ).rejects.toMatchObject(rejection("artwork_sales_amounts_valid"));
+    const [invalidPrimaryEvent] = await db
+      .insert(indexedEvents)
+      .values(eventInput("G", 107n, { ...salePayload, isPrimary: true }, "SALE"))
+      .returning();
+    if (!invalidPrimaryEvent) throw new Error("Primary recipient fixture missing");
+    await expect(
+      db.insert(artworkSales).values({
+        ...saleInput,
+        sourceEventId: invalidPrimaryEvent.id,
+        isPrimary: true,
+      }),
+    ).rejects.toMatchObject(rejection("artwork_sales_recipient_scope"));
+    const [reopenEvent] = await db
+      .insert(indexedEvents)
+      .values(eventInput("C", 108n, listingPayload, "LISTING"))
+      .returning();
+    if (!reopenEvent) throw new Error("Reopen fixture missing");
+    await expect(
+      db
+        .update(artworkListings)
+        .set({ status: "ACTIVE", sourceEventId: reopenEvent.id })
+        .where(eq(artworkListings.id, listing.id)),
+    ).rejects.toMatchObject(rejection("chain_projections_listing_transition"));
+    expect(
+      (
+        await db
+          .select()
+          .from(artworkOwnership)
+          .where(eq(artworkOwnership.artworkId, artwork.id))
+      )[0]?.ownerWallet,
+    ).toBe(address);
+    expect(
+      await db
+        .select()
+        .from(custodyEvents)
+        .where(eq(custodyEvents.artworkId, artwork.id)),
+    ).toHaveLength(0);
+    expect(
+      (await db.select().from(artworks).where(eq(artworks.id, artwork.id)))[0]
+        ?.artistId,
+    ).toBe(artist.id);
   } finally {
     await connection.close();
     await second.close();

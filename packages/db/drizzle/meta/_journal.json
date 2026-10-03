@@ -50,6 +50,13 @@
       "when": 1791047976336,
       "tag": "0006_blockchain_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791050040036,
+      "tag": "0007_blockchain_read_models",
+      "breakpoints": true
     }
   ]
 }

@@ -72,3 +72,22 @@ export {
   type TransactionReceiptRecord,
   type NewTransactionReceiptRecord,
 } from "./schema/blockchain-operations.js";
+export {
+  indexedEventKind,
+  indexedListingStatus,
+  indexedEvents,
+  indexerCheckpoints,
+  artworkOwnership,
+  artworkListings,
+  artworkSales,
+  type IndexedEventRecord,
+  type NewIndexedEventRecord,
+  type IndexerCheckpointRecord,
+  type NewIndexerCheckpointRecord,
+  type ArtworkOwnershipRecord,
+  type NewArtworkOwnershipRecord,
+  type ArtworkListingRecord,
+  type NewArtworkListingRecord,
+  type ArtworkSaleRecord,
+  type NewArtworkSaleRecord,
+} from "./schema/blockchain-read-models.js";
