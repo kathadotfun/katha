@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { describeError, DomainError, type ApiErrorCode } from "./errors.js";
+import type { Readiness } from "./readiness.js";
 import { createLogger, type ApiLogger } from "./logger.js";
 
 type ApiEnvironment = { Variables: { requestId: string; errorCode: ApiErrorCode } };
 
-export function createApi(logger: ApiLogger = createLogger()) {
+export function createApi(logger: ApiLogger = createLogger(), readiness?: Readiness) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
     const { code, message, status } = describeError(error);
@@ -35,6 +36,15 @@ export function createApi(logger: ApiLogger = createLogger()) {
       durationMs: performance.now() - start,
       ...(code ? { code } : {}),
     });
+  });
+  app.get("/health/live", (context) => {
+    context.header("Cache-Control", "no-store");
+    return context.json({ status: "alive" });
+  });
+  app.get("/health/ready", async (context) => {
+    context.header("Cache-Control", "no-store");
+    const ready = readiness ? await readiness.check() : false;
+    return context.json({ status: ready ? "ready" : "unavailable" }, ready ? 200 : 503);
   });
   app.onError(errorResponse);
   app.notFound((context) => errorResponse(new DomainError("NOT_FOUND"), context));

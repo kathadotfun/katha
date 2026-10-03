@@ -71,7 +71,8 @@ throws, private-input omission, unique concurrent IDs, rejected incoming IDs,
 transaction field selection, configuration-name filtering, and logger failures.
 Startup tests exercise invalid configuration and a temporary HTTP listener.
 The factory installs the boundary without opening a socket; test routes exist
-only in tests. Production still has no product endpoints.
+only in tests. Production exposes health probes but still has no product endpoints.
+See [API health and shutdown](api-health.md) for readiness and signal handling.
 
 The boundary uses Hono's [error and not-found hooks](https://hono.dev/docs/api/hono)
 plus an outer middleware fallback for thrown non-Error values.

@@ -56,7 +56,7 @@ import { sql } from "drizzle-orm";
 
 const connection = createDatabase(validateDatabaseUrl(process.env.DATABASE_URL));
 try {
-  await connection.db.execute(sql`select 1`);
+  await connection.check();
   await connection.db.transaction(async (tx) => {
     // Execute related writes through tx so they commit or roll back together.
     await tx.execute(sql`select 1`);
@@ -70,7 +70,8 @@ The pool opens lazily, permits ten connections, uses a ten-second connect timeou
 and a twenty-second idle timeout. Close drains connections with a five-second
 shutdown timeout. Configuration errors omit the URL; caller error/log handling
 must also avoid publishing driver errors or credentials. The browser runtime
-export remains unavailable. API environment validation and readiness are later steps.
+export remains unavailable. The API owns one pool and uses its read-only check for
+[database readiness](api-health.md). Readiness tests also run through `pnpm db:test`.
 
 ## Review migrations before applying
 

@@ -1,4 +1,8 @@
-import { serve } from "@hono/node-server";
+import { createDatabase } from "@katha/db";
+import { createReadiness } from "./readiness.js";
+import { createShutdown } from "./shutdown.js";
+import { createServer } from "node:http";
+import { getRequestListener } from "@hono/node-server";
 import { createApi } from "./app.js";
 import { createLogger } from "./logger.js";
 import { ConfigurationError, readServerConfiguration } from "./config.js";
@@ -15,44 +19,45 @@ function startApi() {
     process.exitCode = 1;
     return;
   }
-  const app = createApi(logger);
+  const database = createDatabase(config.DATABASE_URL);
+  const readiness = createReadiness(database.check);
+  const app = createApi(logger, readiness);
   const port = config.API_PORT;
 
-  const server = serve(
-    {
-      fetch: app.fetch,
-      port,
-      hostname: config.API_HOST,
-    },
-    (info) => {
-      logger.serverStarted(info.port);
-    },
+  const server = createServer(
+    getRequestListener(app.fetch, {
+      errorHandler: () => {
+        logger.serverFailed();
+        return new Response("An unexpected error occurred.", { status: 500 });
+      },
+    }),
   );
-
+  const close = createShutdown(server, readiness, database.close);
+  let isShuttingDown = false;
+  function shutdown(signal?: NodeJS.Signals) {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    if (signal) logger.serverStopping(signal);
+    void close()
+      .then((clean) => {
+        if (!clean) {
+          logger.serverFailed();
+          // Release lingering sockets after bounded drain/close failure.
+          process.exit(1);
+        }
+      })
+      .catch(() => {
+        logger.serverFailed();
+        process.exit(1);
+      });
+  }
   server.on("error", () => {
     logger.serverFailed();
     process.exitCode = 1;
+    shutdown();
   });
-
-  let isShuttingDown = false;
-
-  function shutdown(signal: NodeJS.Signals) {
-    if (isShuttingDown) {
-      return;
-    }
-
-    isShuttingDown = true;
-    logger.serverStopping(signal);
-
-    server.close((error) => {
-      if (error) {
-        logger.serverFailed();
-        process.exitCode = 1;
-      }
-    });
-  }
-
-  process.once("SIGINT", () => shutdown("SIGINT"));
-  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  server.listen(port, config.API_HOST, () => logger.serverStarted(port));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 }
 startApi();

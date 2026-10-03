@@ -35,3 +35,7 @@ against committed reviewed IDLs. Database behavior is covered by the disposable
 constraint and [fictional fixture suites](database-fixtures.md). The pinned Anchor
 build can be checked locally with `NO_DNA=1 anchor build --ignore-keys`; later
 steps add program and application behavior tests as those features are built.
+
+The disposable `pnpm db:test` runner also checks API PostgreSQL readiness and
+shutdown with an opened pool. These tests use the same isolated synthetic target
+and run after the workspace builds; no development volume or environment file is read.

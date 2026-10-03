@@ -9,12 +9,14 @@
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --exclude tests/service-postgres.test.ts",
+    "test:integration": "vitest run tests/service-postgres.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.3",
     "hono": "4.13.11",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@katha/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "26.6.3",

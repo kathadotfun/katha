@@ -33,6 +33,9 @@ export function createDatabase(databaseUrl: string) {
   });
   return {
     db: drizzle({ client, schema }),
+    check: async () => {
+      await client`select 1`;
+    },
     close: () => client.end({ timeout: 5 }),
   };
 }

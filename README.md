@@ -56,7 +56,8 @@ listings and sale distributions; chain ingestion remains planned. Fictional draf
 fixtures and fresh-database constraint tests complete the database foundation.
 The API now validates server settings before listening and provides an explicit
 public configuration allowlist, fixed domain error responses, server-generated
-request IDs, and structured logs that omit private request data.
+request IDs, structured logs that omit private request data, separate liveness and
+database readiness endpoints, and bounded HTTP/database shutdown.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -85,6 +86,7 @@ outside the current scope.
 - [Hono API service](docs/development/api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
+- [API health and shutdown](docs/development/api-health.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

@@ -74,6 +74,11 @@ try {
     timeout: 120_000,
     env: { ...process.env, DATABASE_URL: url, KATHA_TEST_DATABASE_URL: url },
   });
+  execFileSync("pnpm", ["--filter", "@katha/api", "test:integration"], {
+    stdio: "inherit",
+    timeout: 30_000,
+    env: { ...process.env, KATHA_TEST_DATABASE_URL: url },
+  });
 } finally {
   cleanup();
 }
