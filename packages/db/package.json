@@ -18,10 +18,11 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run tests/connection.test.ts",
-    "test:integration": "vitest run tests/postgres.test.ts",
+    "test": "vitest run tests/connection.test.ts tests/fixtures.test.ts",
+    "test:integration": "vitest run tests/postgres.test.ts tests/fixture-database.test.ts",
     "db:generate": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs generate",
-    "db:migrate": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs migrate"
+    "db:migrate": "node --env-file-if-exists=../../.env ./node_modules/drizzle-kit/bin.cjs migrate",
+    "db:seed": "pnpm build && node --env-file-if-exists=../../.env dist/development/seed-drafts.js"
   },
   "devDependencies": {
     "@types/node": "24.19.0",

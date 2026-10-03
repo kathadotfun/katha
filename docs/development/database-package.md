@@ -109,6 +109,11 @@ Compose development database. Migration fixtures remain separate from the
 application schema. Database integration checks run explicitly; ordinary
 `pnpm test` runs only database unit tests and needs no Docker.
 
+The [fictional fixture guide](database-fixtures.md) describes `pnpm db:seed` and
+fresh-database acceptance tests. Seeding is explicit, local-only and transactional;
+it never invents verification or chain activity. CI runs the disposable database
+suite alongside workspace checks.
+
 Build output and declarations remain ignored under `packages/db/dist`.
 
 The main `packages/db/tsconfig.json` includes source, tests and the Drizzle config

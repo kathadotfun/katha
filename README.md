@@ -52,7 +52,8 @@ manual custody history and separate private fulfillment requests, plus unique
 wallet records, single-use challenges and hashed session persistence, and
 idempotent blockchain operations with retained transaction attempts. Database
 read models now preserve indexed events, gap-aware checkpoints, ownership,
-listings and sale distributions; chain ingestion remains planned.
+listings and sale distributions; chain ingestion remains planned. Fictional draft
+fixtures and fresh-database constraint tests complete the database foundation.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -89,6 +90,7 @@ outside the current scope.
 - [Wallet challenge and session persistence](docs/development/wallet-sessions.md)
 - [Pending blockchain operations and receipts](docs/development/blockchain-operations.md)
 - [Blockchain events and query projections](docs/development/blockchain-read-models.md)
+- [Fictional database fixtures and phase checks](docs/development/database-fixtures.md)
 - [Local PostgreSQL service](docs/development/local-services.md)
 - [Foundation CI](docs/development/ci.md)
 - [Solana package boundary](docs/development/solana-package.md)

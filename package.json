@@ -37,6 +37,7 @@
     "db:stop": "docker compose down",
     "db:generate": "pnpm --filter @katha/db db:generate",
     "db:migrate": "pnpm --filter @katha/db db:migrate",
-    "db:test": "node scripts/test-database.mjs"
+    "db:test": "node scripts/test-database.mjs",
+    "db:seed": "pnpm --filter @katha/db db:seed"
   }
 }
