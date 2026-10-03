@@ -155,3 +155,7 @@ built JavaScript and declaration entrypoints.
 
 `JsonValue` remains a recursive structural type only. Validate untrusted JSON
 and domain rules at the relevant application boundary.
+
+Shared [REST contracts](api-rest.md) now define fixed errors, strict error responses,
+request-size constants and bounded pagination. Existing token amount schemas remain
+the HTTP payment boundary: canonical integer decimal strings, never JSON numbers.

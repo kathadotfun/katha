@@ -11,6 +11,7 @@ From the repository root with the pinned Node.js and pnpm versions selected:
 ```bash
 pnpm install --frozen-lockfile
 pnpm --filter @katha/db build
+pnpm --filter @katha/shared build
 pnpm --filter @katha/api dev
 ```
 
@@ -35,4 +36,5 @@ pnpm --filter @katha/api start
 `build` emits JavaScript to the ignored `apps/api/dist` directory, and `start`
 runs that compiled entry point. Environment validation and public configuration separation are implemented;
 domain error responses, request IDs, and private-data-safe structured logs are implemented.
-Database readiness is implemented; product endpoints remain later steps.
+Database readiness and [REST boundaries](api-rest.md) are implemented; product
+endpoints remain later steps.

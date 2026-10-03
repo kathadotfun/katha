@@ -1,15 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { HTTPException } from "hono/http-exception";
-import { expect, it } from "vitest";
-import { z } from "zod";
-
-const errorResponse = z.object({
-  error: z.object({ code: z.string(), message: z.string() }),
-  requestId: z.string().uuid(),
-});
 import { createApi } from "../src/app.js";
 import { DomainError } from "../src/errors.js";
 import { createLogger } from "../src/logger.js";
+import { randomUUID } from "node:crypto";
+import { HTTPException } from "hono/http-exception";
+import { expect, it } from "vitest";
+import { apiErrorResponseSchema } from "@katha/shared";
 
 function fixture() {
   const lines: string[] = [];
@@ -33,7 +28,7 @@ it.each([
     throw error;
   });
   const response = await app.request("/failure");
-  const body = errorResponse.parse(await response.json());
+  const body = apiErrorResponseSchema.parse(await response.json());
   expect(response.status).toBe(status);
   expect(body).toEqual({
     error: { code, message: expect.any(String) },
@@ -58,7 +53,7 @@ it.each([
     throw error;
   });
   const response = await app.request("/failure");
-  const body = errorResponse.parse(await response.json());
+  const body = apiErrorResponseSchema.parse(await response.json());
   expect(response.status).toBe(500);
   expect(body.error).toEqual({
     code: "INTERNAL_ERROR",

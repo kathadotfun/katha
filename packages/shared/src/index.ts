@@ -71,3 +71,14 @@ export type {
 } from "./marketplace.js";
 
 export { canonicalDocumentBytes, sha256Hex } from "./canonical-document.js";
+
+export {
+  apiErrors,
+  apiErrorCodeSchema,
+  apiErrorResponseSchema,
+  HTTP_LIMITS,
+  paginationQuerySchema,
+  paginationResponseSchema,
+  paginatedResponseSchema,
+} from "./http.js";
+export type { ApiErrorCode, ApiErrorResponse, Pagination } from "./http.js";

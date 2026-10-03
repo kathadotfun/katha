@@ -14,15 +14,18 @@ also include that ID:
 }
 ```
 
-| Code              | HTTP status | Meaning                              |
-| ----------------- | ----------- | ------------------------------------ |
-| `INVALID_REQUEST` | 400         | Invalid request                      |
-| `UNAUTHENTICATED` | 401         | Sign-in required                     |
-| `FORBIDDEN`       | 403         | Action not permitted                 |
-| `NOT_FOUND`       | 404         | Resource unavailable                 |
-| `CONFLICT`        | 409         | Current state prevents the operation |
-| `INTERNAL_ERROR`  | 500         | Unexpected failure                   |
+| Code                     | HTTP status | Meaning                              |
+| ------------------------ | ----------- | ------------------------------------ |
+| `INVALID_REQUEST`        | 400         | Invalid request                      |
+| `UNAUTHENTICATED`        | 401         | Sign-in required                     |
+| `FORBIDDEN`              | 403         | Action not permitted                 |
+| `NOT_FOUND`              | 404         | Resource unavailable                 |
+| `CONFLICT`               | 409         | Current state prevents the operation |
+| `PAYLOAD_TOO_LARGE`      | 413         | Body size limit exceeded             |
+| `UNSUPPORTED_MEDIA_TYPE` | 415         | Unsupported content type             |
+| `INTERNAL_ERROR`         | 500         | Unexpected failure                   |
 
+The error catalog and response schema live in `@katha/shared`.
 Handlers throw `DomainError` with an approved code. The boundary uses fixed
 messages from the catalog, never the thrown message, stack, cause, or arbitrary
 framework exception response. Unknown exceptions, including non-Error thrown

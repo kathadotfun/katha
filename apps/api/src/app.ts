@@ -1,3 +1,4 @@
+import { restrictedCors, requestBodyLimit } from "./http.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { describeError, DomainError, type ApiErrorCode } from "./errors.js";
@@ -6,7 +7,11 @@ import { createLogger, type ApiLogger } from "./logger.js";
 
 type ApiEnvironment = { Variables: { requestId: string; errorCode: ApiErrorCode } };
 
-export function createApi(logger: ApiLogger = createLogger(), readiness?: Readiness) {
+export function createApi(
+  logger: ApiLogger = createLogger(),
+  readiness?: Readiness,
+  origins: readonly string[] = [],
+) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
     const { code, message, status } = describeError(error);
@@ -37,6 +42,8 @@ export function createApi(logger: ApiLogger = createLogger(), readiness?: Readin
       ...(code ? { code } : {}),
     });
   });
+  app.use("*", restrictedCors(origins));
+  app.use("*", requestBodyLimit());
   app.get("/health/live", (context) => {
     context.header("Cache-Control", "no-store");
     return context.json({ status: "alive" });

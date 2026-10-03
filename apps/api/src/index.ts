@@ -21,7 +21,10 @@ function startApi() {
   }
   const database = createDatabase(config.DATABASE_URL);
   const readiness = createReadiness(database.check);
-  const app = createApi(logger, readiness);
+  const app = createApi(logger, readiness, [
+    config.KATHA_PUBLIC_APP_ORIGIN,
+    config.KATHA_PUBLIC_API_ORIGIN,
+  ]);
   const port = config.API_PORT;
 
   const server = createServer(

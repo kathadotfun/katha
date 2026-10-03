@@ -1,3 +1,4 @@
+import { apiErrorCodeSchema } from "@katha/shared";
 import type { ApiErrorCode } from "./errors.js";
 
 type LogSink = (line: string, level: "info" | "error") => void;
@@ -58,16 +59,7 @@ export function createLogger(
         durationMs: Number.isFinite(input.durationMs)
           ? Math.max(0, Math.round(input.durationMs))
           : 0,
-        code: [
-          "INVALID_REQUEST",
-          "UNAUTHENTICATED",
-          "FORBIDDEN",
-          "NOT_FOUND",
-          "CONFLICT",
-          "INTERNAL_ERROR",
-        ].includes(input.code ?? "")
-          ? input.code
-          : undefined,
+        code: apiErrorCodeSchema.safeParse(input.code).success ? input.code : undefined,
       });
     },
     transactionObserved(input: {
