@@ -20,7 +20,11 @@ it.each([
   expect(result.error).toBeUndefined();
   expect(result.status).toBe(1);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toContain("Invalid API configuration");
+  expect(JSON.parse(result.stderr)).toMatchObject({
+    event: "configuration_invalid",
+    level: "error",
+    message: "Invalid API configuration. Check the server environment.",
+  });
   expect(result.stderr).not.toContain("SYNTHETIC_DATABASE_SECRET");
   expect(result.stderr).not.toContain("fixture-password");
   expect(result.stderr).not.toContain("at readServerConfiguration");
@@ -53,7 +57,7 @@ it("starts on the configured listener and closes on SIGTERM", async () => {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("API startup timed out")), 3000);
       child.stdout.on("data", (chunk: Buffer) => {
-        if (chunk.toString().includes(`listening on port ${port}`)) {
+        if (chunk.toString().includes(`"port":${port}`)) {
           clearTimeout(timer);
           resolve();
         }

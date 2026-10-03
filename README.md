@@ -55,7 +55,8 @@ read models now preserve indexed events, gap-aware checkpoints, ownership,
 listings and sale distributions; chain ingestion remains planned. Fictional draft
 fixtures and fresh-database constraint tests complete the database foundation.
 The API now validates server settings before listening and provides an explicit
-public configuration allowlist.
+public configuration allowlist, fixed domain error responses, server-generated
+request IDs, and structured logs that omit private request data.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -83,6 +84,7 @@ outside the current scope.
 - [Next.js web application](docs/development/nextjs.md)
 - [Hono API service](docs/development/api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
+- [API errors and logging](docs/development/api-errors-logging.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

@@ -49,6 +49,16 @@ const serverConfigurationSchema = z.object({
   KATHA_PUBLIC_APP_ORIGIN: origin.default("http://localhost:3000"),
   KATHA_PUBLIC_API_ORIGIN: origin.default("http://localhost:3001"),
 });
+export class ConfigurationError extends Error {
+  constructor(
+    readonly fields: readonly string[],
+    message: string,
+  ) {
+    super(message);
+    this.name = "ConfigurationError";
+  }
+}
+
 export type ServerConfiguration = Readonly<z.infer<typeof serverConfigurationSchema>>;
 
 /** Only startup reads process.env; parsing never logs values or retains Zod errors. */
@@ -62,14 +72,18 @@ export function readServerConfiguration(
         /DATABASE|PASSWORD|SECRET|TOKEN|PRIVATE_KEY/.test(key),
     )
   ) {
-    throw new Error("Server-only settings must not use NEXT_PUBLIC_ aliases.");
+    throw new ConfigurationError(
+      [],
+      "Server-only settings must not use NEXT_PUBLIC_ aliases.",
+    );
   }
   const parsed = serverConfigurationSchema.safeParse(environment);
   if (!parsed.success) {
     const fields = [
       ...new Set(parsed.error.issues.map((issue) => String(issue.path[0]))),
     ].sort();
-    throw new Error(
+    throw new ConfigurationError(
+      fields,
       `Invalid API configuration: ${fields.join(", ")}. Check the server environment.`,
     );
   }

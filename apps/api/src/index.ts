@@ -1,19 +1,21 @@
 import { serve } from "@hono/node-server";
-import { Hono } from "hono";
-import { readServerConfiguration } from "./config.js";
+import { createApi } from "./app.js";
+import { createLogger } from "./logger.js";
+import { ConfigurationError, readServerConfiguration } from "./config.js";
 
 function startApi() {
+  const logger = createLogger();
   let config;
   try {
     config = readServerConfiguration(process.env);
   } catch (error) {
-    console.error(
-      error instanceof Error ? error.message : "Invalid API configuration.",
+    logger.configurationInvalid(
+      error instanceof ConfigurationError ? error.fields : [],
     );
     process.exitCode = 1;
     return;
   }
-  const app = new Hono();
+  const app = createApi(logger);
   const port = config.API_PORT;
 
   const server = serve(
@@ -23,9 +25,14 @@ function startApi() {
       hostname: config.API_HOST,
     },
     (info) => {
-      console.info(`Katha API listening on port ${info.port}`);
+      logger.serverStarted(info.port);
     },
   );
+
+  server.on("error", () => {
+    logger.serverFailed();
+    process.exitCode = 1;
+  });
 
   let isShuttingDown = false;
 
@@ -35,11 +42,11 @@ function startApi() {
     }
 
     isShuttingDown = true;
-    console.info(`Received ${signal}; closing the Katha API server.`);
+    logger.serverStopping(signal);
 
     server.close((error) => {
       if (error) {
-        console.error("The Katha API server did not close cleanly.", error);
+        logger.serverFailed();
         process.exitCode = 1;
       }
     });

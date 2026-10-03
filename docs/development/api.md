@@ -2,7 +2,8 @@
 
 The Node.js API lives in `apps/api`. It is a minimal Hono service using the
 `@hono/node-server` adapter. At this foundation step it has no product routes, so
-an HTTP request receives Hono's default not-found response.
+an HTTP request receives a JSON not-found response with a server-generated
+request ID. See [API errors and logging](api-errors-logging.md).
 
 ## Run the service
 
@@ -32,4 +33,5 @@ pnpm --filter @katha/api start
 
 `build` emits JavaScript to the ignored `apps/api/dist` directory, and `start`
 runs that compiled entry point. Environment validation and public configuration separation are implemented;
-readiness routes, request handling and product behavior remain later steps.
+domain error responses, request IDs, and private-data-safe structured logs are implemented.
+Readiness routes and product behavior remain later steps.
