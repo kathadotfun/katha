@@ -50,3 +50,14 @@ export {
   type FulfillmentRequestRecord,
   type NewFulfillmentRequestRecord,
 } from "./schema/custody-fulfillment.js";
+export {
+  wallets,
+  walletChallenges,
+  walletSessions,
+  type WalletRecord,
+  type NewWalletRecord,
+  type WalletChallengeRecord,
+  type NewWalletChallengeRecord,
+  type WalletSessionRecord,
+  type NewWalletSessionRecord,
+} from "./schema/wallet-sessions.js";

@@ -9,6 +9,9 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
 import {
   artists,
+  wallets,
+  walletChallenges,
+  walletSessions,
   custodyEvents,
   fulfillmentRequests,
   type NewFulfillmentRequestRecord,
@@ -51,7 +54,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(5);
+    expect(applicationCount).toBe(6);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -67,7 +70,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(6);
+    expect(result[0]?.count).toBe(7);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -122,7 +125,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(6);
+    ).toBe(7);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -1521,6 +1524,279 @@ it("serializes append-only manual custody and separates private fulfillment", as
       (await db.select().from(artworks).where(eq(artworks.id, artwork.id)))[0]
         ?.artistId,
     ).toBe(artist.id);
+  } finally {
+    await connection.close();
+    await second.close();
+  }
+}, 30_000);
+
+it("persists immutable wallets, single-use challenges and revocable hashed sessions", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url) throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const second = createDatabase(url);
+  const db = connection.db;
+  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+  const rejection = (constraint: string, code = "23514") => ({
+    cause: { code, constraint_name: constraint },
+  });
+  try {
+    const [wallet, other] = await db
+      .insert(wallets)
+      .values([
+        { address: "Vote111111111111111111111111111111111111111" },
+        { address: "11111111111111111111111111111111" },
+      ])
+      .returning();
+    if (!wallet || !other) throw new Error("Wallet fixture missing");
+    await expect(
+      db.insert(wallets).values({ address: wallet.address }),
+    ).rejects.toMatchObject(rejection("wallets_address_unique", "23505"));
+    await expect(
+      db.insert(wallets).values({ address: "invalid" }),
+    ).rejects.toMatchObject(rejection("wallets_address_format"));
+    await expect(
+      db
+        .update(wallets)
+        .set({ address: other.address })
+        .where(eq(wallets.id, wallet.id)),
+    ).rejects.toMatchObject(rejection("wallets_identity_immutable"));
+    const challengeInput = () => {
+      const nonce = digest(randomUUID());
+      const message = `Synthetic Katha challenge\nWallet: ${wallet.address}\nDomain: localhost:3000\nCluster: LOCALNET\nNonce: ${nonce}`;
+      return {
+        walletId: wallet.id,
+        nonce,
+        domain: "localhost:3000",
+        cluster: "LOCALNET" as const,
+        message,
+        messageHash: digest(message),
+        issuedAt: new Date(Date.now() - 60_000),
+        expiresAt: new Date(Date.now() + 600_000),
+      };
+    };
+    const input = challengeInput();
+    const [challenge] = await db.insert(walletChallenges).values(input).returning();
+    if (!challenge) throw new Error("Challenge missing");
+    await expect(db.insert(walletChallenges).values(input)).rejects.toMatchObject(
+      rejection("wallet_challenges_nonce_unique", "23505"),
+    );
+    const invalid = [
+      {
+        change: { nonce: "x".repeat(64) },
+        constraint: "wallet_challenges_nonce_format",
+      },
+      {
+        change: { domain: "https://localhost" },
+        constraint: "wallet_challenges_domain_format",
+      },
+      {
+        change: { messageHash: "0".repeat(64) },
+        constraint: "wallet_challenges_message_integrity",
+      },
+      { change: { message: "" }, constraint: "wallet_challenges_message_integrity" },
+      {
+        change: { expiresAt: new Date(0) },
+        constraint: "wallet_challenges_time_order",
+      },
+      {
+        change: { consumedAt: new Date() },
+        constraint: "wallet_challenges_unused_insert",
+      },
+    ];
+    for (const { change, constraint } of invalid) {
+      await expect(
+        db.insert(walletChallenges).values({ ...challengeInput(), ...change }),
+      ).rejects.toMatchObject(rejection(constraint));
+    }
+    await expect(
+      db
+        .insert(walletChallenges)
+        .values({ ...challengeInput(), walletId: randomUUID() }),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    const sessionInput = (challengeId: string, token = randomUUID()) => ({
+      walletId: wallet.id,
+      challengeId,
+      tokenHash: digest(token),
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    await expect(
+      db.insert(walletSessions).values(sessionInput(challenge.id)),
+    ).rejects.toMatchObject(rejection("wallet_sessions_challenge_valid"));
+    await expect(
+      db
+        .insert(walletSessions)
+        .values({ ...sessionInput(challenge.id), walletId: other.id }),
+    ).rejects.toMatchObject(rejection("wallet_sessions_challenge_wallet_fk", "23503"));
+    await expect(
+      db
+        .update(walletChallenges)
+        .set({ message: "changed" })
+        .where(eq(walletChallenges.id, challenge.id)),
+    ).rejects.toMatchObject(rejection("wallet_challenges_immutable"));
+    for (const offset of [-120_000, 120_000]) {
+      const [timed] = await db
+        .insert(walletChallenges)
+        .values({
+          ...challengeInput(),
+          issuedAt: new Date(Date.now() + offset),
+          expiresAt: new Date(Date.now() + offset + 60_000),
+        })
+        .returning();
+      if (!timed) throw new Error("Timed challenge missing");
+      await expect(
+        db
+          .update(walletChallenges)
+          .set({ consumedAt: new Date() })
+          .where(eq(walletChallenges.id, timed.id)),
+      ).rejects.toMatchObject(rejection("wallet_challenges_expired"));
+    }
+    // Separate pools compete for the same challenge; row locking permits only one issuance.
+    const results = await Promise.allSettled(
+      [db, second.db].map((pool) =>
+        pool.transaction(async (tx) => {
+          await tx
+            .update(walletChallenges)
+            .set({ consumedAt: new Date() })
+            .where(eq(walletChallenges.id, challenge.id));
+          return tx
+            .insert(walletSessions)
+            .values(sessionInput(challenge.id))
+            .returning();
+        }),
+      ),
+    );
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status !== "rejected")
+      throw new Error("Expected competing issuance rejection");
+    expect(failed.reason).toMatchObject(rejection("wallet_challenges_single_use"));
+    const [session] = await db
+      .select()
+      .from(walletSessions)
+      .where(eq(walletSessions.challengeId, challenge.id));
+    if (!session) throw new Error("Session missing");
+    expect(session.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(
+      (
+        await db
+          .select()
+          .from(walletChallenges)
+          .where(eq(walletChallenges.id, challenge.id))
+      )[0]?.consumedAt,
+    ).toBeInstanceOf(Date);
+    await expect(
+      db
+        .update(walletChallenges)
+        .set({ consumedAt: new Date() })
+        .where(eq(walletChallenges.id, challenge.id)),
+    ).rejects.toMatchObject(rejection("wallet_challenges_single_use"));
+    await expect(
+      db.insert(walletSessions).values(sessionInput(challenge.id)),
+    ).rejects.toMatchObject(rejection("wallet_sessions_challenge_unique", "23505"));
+    await expect(
+      db
+        .insert(walletSessions)
+        .values({ ...sessionInput(challenge.id), tokenHash: "bad" }),
+    ).rejects.toMatchObject(rejection("wallet_sessions_token_hash_format"));
+    await expect(
+      db
+        .insert(walletSessions)
+        .values({ ...sessionInput(challenge.id), expiresAt: new Date(0) }),
+    ).rejects.toMatchObject(rejection("wallet_sessions_expiry_valid"));
+    await expect(
+      db
+        .insert(walletSessions)
+        .values({ ...sessionInput(challenge.id), revokedAt: new Date() }),
+    ).rejects.toMatchObject(rejection("wallet_sessions_unrevoked_insert"));
+    await expect(
+      db
+        .update(walletSessions)
+        .set({ expiresAt: new Date(Date.now() + 7_200_000) })
+        .where(eq(walletSessions.id, session.id)),
+    ).rejects.toMatchObject(rejection("wallet_sessions_immutable"));
+    const [retry] = await db
+      .insert(walletChallenges)
+      .values(challengeInput())
+      .returning();
+    if (!retry) throw new Error("Retry challenge missing");
+    await expect(
+      db.transaction(async (tx) => {
+        await tx
+          .update(walletChallenges)
+          .set({ consumedAt: new Date() })
+          .where(eq(walletChallenges.id, retry.id));
+        await tx.insert(walletSessions).values(sessionInput(retry.id));
+        throw new Error("Synthetic issuance rollback");
+      }),
+    ).rejects.toThrow("Synthetic issuance rollback");
+    expect(
+      (
+        await db
+          .select()
+          .from(walletChallenges)
+          .where(eq(walletChallenges.id, retry.id))
+      )[0]?.consumedAt,
+    ).toBeNull();
+    expect(
+      await db
+        .select()
+        .from(walletSessions)
+        .where(eq(walletSessions.challengeId, retry.id)),
+    ).toHaveLength(0);
+    await db
+      .update(walletChallenges)
+      .set({ consumedAt: new Date() })
+      .where(eq(walletChallenges.id, retry.id));
+    await expect(
+      db
+        .insert(walletSessions)
+        .values({ ...sessionInput(retry.id), tokenHash: session.tokenHash }),
+    ).rejects.toMatchObject(rejection("wallet_sessions_token_hash_unique", "23505"));
+    await db.insert(walletSessions).values(sessionInput(retry.id));
+    await db
+      .update(walletSessions)
+      .set({ revokedAt: new Date() })
+      .where(eq(walletSessions.id, session.id));
+    for (const revokedAt of [null, new Date()]) {
+      await expect(
+        db
+          .update(walletSessions)
+          .set({ revokedAt })
+          .where(eq(walletSessions.id, session.id)),
+      ).rejects.toMatchObject(rejection("wallet_sessions_revocation_once"));
+    }
+    const active = await db
+      .select()
+      .from(walletSessions)
+      .where(
+        and(
+          eq(walletSessions.walletId, wallet.id),
+          sql`${walletSessions.revokedAt} IS NULL`,
+          sql`${walletSessions.expiresAt} > clock_timestamp()`,
+        ),
+      );
+    expect(active).toHaveLength(1);
+    await db.delete(walletChallenges).where(eq(walletChallenges.id, retry.id));
+    expect(
+      await db
+        .select()
+        .from(walletSessions)
+        .where(eq(walletSessions.challengeId, retry.id)),
+    ).toHaveLength(0);
+    await db.delete(wallets).where(eq(wallets.id, wallet.id));
+    expect(
+      await db
+        .select()
+        .from(walletChallenges)
+        .where(eq(walletChallenges.walletId, wallet.id)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(walletSessions)
+        .where(eq(walletSessions.walletId, wallet.id)),
+    ).toHaveLength(0);
   } finally {
     await connection.close();
     await second.close();

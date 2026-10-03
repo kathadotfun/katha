@@ -23,3 +23,4 @@ export {
   fulfillmentKind,
   fulfillmentStatus,
 } from "./custody-fulfillment.js";
+export { wallets, walletChallenges, walletSessions } from "./wallet-sessions.js";

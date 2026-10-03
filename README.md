@@ -48,7 +48,8 @@ migration commands, artist profiles, and artwork records with concurrent permane
 Katha ID allocation and immutable attribution, ordered media with explicit
 visibility, separate material records, and preserved metadata, verification and
 condition documents with explicit preparation and finalization states, plus
-manual custody history and separate private fulfillment requests.
+manual custody history and separate private fulfillment requests, plus unique
+wallet records, single-use challenges and hashed session persistence.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -82,6 +83,7 @@ outside the current scope.
 - [Artwork media and materials](docs/development/artwork-media-materials.md)
 - [Preserved artwork attestations](docs/development/artwork-attestations.md)
 - [Manual custody and private fulfillment](docs/development/custody-fulfillment.md)
+- [Wallet challenge and session persistence](docs/development/wallet-sessions.md)
 - [Local PostgreSQL service](docs/development/local-services.md)
 - [Foundation CI](docs/development/ci.md)
 - [Solana package boundary](docs/development/solana-package.md)
