@@ -91,3 +91,8 @@ export {
   type ArtworkSaleRecord,
   type NewArtworkSaleRecord,
 } from "./schema/blockchain-read-models.js";
+
+export {
+  createWalletSessionStore,
+  type WalletSessionStore,
+} from "./wallet-session-store.js";

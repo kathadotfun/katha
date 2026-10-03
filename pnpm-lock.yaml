@@ -205,6 +205,9 @@ importers:
       '@katha/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@katha/solana':
+        specifier: workspace:*
+        version: link:../../packages/solana
       hono:
         specifier: 4.13.11
         version: 4.13.11

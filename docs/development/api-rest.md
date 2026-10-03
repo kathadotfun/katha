@@ -1,8 +1,7 @@
 # REST boundaries
 
 The API installs its request-ID/error boundary first, then restricted CORS and
-body limits, before routes. The only application routes currently installed are
-health probes. Product endpoints will use the parsing helpers and shared schemas
+body limits, before routes. Installed routes are health probes and [wallet authentication](wallet-authentication.md). Product endpoints will use the parsing helpers and shared schemas
 as they are introduced.
 
 ## Shared contracts and validation
@@ -56,8 +55,8 @@ are Content-Type and Authorization. Unsupported preflight methods/headers receiv
 
 The testable app factory defaults to no permitted browser origins. Production
 passes explicit configuration. CORS does not authenticate clients, validate wallet
-sessions or replace authorization/CSRF defenses. Those belong to later session
-and role steps. Credentials support here does not create a session.
+sessions or replace authorization/CSRF defenses. Wallet sessions use explicit bearer authentication; administrative/verifier role
+enforcement remains a separate step. CORS does not create a session.
 
 ## Body limits
 

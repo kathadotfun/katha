@@ -62,3 +62,5 @@ export type {
   MetadataTransactionInput,
   MetadataRevisionInput,
 } from "./lifecycle.js";
+
+export { validateWalletAddress, verifyWalletSignature } from "./wallet-signature.js";

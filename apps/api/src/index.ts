@@ -1,4 +1,5 @@
-import { createDatabase } from "@katha/db";
+import { createWalletSessions } from "./wallet-session.js";
+import { createDatabase, createWalletSessionStore } from "@katha/db";
 import { createReadiness } from "./readiness.js";
 import { createShutdown } from "./shutdown.js";
 import { createServer } from "node:http";
@@ -21,10 +22,16 @@ function startApi() {
   }
   const database = createDatabase(config.DATABASE_URL);
   const readiness = createReadiness(database.check);
-  const app = createApi(logger, readiness, [
-    config.KATHA_PUBLIC_APP_ORIGIN,
-    config.KATHA_PUBLIC_API_ORIGIN,
-  ]);
+  const sessions = createWalletSessions(createWalletSessionStore(database.db), {
+    origin: config.KATHA_PUBLIC_APP_ORIGIN,
+    cluster: config.KATHA_CLUSTER,
+  });
+  const app = createApi(
+    logger,
+    readiness,
+    [config.KATHA_PUBLIC_APP_ORIGIN, config.KATHA_PUBLIC_API_ORIGIN],
+    sessions,
+  );
   const port = config.API_PORT;
 
   const server = createServer(

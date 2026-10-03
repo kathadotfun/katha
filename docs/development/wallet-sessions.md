@@ -20,11 +20,11 @@ allowed once, only within the validity interval. Consumption time comes from the
 database clock, overriding caller-supplied timestamps.
 
 The domain constraint checks basic text shape, including optional local ports.
-The future API must validate the configured host, port and cluster and construct
-and verify the complete message, including wallet, nonce and timestamps. The
+The [authentication API](wallet-authentication.md) validates the configured host, port and cluster and constructs
+and verifies the complete message, including wallet, nonce and timestamps. The
 database does not parse the signed message or verify signatures. Nonce generation,
 cryptographic entropy, bounded lifetimes and HTTP authentication are implemented
-with wallet authentication in a later step.
+through the wallet authentication boundary.
 
 Sessions store only a SHA-256 digest of an opaque token, with a wallet link,
 challenge link, immutable expiry and optional permanent revocation. The token hash
@@ -83,4 +83,5 @@ Run `pnpm db:test` with Docker running. Its disposable PostgreSQL database tests
 unique addresses/nonces/token hashes, message integrity, invalid time bounds,
 expired and future challenges, wrong-wallet sessions, concurrent replay,
 transaction rollback, immutable fields, permanent revocation and cascading cleanup.
-All data is synthetic. There are no API sessions or wallet signature endpoints yet.
+All data is synthetic. The runner also exercises the signed API lifecycle,
+concurrent verification and rollback using temporary test wallets.

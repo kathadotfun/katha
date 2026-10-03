@@ -1,3 +1,10 @@
+import {
+  walletChallengeResponseSchema,
+  walletSessionResponseSchema,
+} from "@katha/shared";
+import { createWalletSessionStore } from "@katha/db";
+import { createWalletSessions, hashSessionValue } from "../src/wallet-session.js";
+import { temporaryWallet } from "./fixtures/wallet.js";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
@@ -98,3 +105,129 @@ it("closes an opened PostgreSQL pool when the running API receives SIGTERM", asy
     await exited;
   }
 }, 8000);
+
+it("authenticates signed wallets with atomic replay protection and rollback in PostgreSQL", async () => {
+  const url = validateDatabaseUrl(process.env.KATHA_TEST_DATABASE_URL);
+  const target = new URL(url);
+  if (target.hostname !== "127.0.0.1" || target.pathname !== "/katha_test")
+    throw new Error("Expected disposable target");
+  const database = createDatabase(url);
+  const store = createWalletSessionStore(database.db);
+  const config = { origin: "http://localhost:3000", cluster: "localnet" as const };
+  const sessions = createWalletSessions(store, config);
+  const wallet = temporaryWallet();
+  const logs: string[] = [];
+  const app = createApi(
+    createLogger((line) => logs.push(line)),
+    undefined,
+    [config.origin],
+    sessions,
+  );
+  const post = (path: string, body: unknown) =>
+    app.request(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  try {
+    const challenge = walletChallengeResponseSchema.parse(
+      await (
+        await post("/auth/challenge", {
+          walletAddress: wallet.address,
+          cluster: "localnet",
+        })
+      ).json(),
+    );
+    const request = {
+      challengeId: challenge.challengeId,
+      walletAddress: wallet.address,
+      signature: wallet.signMessage(challenge.message),
+    };
+    const wrong = await post("/auth/verify", {
+      ...request,
+      signature: temporaryWallet().signMessage(challenge.message),
+    });
+    expect(wrong.status).toBe(401);
+    expect(
+      (await store.findChallenge(challenge.challengeId))?.challenge.consumedAt,
+    ).toBeNull();
+    const outcomes = await Promise.all([
+      post("/auth/verify", request),
+      post("/auth/verify", request),
+    ]);
+    expect(outcomes.map((response) => response.status).sort()).toEqual([200, 401]);
+    const winner = outcomes.find((response) => response.status === 200)!;
+    const result = walletSessionResponseSchema.parse(await winner.json());
+    const tokenHash = hashSessionValue(result.token);
+    const record = await store.findSession(tokenHash, "localhost:3000", "LOCALNET");
+    expect(record?.session.tokenHash).toBe(tokenHash);
+    expect(JSON.stringify(record?.session)).not.toContain(result.token);
+    expect(
+      await store.findSession(tokenHash, "evil.example", "LOCALNET"),
+    ).toBeUndefined();
+    expect(
+      await store.findSession(tokenHash, "localhost:3000", "DEVNET"),
+    ).toBeUndefined();
+    expect((await post("/auth/verify", request)).status).toBe(401);
+    expect(
+      (
+        await app.request("/auth/session", {
+          headers: { Authorization: `Bearer ${result.token}` },
+        })
+      ).status,
+    ).toBe(200);
+
+    const next = await sessions.challenge({
+      walletAddress: wallet.address,
+      cluster: "localnet",
+    });
+    const pending = (await store.findChallenge(next.challengeId))!;
+    await expect(
+      store.issueSession(
+        next.challengeId,
+        pending.challenge.walletId,
+        tokenHash,
+        new Date(Date.now() + 60_000),
+      ),
+    ).rejects.toBeDefined();
+    expect(
+      (await store.findChallenge(next.challengeId))?.challenge.consumedAt,
+    ).toBeNull();
+    const retry = await sessions.verify({
+      challengeId: next.challengeId,
+      walletAddress: wallet.address,
+      signature: wallet.signMessage(next.message),
+    });
+    expect(retry.token).not.toBe(result.token);
+
+    for (const offset of [-10 * 60_000, 10 * 60_000]) {
+      const skewed = createWalletSessions(
+        store,
+        config,
+        () => new Date(Date.now() + offset),
+      );
+      const invalid = await skewed.challenge({
+        walletAddress: wallet.address,
+        cluster: "localnet",
+      });
+      await expect(
+        skewed.verify({
+          challengeId: invalid.challengeId,
+          walletAddress: wallet.address,
+          signature: wallet.signMessage(invalid.message),
+        }),
+      ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+      expect(
+        (await store.findChallenge(invalid.challengeId))?.challenge.consumedAt,
+      ).toBeNull();
+    }
+    await sessions.logout(`Bearer ${result.token}`);
+    await expect(sessions.authenticate(`Bearer ${result.token}`)).rejects.toMatchObject(
+      { code: "UNAUTHENTICATED" },
+    );
+    for (const value of [result.token, request.signature, challenge.message])
+      expect(logs.join("")).not.toContain(value);
+  } finally {
+    await database.close();
+  }
+}, 10_000);

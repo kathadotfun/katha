@@ -1,3 +1,6 @@
+import type { WalletSessionBoundary } from "./wallet-session.js";
+import { walletChallengeRequestSchema, walletVerifyRequestSchema } from "@katha/shared";
+import { parseJson } from "./http.js";
 import { restrictedCors, requestBodyLimit } from "./http.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
@@ -11,6 +14,7 @@ export function createApi(
   logger: ApiLogger = createLogger(),
   readiness?: Readiness,
   origins: readonly string[] = [],
+  sessions?: WalletSessionBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -42,6 +46,12 @@ export function createApi(
       ...(code ? { code } : {}),
     });
   });
+  if (sessions) {
+    app.use("/auth/*", async (c, next) => {
+      c.header("Cache-Control", "no-store");
+      await next();
+    });
+  }
   app.use("*", restrictedCors(origins));
   app.use("*", requestBodyLimit());
   app.get("/health/live", (context) => {
@@ -53,6 +63,24 @@ export function createApi(
     const ready = readiness ? await readiness.check() : false;
     return context.json({ status: ready ? "ready" : "unavailable" }, ready ? 200 : 503);
   });
+  if (sessions) {
+    app.post("/auth/challenge", async (c) =>
+      c.json(
+        await sessions.challenge(await parseJson(c, walletChallengeRequestSchema)),
+        201,
+      ),
+    );
+    app.post("/auth/verify", async (c) =>
+      c.json(await sessions.verify(await parseJson(c, walletVerifyRequestSchema))),
+    );
+    app.get("/auth/session", async (c) =>
+      c.json(await sessions.authenticate(c.req.header("Authorization"))),
+    );
+    app.post("/auth/logout", async (c) => {
+      await sessions.logout(c.req.header("Authorization"));
+      return c.body(null, 204);
+    });
+  }
   app.onError(errorResponse);
   app.notFound((context) => errorResponse(new DomainError("NOT_FOUND"), context));
   return app;

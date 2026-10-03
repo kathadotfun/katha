@@ -82,3 +82,18 @@ export {
   paginatedResponseSchema,
 } from "./http.js";
 export type { ApiErrorCode, ApiErrorResponse, Pagination } from "./http.js";
+
+export {
+  walletClusterSchema,
+  walletChallengeRequestSchema,
+  walletChallengeResponseSchema,
+  walletVerifyRequestSchema,
+  walletSessionSchema,
+  walletSessionResponseSchema,
+} from "./wallet-session.js";
+export type {
+  WalletChallengeRequest,
+  WalletChallengeResponse,
+  WalletVerifyRequest,
+  WalletSession,
+} from "./wallet-session.js";

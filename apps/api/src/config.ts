@@ -46,7 +46,15 @@ const serverConfigurationSchema = z.object({
     .default(3001),
   DATABASE_URL: z.string().refine(validDatabaseUrl),
   KATHA_CLUSTER: z.enum(["localnet", "devnet"]).default("localnet"),
-  KATHA_PUBLIC_APP_ORIGIN: origin.default("http://localhost:3000"),
+  KATHA_PUBLIC_APP_ORIGIN: origin
+    .refine((value) => {
+      const host = new URL(value).host;
+      return (
+        host.length <= 253 &&
+        /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?(:[0-9]{1,5})?$/.test(host)
+      );
+    })
+    .default("http://localhost:3000"),
   KATHA_PUBLIC_API_ORIGIN: origin.default("http://localhost:3001"),
 });
 export class ConfigurationError extends Error {

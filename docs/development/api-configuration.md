@@ -92,3 +92,8 @@ listening, configured startup and SIGTERM shutdown.
 API pins Zod 4.6.5 and Vitest 5.0.3, verified against package registry releases on
 2026-10-04. Existing runtime and other workspace dependency pins remain unchanged.
 Zod schema behavior follows the [official API documentation](https://zod.dev/api).
+
+Wallet authentication derives its domain from the configured app origin. Its
+authority must be a DNS name or IPv4 address, optionally a port, at most 253 characters
+to fit existing challenge storage. IPv6 app origins are rejected before listening;
+the API listener can still use IPv6. See [wallet authentication](wallet-authentication.md).

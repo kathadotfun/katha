@@ -12,6 +12,7 @@ From the repository root with the pinned Node.js and pnpm versions selected:
 pnpm install --frozen-lockfile
 pnpm --filter @katha/db build
 pnpm --filter @katha/shared build
+pnpm --filter @katha/solana build
 pnpm --filter @katha/api dev
 ```
 
@@ -37,4 +38,6 @@ pnpm --filter @katha/api start
 runs that compiled entry point. Environment validation and public configuration separation are implemented;
 domain error responses, request IDs, and private-data-safe structured logs are implemented.
 Database readiness and [REST boundaries](api-rest.md) are implemented; product
-endpoints remain later steps.
+artist/artwork endpoints remain later steps.
+[Wallet authentication](wallet-authentication.md) adds challenge, verification,
+session lookup and logout routes; role enforcement remains planned.

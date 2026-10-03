@@ -111,3 +111,12 @@ describe("server configuration", () => {
     ).toThrow("Server-only settings");
   });
 });
+
+it("rejects app authorities unsupported by challenge persistence before listening", () => {
+  expect(() =>
+    readServerConfiguration({
+      DATABASE_URL: "postgres://localhost/katha_test",
+      KATHA_PUBLIC_APP_ORIGIN: "http://[::1]:3000",
+    }),
+  ).toThrow("KATHA_PUBLIC_APP_ORIGIN");
+});
