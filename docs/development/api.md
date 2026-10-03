@@ -13,7 +13,11 @@ pnpm install --frozen-lockfile
 pnpm --filter @katha/api dev
 ```
 
-The service listens at <http://localhost:3001>. Stop it with `Ctrl+C`; the server
+First copy the safe root `.env.example` to ignored `.env` and configure
+`DATABASE_URL`. Startup validation fails before listening if required settings are
+missing or invalid. The service defaults to <http://localhost:3001>, bound to
+loopback; configure its listener explicitly for LAN use. See
+[API environment and public configuration](api-configuration.md). Stop it with `Ctrl+C`; the server
 closes on SIGINT and SIGTERM.
 
 ## Check and build
@@ -21,10 +25,11 @@ closes on SIGINT and SIGTERM.
 ```bash
 pnpm --filter @katha/api lint
 pnpm --filter @katha/api typecheck
+pnpm --filter @katha/api test
 pnpm --filter @katha/api build
 pnpm --filter @katha/api start
 ```
 
 `build` emits JavaScript to the ignored `apps/api/dist` directory, and `start`
-runs that compiled entry point. Environment validation, readiness routes, request
-handling, and product behavior are added in later steps.
+runs that compiled entry point. Environment validation and public configuration separation are implemented;
+readiness routes, request handling and product behavior remain later steps.

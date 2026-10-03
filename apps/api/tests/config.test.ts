@@ -1,0 +1,113 @@
+import { describe, expect, it } from "vitest";
+import { readServerConfiguration, toPublicConfiguration } from "../src/config.js";
+
+const databaseUrl = "postgres://synthetic:fixture-password@127.0.0.1:5432/katha_test";
+const environment = { DATABASE_URL: databaseUrl };
+
+describe("server configuration", () => {
+  it("defaults the local listener and cluster while requiring the database URL", () => {
+    expect(readServerConfiguration(environment)).toMatchObject({
+      API_HOST: "127.0.0.1",
+      API_PORT: 3001,
+      KATHA_CLUSTER: "localnet",
+    });
+    expect(() => readServerConfiguration({})).toThrow("DATABASE_URL");
+  });
+  it("accepts explicit Devnet and LAN origins without equating runtime production with mainnet", () => {
+    const config = readServerConfiguration({
+      ...environment,
+      NODE_ENV: "production",
+      API_HOST: "0.0.0.0",
+      API_PORT: "4001",
+      KATHA_CLUSTER: "devnet",
+      KATHA_PUBLIC_APP_ORIGIN: "http://192.168.1.20:3000/",
+      KATHA_PUBLIC_API_ORIGIN: "http://192.168.1.20:4001",
+    });
+    expect(config.API_PORT).toBe(4001);
+    expect(toPublicConfiguration(config)).toEqual({
+      cluster: "devnet",
+      appOrigin: "http://192.168.1.20:3000",
+      apiOrigin: "http://192.168.1.20:4001",
+    });
+  });
+  it.each(["mainnet", "mainnet-beta", "testnet", "", "DEVNET"])(
+    "rejects unsupported cluster %s",
+    (KATHA_CLUSTER) => {
+      expect(() => readServerConfiguration({ ...environment, KATHA_CLUSTER })).toThrow(
+        "KATHA_CLUSTER",
+      );
+    },
+  );
+  it.each(["0", "65536", "3001.5", "1e3", " 3001", "03001", "", "-1"])(
+    "rejects invalid port %s",
+    (API_PORT) => {
+      expect(() => readServerConfiguration({ ...environment, API_PORT })).toThrow(
+        "API_PORT",
+      );
+    },
+  );
+  it.each([
+    "https://localhost/db",
+    "postgres://localhost",
+    "postgres://localhost/db#secret",
+    " postgres://localhost/db",
+    "",
+  ])("rejects malformed database URL without values %s", (DATABASE_URL) => {
+    expect(() => readServerConfiguration({ DATABASE_URL })).toThrow("DATABASE_URL");
+  });
+  it.each([
+    "https://user:secret@example.com",
+    "https://example.com/path",
+    "https://example.com?token=secret",
+    "https://example.com#secret",
+    "file:///tmp",
+    " https://example.com",
+  ])("rejects non-origin public URLs %s", (KATHA_PUBLIC_APP_ORIGIN) => {
+    expect(() =>
+      readServerConfiguration({ ...environment, KATHA_PUBLIC_APP_ORIGIN }),
+    ).toThrow("KATHA_PUBLIC_APP_ORIGIN");
+  });
+  it("reports only failed setting names, omitting all synthetic secret values and validation causes", () => {
+    try {
+      readServerConfiguration({
+        DATABASE_URL: "SYNTHETIC_SECRET_VALUE",
+        API_PORT: "ANOTHER_SECRET",
+      });
+      throw new Error("Expected invalid configuration");
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      if (!(error instanceof Error)) throw error;
+      expect(error.message).toContain("DATABASE_URL");
+      expect(error.message).toContain("API_PORT");
+      expect(JSON.stringify(error)).not.toContain("SYNTHETIC_SECRET_VALUE");
+      expect(error.message).not.toContain("SECRET");
+      expect(error.cause).toBeUndefined();
+    }
+  });
+  it("exposes only the public allowlist, ignoring arbitrary environment secrets", () => {
+    const config = readServerConfiguration({
+      ...environment,
+      SOME_PROVIDER_TOKEN: "SYNTHETIC_SECRET",
+    });
+    const publicConfig = toPublicConfiguration(config);
+    expect(Object.keys(publicConfig).sort()).toEqual([
+      "apiOrigin",
+      "appOrigin",
+      "cluster",
+    ]);
+    expect(JSON.stringify(publicConfig)).not.toContain(databaseUrl);
+    expect(JSON.stringify(publicConfig)).not.toContain("SYNTHETIC_SECRET");
+    expect(Object.isFrozen(config)).toBe(true);
+    expect(Object.isFrozen(publicConfig)).toBe(true);
+  });
+  it.each([
+    "NEXT_PUBLIC_DATABASE_URL",
+    "NEXT_PUBLIC_KATHA_DB_PASSWORD",
+    "NEXT_PUBLIC_PROVIDER_TOKEN",
+    "NEXT_PUBLIC_PRIVATE_KEY",
+  ])("rejects public aliases for server-only settings %s", (key) => {
+    expect(() =>
+      readServerConfiguration({ ...environment, [key]: "SYNTHETIC_SECRET" }),
+    ).toThrow("Server-only settings");
+  });
+});
