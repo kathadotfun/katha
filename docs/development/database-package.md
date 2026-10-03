@@ -8,7 +8,8 @@ and [artwork identities](artwork-identities.md), with related
 [media and materials](artwork-media-materials.md) and
 [preserved attestations](artwork-attestations.md),
 [manual custody and private fulfillment](custody-fulfillment.md), and
-[wallet challenges and sessions](wallet-sessions.md).
+[wallet challenges and sessions](wallet-sessions.md), plus
+[pending blockchain operations and receipts](blockchain-operations.md).
 
 ## Local configuration
 
@@ -36,8 +37,9 @@ The first migration creates artist profiles; the second creates artwork records
 and category counters. The third adds ordered media and material tables; the
 fourth adds metadata versions, verifications and condition reports. The fifth
 adds manual custody history and private fulfillment requests. The sixth adds
-wallets, single-use challenges and hashed sessions. The
-artwork identity, attestation, custody and wallet-session migrations also contain reviewed SQL functions
+wallets, single-use challenges and hashed sessions. The seventh adds immutable
+blockchain operations and retained transaction receipts. The
+artwork identity, attestation, custody, wallet-session and blockchain-operation migrations also contain reviewed SQL functions
 and triggers for allocation and permanence, which the table snapshot does not
 represent. Review the SQL, snapshot and journal before applying; Drizzle records
 applied versions in its migration log schema/table.

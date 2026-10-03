@@ -43,6 +43,13 @@
       "when": 1791046030177,
       "tag": "0005_wallet_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791047976336,
+      "tag": "0006_blockchain_operations",
+      "breakpoints": true
     }
   ]
 }

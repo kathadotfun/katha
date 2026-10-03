@@ -9,6 +9,9 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
 import {
   artists,
+  blockchainOperations,
+  transactionReceipts,
+  type NewBlockchainOperationRecord,
   wallets,
   walletChallenges,
   walletSessions,
@@ -54,7 +57,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(6);
+    expect(applicationCount).toBe(7);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -70,7 +73,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(7);
+    expect(result[0]?.count).toBe(8);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -125,7 +128,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(7);
+    ).toBe(8);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -1796,6 +1799,307 @@ it("persists immutable wallets, single-use challenges and revocable hashed sessi
         .select()
         .from(walletSessions)
         .where(eq(walletSessions.walletId, wallet.id)),
+    ).toHaveLength(0);
+  } finally {
+    await connection.close();
+    await second.close();
+  }
+}, 30_000);
+
+it("preserves idempotent operation expectations and reconciles immutable transaction attempts", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const second = createDatabase(url);
+  const db = connection.db;
+  const rejection = (constraint: string, code = "23514") => ({
+    cause: { code, constraint_name: constraint },
+  });
+  const address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "operation-artist",
+        displayName: "Synthetic Artist",
+        biography: "Synthetic biography",
+        region: "Lalitpur",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic operations",
+        creationYear: 2026,
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw new Error("Operation fixtures missing");
+    const input: NewBlockchainOperationRecord = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET",
+      kind: "REGISTER_ARTWORK",
+      idempotencyKey: "synthetic-register-1",
+      requestHash: "a".repeat(64),
+      programAddress: address,
+      expectedAccounts: [address, "11111111111111111111111111111111"],
+      expectedHashes: ["b".repeat(64)],
+    };
+    const race = await Promise.allSettled(
+      [db, second.db].map((pool) =>
+        pool.insert(blockchainOperations).values(input).returning(),
+      ),
+    );
+    expect(race.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const failed = race.find((result) => result.status === "rejected");
+    if (failed?.status !== "rejected")
+      throw new Error("Expected duplicate key rejection");
+    expect(failed.reason).toMatchObject(
+      rejection("blockchain_operations_idempotency_unique", "23505"),
+    );
+    const [operation] = await db
+      .select()
+      .from(blockchainOperations)
+      .where(eq(blockchainOperations.idempotencyKey, input.idempotencyKey));
+    if (!operation) throw new Error("Operation missing");
+    const operationStatus = async () =>
+      (
+        await db
+          .select()
+          .from(blockchainOperations)
+          .where(eq(blockchainOperations.id, operation.id))
+      )[0]?.status;
+    expect(await operationStatus()).toBe("PREPARED");
+    await expect(
+      db.insert(blockchainOperations).values({ ...input, requestHash: "c".repeat(64) }),
+    ).rejects.toMatchObject(
+      rejection("blockchain_operations_idempotency_unique", "23505"),
+    );
+    await db.insert(blockchainOperations).values({ ...input, cluster: "DEVNET" });
+    const invalid: {
+      change: Partial<NewBlockchainOperationRecord>;
+      constraint: string;
+    }[] = [
+      {
+        change: { idempotencyKey: "with space" },
+        constraint: "blockchain_operations_key_format",
+      },
+      {
+        change: { requestHash: "bad" },
+        constraint: "blockchain_operations_request_hash_format",
+      },
+      {
+        change: { programAddress: "bad" },
+        constraint: "blockchain_operations_program_format",
+      },
+      {
+        change: { expectedAccounts: [] },
+        constraint: "blockchain_operations_accounts_valid",
+      },
+      {
+        change: { expectedAccounts: ["bad"] },
+        constraint: "blockchain_operations_accounts_valid",
+      },
+      {
+        change: { expectedHashes: ["bad"] },
+        constraint: "blockchain_operations_hashes_valid",
+      },
+    ];
+    for (const { change, constraint } of invalid) {
+      await expect(
+        db
+          .insert(blockchainOperations)
+          .values({ ...input, idempotencyKey: randomUUID(), ...change }),
+      ).rejects.toMatchObject(rejection(constraint));
+    }
+    for (const change of [{ walletId: randomUUID() }, { artworkId: randomUUID() }]) {
+      await expect(
+        db
+          .insert(blockchainOperations)
+          .values({ ...input, idempotencyKey: randomUUID(), ...change }),
+      ).rejects.toMatchObject({ cause: { code: "23503" } });
+    }
+    await expect(
+      db
+        .insert(blockchainOperations)
+        .values({ ...input, idempotencyKey: randomUUID(), status: "FINALIZED" }),
+    ).rejects.toMatchObject(rejection("blockchain_operations_prepared_insert"));
+    await expect(
+      db
+        .update(blockchainOperations)
+        .set({ requestHash: "c".repeat(64) })
+        .where(eq(blockchainOperations.id, operation.id)),
+    ).rejects.toMatchObject(rejection("blockchain_operations_immutable"));
+    await expect(
+      db
+        .update(blockchainOperations)
+        .set({ status: "FINALIZED" })
+        .where(eq(blockchainOperations.id, operation.id)),
+    ).rejects.toMatchObject(rejection("blockchain_operations_receipt_status"));
+    const attemptInput = (character: string) => ({
+      operationId: operation.id,
+      cluster: "LOCALNET" as const,
+      signature: character.repeat(64),
+      messageHash: "d".repeat(64),
+    });
+    await expect(
+      db
+        .insert(transactionReceipts)
+        .values({ ...attemptInput("2"), cluster: "DEVNET" }),
+    ).rejects.toMatchObject(
+      rejection("transaction_receipts_operation_cluster_fk", "23503"),
+    );
+    await expect(
+      db
+        .insert(transactionReceipts)
+        .values({ ...attemptInput("2"), operationId: randomUUID() }),
+    ).rejects.toMatchObject(
+      rejection("transaction_receipts_operation_cluster_fk", "23503"),
+    );
+    await expect(
+      db
+        .insert(transactionReceipts)
+        .values({ ...attemptInput("2"), status: "FINALIZED" }),
+    ).rejects.toMatchObject(rejection("transaction_receipts_unknown_insert"));
+    await expect(
+      db.insert(transactionReceipts).values({ ...attemptInput("2"), signature: "bad" }),
+    ).rejects.toMatchObject(rejection("transaction_receipts_signature_format"));
+    await expect(
+      db
+        .insert(transactionReceipts)
+        .values({ ...attemptInput("2"), messageHash: "bad" }),
+    ).rejects.toMatchObject(rejection("transaction_receipts_message_hash_format"));
+    const [attempt] = await db
+      .insert(transactionReceipts)
+      .values(attemptInput("2"))
+      .returning();
+    if (!attempt) throw new Error("Attempt missing");
+    expect(await operationStatus()).toBe("UNKNOWN");
+    await expect(
+      db.insert(transactionReceipts).values(attemptInput("2")),
+    ).rejects.toMatchObject(
+      rejection("transaction_receipts_signature_unique", "23505"),
+    );
+    await expect(
+      db
+        .update(transactionReceipts)
+        .set({ signature: "3".repeat(64) })
+        .where(eq(transactionReceipts.id, attempt.id)),
+    ).rejects.toMatchObject(rejection("transaction_receipts_immutable"));
+    await expect(
+      db
+        .update(transactionReceipts)
+        .set({ status: "FAILED" })
+        .where(eq(transactionReceipts.id, attempt.id)),
+    ).rejects.toMatchObject(rejection("transaction_receipts_outcome_complete"));
+    await db
+      .update(transactionReceipts)
+      .set({ status: "FAILED", failureCode: "TRANSACTION_ERROR" })
+      .where(eq(transactionReceipts.id, attempt.id));
+    expect(await operationStatus()).toBe("FAILED");
+    await expect(
+      db
+        .update(transactionReceipts)
+        .set({ status: "UNKNOWN", failureCode: null })
+        .where(eq(transactionReceipts.id, attempt.id)),
+    ).rejects.toMatchObject(rejection("transaction_receipts_terminal"));
+    // A new signed attempt retains the failed receipt; timeout uncertainty never means failure.
+    const attempts = await db
+      .insert(transactionReceipts)
+      .values([attemptInput("3"), attemptInput("4")])
+      .returning();
+    expect(await operationStatus()).toBe("UNKNOWN");
+    const outcome = {
+      status: "FINALIZED" as const,
+      slot: 9007199254740993n,
+      chainRecordedAt: new Date(Date.now() - 2000),
+      finalizedAt: new Date(Date.now() - 1000),
+    };
+    const firstAttempt = attempts[0];
+    if (!firstAttempt) throw new Error("Retry missing");
+    await expect(
+      db
+        .update(transactionReceipts)
+        .set({ status: "FINALIZED" })
+        .where(eq(transactionReceipts.id, firstAttempt.id)),
+    ).rejects.toMatchObject(rejection("transaction_receipts_outcome_complete"));
+    await expect(
+      db.transaction(async (tx) => {
+        await tx
+          .update(transactionReceipts)
+          .set(outcome)
+          .where(eq(transactionReceipts.id, firstAttempt.id));
+        throw new Error("Synthetic reconciliation rollback");
+      }),
+    ).rejects.toThrow("Synthetic reconciliation rollback");
+    expect(await operationStatus()).toBe("UNKNOWN");
+    const outcomes = await Promise.allSettled(
+      attempts.map((receipt, i) =>
+        (i ? second.db : db)
+          .update(transactionReceipts)
+          .set(outcome)
+          .where(eq(transactionReceipts.id, receipt.id))
+          .returning(),
+      ),
+    );
+    expect(outcomes.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = outcomes.find((result) => result.status === "rejected");
+    if (rejected?.status !== "rejected")
+      throw new Error("Expected second success rejection");
+    expect(rejected.reason).toMatchObject(
+      rejection("transaction_receipts_one_success"),
+    );
+    expect(await operationStatus()).toBe("FINALIZED");
+    const receipts = await db
+      .select()
+      .from(transactionReceipts)
+      .where(eq(transactionReceipts.operationId, operation.id));
+    expect(receipts).toHaveLength(3);
+    const success = receipts.find((receipt) => receipt.status === "FINALIZED");
+    const pending = receipts.find((receipt) => receipt.status === "UNKNOWN");
+    if (!success || !pending) throw new Error("Reconciliation records missing");
+    expect(success.slot).toBe(9007199254740993n);
+    await expect(
+      db
+        .update(transactionReceipts)
+        .set({ ...outcome, slot: 1n })
+        .where(eq(transactionReceipts.id, success.id)),
+    ).rejects.toMatchObject(rejection("transaction_receipts_terminal"));
+    await db
+      .update(transactionReceipts)
+      .set({ status: "FAILED", failureCode: "EXPIRED_BLOCKHASH" })
+      .where(eq(transactionReceipts.id, pending.id));
+    expect(await operationStatus()).toBe("FINALIZED");
+    await expect(
+      db.insert(transactionReceipts).values(attemptInput("5")),
+    ).rejects.toMatchObject(rejection("transaction_receipts_unknown_insert"));
+    await expect(
+      db.delete(transactionReceipts).where(eq(transactionReceipts.id, attempt.id)),
+    ).rejects.toMatchObject(rejection("transaction_receipts_permanent"));
+    await expect(
+      db.delete(blockchainOperations).where(eq(blockchainOperations.id, operation.id)),
+    ).rejects.toMatchObject(rejection("blockchain_operations_permanent"));
+    await expect(
+      db.delete(wallets).where(eq(wallets.id, wallet.id)),
+    ).rejects.toMatchObject({ cause: { code: "23001" } });
+    // Persistence never manufactures verification or ownership history from receipt status.
+    expect(
+      await db
+        .select()
+        .from(verifications)
+        .where(eq(verifications.artworkId, artwork.id)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(custodyEvents)
+        .where(eq(custodyEvents.artworkId, artwork.id)),
     ).toHaveLength(0);
   } finally {
     await connection.close();

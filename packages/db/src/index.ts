@@ -61,3 +61,14 @@ export {
   type WalletSessionRecord,
   type NewWalletSessionRecord,
 } from "./schema/wallet-sessions.js";
+export {
+  blockchainOperations,
+  transactionReceipts,
+  blockchainOperationKind,
+  blockchainOperationStatus,
+  transactionReceiptStatus,
+  type BlockchainOperationRecord,
+  type NewBlockchainOperationRecord,
+  type TransactionReceiptRecord,
+  type NewTransactionReceiptRecord,
+} from "./schema/blockchain-operations.js";
