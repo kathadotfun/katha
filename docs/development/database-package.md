@@ -6,7 +6,8 @@ Drizzle supplies typed queries and transactions. Package imports neither read
 configuration nor open connections. Domain tables store [artist profiles](artist-profiles.md)
 and [artwork identities](artwork-identities.md), with related
 [media and materials](artwork-media-materials.md) and
-[preserved attestations](artwork-attestations.md).
+[preserved attestations](artwork-attestations.md),
+[manual custody and private fulfillment](custody-fulfillment.md).
 
 ## Local configuration
 
@@ -32,8 +33,9 @@ can run without a database URL or server. Applying migrations requires
 `drizzle.config.ts` selects PostgreSQL, `src/schema/index.ts` and `drizzle/`.
 The first migration creates artist profiles; the second creates artwork records
 and category counters. The third adds ordered media and material tables; the
-fourth adds metadata versions, verifications and condition reports. The
-artwork identity and attestation migrations also contain reviewed SQL functions
+fourth adds metadata versions, verifications and condition reports. The fifth
+adds manual custody history and private fulfillment requests. The
+artwork identity, attestation and custody migrations also contain reviewed SQL functions
 and triggers for allocation and permanence, which the table snapshot does not
 represent. Review the SQL, snapshot and journal before applying; Drizzle records
 applied versions in its migration log schema/table.

@@ -1,0 +1,1732 @@
+{
+  "id": "eaec989c-7031-43ba-ad05-9f89a1b1dbea",
+  "prevId": "f63a2e3b-f295-432e-946e-38e5193f1795",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.artists": {
+      "name": "artists",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "biography": {
+          "name": "biography",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "region": {
+          "name": "region",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "traditions": {
+          "name": "traditions",
+          "type": "varchar(120)[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "public_links": {
+          "name": "public_links",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "ARRAY[]::text[]"
+        },
+        "profile_image_url": {
+          "name": "profile_image_url",
+          "type": "varchar(2048)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creator_wallet": {
+          "name": "creator_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payout_wallet": {
+          "name": "payout_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verification_status": {
+          "name": "verification_status",
+          "type": "artist_verification_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'UNVERIFIED'"
+        },
+        "verified_by_wallet": {
+          "name": "verified_by_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "verified_at": {
+          "name": "verified_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artists_slug_unique": {
+          "name": "artists_slug_unique",
+          "nullsNotDistinct": false,
+          "columns": ["slug"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artists_slug_format": {
+          "name": "artists_slug_format",
+          "value": "\"artists\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$'"
+        },
+        "artists_display_name_nonblank": {
+          "name": "artists_display_name_nonblank",
+          "value": "\"artists\".\"display_name\" ~ '[^[:space:]]'"
+        },
+        "artists_biography_nonblank": {
+          "name": "artists_biography_nonblank",
+          "value": "\"artists\".\"biography\" ~ '[^[:space:]]'"
+        },
+        "artists_region_nonblank": {
+          "name": "artists_region_nonblank",
+          "value": "\"artists\".\"region\" ~ '[^[:space:]]'"
+        },
+        "artists_traditions_valid": {
+          "name": "artists_traditions_valid",
+          "value": "cardinality(\"artists\".\"traditions\") BETWEEN 1 AND 20 AND array_ndims(\"artists\".\"traditions\") = 1 AND array_position(\"artists\".\"traditions\", NULL) IS NULL AND array_to_string(\"artists\".\"traditions\", chr(31)) !~ ('(^|' || chr(31) || ')[[:space:]]*(' || chr(31) || '|$)')"
+        },
+        "artists_public_links_valid": {
+          "name": "artists_public_links_valid",
+          "value": "cardinality(\"artists\".\"public_links\") <= 10 AND coalesce(array_ndims(\"artists\".\"public_links\"), 1) = 1 AND array_position(\"artists\".\"public_links\", NULL) IS NULL AND (cardinality(\"artists\".\"public_links\") = 0 OR array_to_string(\"artists\".\"public_links\", chr(31)) ~ ('^https?://[^[:space:]' || chr(31) || ']+(' || chr(31) || 'https?://[^[:space:]' || chr(31) || ']+)*$'))"
+        },
+        "artists_profile_image_url_format": {
+          "name": "artists_profile_image_url_format",
+          "value": "\"artists\".\"profile_image_url\" IS NULL OR \"artists\".\"profile_image_url\" ~ '^https?://[^[:space:]]+$'"
+        },
+        "artists_creator_wallet_format": {
+          "name": "artists_creator_wallet_format",
+          "value": "\"artists\".\"creator_wallet\" IS NULL OR \"artists\".\"creator_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_payout_wallet_format": {
+          "name": "artists_payout_wallet_format",
+          "value": "\"artists\".\"payout_wallet\" IS NULL OR \"artists\".\"payout_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_verifier_wallet_format": {
+          "name": "artists_verifier_wallet_format",
+          "value": "\"artists\".\"verified_by_wallet\" IS NULL OR \"artists\".\"verified_by_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artists_manual_verification_complete": {
+          "name": "artists_manual_verification_complete",
+          "value": "(\"artists\".\"verification_status\" = 'UNVERIFIED' AND \"artists\".\"verified_by_wallet\" IS NULL AND \"artists\".\"verified_at\" IS NULL) OR (\"artists\".\"verification_status\" = 'VERIFIED' AND \"artists\".\"verified_by_wallet\" IS NOT NULL AND \"artists\".\"verified_at\" IS NOT NULL)"
+        },
+        "artists_timestamp_order": {
+          "name": "artists_timestamp_order",
+          "value": "\"artists\".\"updated_at\" >= \"artists\".\"created_at\" AND (\"artists\".\"verified_at\" IS NULL OR \"artists\".\"verified_at\" BETWEEN \"artists\".\"created_at\" AND \"artists\".\"updated_at\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artwork_id_counters": {
+      "name": "artwork_id_counters",
+      "schema": "",
+      "columns": {
+        "category": {
+          "name": "category",
+          "type": "artwork_category",
+          "typeSchema": "public",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "last_value": {
+          "name": "last_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "artwork_id_counters_range": {
+          "name": "artwork_id_counters_range",
+          "value": "\"artwork_id_counters\".\"last_value\" BETWEEN 1 AND 999999"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artwork_materials": {
+      "name": "artwork_materials",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "artwork_materials_name_unique": {
+          "name": "artwork_materials_name_unique",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"name\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "artwork_materials_artwork_id_artworks_id_fk": {
+          "name": "artwork_materials_artwork_id_artworks_id_fk",
+          "tableFrom": "artwork_materials",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artwork_materials_position_unique": {
+          "name": "artwork_materials_position_unique",
+          "nullsNotDistinct": false,
+          "columns": ["artwork_id", "position"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artwork_materials_position_valid": {
+          "name": "artwork_materials_position_valid",
+          "value": "\"artwork_materials\".\"position\" >= 0"
+        },
+        "artwork_materials_name_valid": {
+          "name": "artwork_materials_name_valid",
+          "value": "\"artwork_materials\".\"name\" ~ '[^[:space:]]' AND \"artwork_materials\".\"name\" = btrim(\"artwork_materials\".\"name\") AND position(',' in \"artwork_materials\".\"name\") = 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artwork_media": {
+      "name": "artwork_media",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "artwork_media_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "artwork_media_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'OTHER'"
+        },
+        "visibility": {
+          "name": "visibility",
+          "type": "media_visibility",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PRIVATE'"
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "storage_key": {
+          "name": "storage_key",
+          "type": "varchar(512)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mime_type": {
+          "name": "mime_type",
+          "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "byte_size": {
+          "name": "byte_size",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alt_text": {
+          "name": "alt_text",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "caption": {
+          "name": "caption",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "artwork_media_hero_unique": {
+          "name": "artwork_media_hero_unique",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"artwork_media\".\"role\" = 'HERO'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "artwork_media_artwork_id_artworks_id_fk": {
+          "name": "artwork_media_artwork_id_artworks_id_fk",
+          "tableFrom": "artwork_media",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artwork_media_position_unique": {
+          "name": "artwork_media_position_unique",
+          "nullsNotDistinct": false,
+          "columns": ["artwork_id", "position"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artwork_media_position_valid": {
+          "name": "artwork_media_position_valid",
+          "value": "\"artwork_media\".\"position\" >= 0"
+        },
+        "artwork_media_hash_format": {
+          "name": "artwork_media_hash_format",
+          "value": "\"artwork_media\".\"content_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "artwork_media_size_positive": {
+          "name": "artwork_media_size_positive",
+          "value": "\"artwork_media\".\"byte_size\" > 0"
+        },
+        "artwork_media_storage_key_valid": {
+          "name": "artwork_media_storage_key_valid",
+          "value": "\"artwork_media\".\"storage_key\" ~ '^[A-Za-z0-9][A-Za-z0-9._/-]*$' AND \"artwork_media\".\"storage_key\" !~ '(^|/)\\.\\.?(/|$)' AND \"artwork_media\".\"storage_key\" !~ '//|/$'"
+        },
+        "artwork_media_mime_kind_valid": {
+          "name": "artwork_media_mime_kind_valid",
+          "value": "(\"artwork_media\".\"kind\" = 'IMAGE' AND \"artwork_media\".\"mime_type\" IN ('image/jpeg', 'image/png', 'image/webp', 'image/avif')) OR (\"artwork_media\".\"kind\" = 'VIDEO' AND \"artwork_media\".\"mime_type\" IN ('video/mp4', 'video/webm')) OR (\"artwork_media\".\"kind\" = 'DOCUMENT' AND \"artwork_media\".\"mime_type\" = 'application/pdf')"
+        },
+        "artwork_media_hero_image": {
+          "name": "artwork_media_hero_image",
+          "value": "\"artwork_media\".\"role\" <> 'HERO' OR \"artwork_media\".\"kind\" = 'IMAGE'"
+        },
+        "artwork_media_alt_text_valid": {
+          "name": "artwork_media_alt_text_valid",
+          "value": "(\"artwork_media\".\"alt_text\" IS NULL OR \"artwork_media\".\"alt_text\" ~ '[^[:space:]]') AND (\"artwork_media\".\"visibility\" <> 'PUBLIC' OR \"artwork_media\".\"kind\" <> 'IMAGE' OR \"artwork_media\".\"alt_text\" IS NOT NULL)"
+        },
+        "artwork_media_caption_nonblank": {
+          "name": "artwork_media_caption_nonblank",
+          "value": "\"artwork_media\".\"caption\" IS NULL OR \"artwork_media\".\"caption\" ~ '[^[:space:]]'"
+        },
+        "artwork_media_timestamp_order": {
+          "name": "artwork_media_timestamp_order",
+          "value": "\"artwork_media\".\"updated_at\" >= \"artwork_media\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artwork_metadata_versions": {
+      "name": "artwork_metadata_versions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "attestation_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "authority_wallet": {
+          "name": "authority_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "canonical_document": {
+          "name": "canonical_document",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "document_hash": {
+          "name": "document_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_cluster": {
+          "name": "chain_cluster",
+          "type": "attestation_cluster",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_signature": {
+          "name": "chain_signature",
+          "type": "varchar(88)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_slot": {
+          "name": "chain_slot",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_recorded_at": {
+          "name": "chain_recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalized_at": {
+          "name": "finalized_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain_version": {
+          "name": "chain_version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "uri": {
+          "name": "uri",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "metadata_versions_chain_version_unique": {
+          "name": "metadata_versions_chain_version_unique",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chain_cluster",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chain_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"artwork_metadata_versions\".\"status\" = 'FINALIZED'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "artwork_metadata_versions_artwork_id_artworks_id_fk": {
+          "name": "artwork_metadata_versions_artwork_id_artworks_id_fk",
+          "tableFrom": "artwork_metadata_versions",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "metadata_versions_artwork_version_unique": {
+          "name": "metadata_versions_artwork_version_unique",
+          "nullsNotDistinct": false,
+          "columns": ["artwork_id", "version"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "metadata_versions_authority_format": {
+          "name": "metadata_versions_authority_format",
+          "value": "\"artwork_metadata_versions\".\"authority_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "metadata_versions_document_integrity": {
+          "name": "metadata_versions_document_integrity",
+          "value": "\n      (\"artwork_metadata_versions\".\"canonical_document\" IS NULL AND \"artwork_metadata_versions\".\"document_hash\" IS NULL AND \"artwork_metadata_versions\".\"status\" = 'DRAFT') OR\n      (\"artwork_metadata_versions\".\"canonical_document\" IS NOT NULL AND \"artwork_metadata_versions\".\"document_hash\" IS NOT NULL\n       AND octet_length(convert_to(\"artwork_metadata_versions\".\"canonical_document\", 'UTF8')) BETWEEN 2 AND 1048576\n       AND jsonb_typeof(\"artwork_metadata_versions\".\"canonical_document\"::jsonb) = 'object'\n       AND \"artwork_metadata_versions\".\"document_hash\" ~ '^[0-9a-f]{64}$'\n       AND \"artwork_metadata_versions\".\"document_hash\" = encode(sha256(convert_to(\"artwork_metadata_versions\".\"canonical_document\", 'UTF8')), 'hex'))"
+        },
+        "metadata_versions_receipt_complete": {
+          "name": "metadata_versions_receipt_complete",
+          "value": "\n      (\"artwork_metadata_versions\".\"status\" <> 'FINALIZED' AND \"artwork_metadata_versions\".\"chain_cluster\" IS NULL AND \"artwork_metadata_versions\".\"chain_signature\" IS NULL AND \"artwork_metadata_versions\".\"chain_slot\" IS NULL\n       AND \"artwork_metadata_versions\".\"chain_recorded_at\" IS NULL AND \"artwork_metadata_versions\".\"finalized_at\" IS NULL) OR\n      (\"artwork_metadata_versions\".\"status\" = 'FINALIZED' AND \"artwork_metadata_versions\".\"chain_cluster\" IS NOT NULL AND \"artwork_metadata_versions\".\"chain_signature\" IS NOT NULL AND \"artwork_metadata_versions\".\"chain_slot\" IS NOT NULL\n       AND \"artwork_metadata_versions\".\"chain_recorded_at\" IS NOT NULL AND \"artwork_metadata_versions\".\"finalized_at\" IS NOT NULL\n       AND \"artwork_metadata_versions\".\"chain_signature\" ~ '^[1-9A-HJ-NP-Za-km-z]{64,88}$'\n       AND \"artwork_metadata_versions\".\"chain_slot\" >= 0 AND \"artwork_metadata_versions\".\"finalized_at\" >= \"artwork_metadata_versions\".\"chain_recorded_at\")"
+        },
+        "metadata_versions_timestamp_order": {
+          "name": "metadata_versions_timestamp_order",
+          "value": "\"artwork_metadata_versions\".\"updated_at\" >= \"artwork_metadata_versions\".\"created_at\" AND (\"artwork_metadata_versions\".\"finalized_at\" IS NULL OR \"artwork_metadata_versions\".\"finalized_at\" <= \"artwork_metadata_versions\".\"updated_at\")"
+        },
+        "metadata_versions_chain_version_valid": {
+          "name": "metadata_versions_chain_version_valid",
+          "value": "(\"artwork_metadata_versions\".\"status\" <> 'FINALIZED' AND \"artwork_metadata_versions\".\"chain_version\" IS NULL) OR (\"artwork_metadata_versions\".\"status\" = 'FINALIZED' AND \"artwork_metadata_versions\".\"chain_version\" IS NOT NULL AND \"artwork_metadata_versions\".\"chain_version\" BETWEEN 1 AND 4294967295)"
+        },
+        "metadata_versions_version_valid": {
+          "name": "metadata_versions_version_valid",
+          "value": "\"artwork_metadata_versions\".\"version\" BETWEEN 1 AND 4294967295"
+        },
+        "metadata_versions_uri_valid": {
+          "name": "metadata_versions_uri_valid",
+          "value": "\n      (\"artwork_metadata_versions\".\"uri\" IS NULL AND \"artwork_metadata_versions\".\"status\" = 'DRAFT') OR\n      (\"artwork_metadata_versions\".\"uri\" IS NOT NULL AND \"artwork_metadata_versions\".\"uri\" ~ '^https?://[^[:space:]@/#?]+([/?][^[:space:]#]*)?$'\n       AND octet_length(\"artwork_metadata_versions\".\"uri\") <= 200 AND \"artwork_metadata_versions\".\"uri\" !~ '[^ -~]')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.artworks": {
+      "name": "artworks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "katha_id": {
+          "name": "katha_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "''"
+        },
+        "artist_id": {
+          "name": "artist_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "category": {
+          "name": "category",
+          "type": "artwork_category",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creator_wallet": {
+          "name": "creator_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creation_year": {
+          "name": "creation_year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "authorship_evidence_hash": {
+          "name": "authorship_evidence_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "height_mm": {
+          "name": "height_mm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "width_mm": {
+          "name": "width_mm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "depth_mm": {
+          "name": "depth_mm",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin_country_code": {
+          "name": "origin_country_code",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'NP'"
+        },
+        "origin_region": {
+          "name": "origin_region",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origin_locality": {
+          "name": "origin_locality",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "technique": {
+          "name": "technique",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "story": {
+          "name": "story",
+          "type": "varchar(10000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "meaning": {
+          "name": "meaning",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cultural_context": {
+          "name": "cultural_context",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creation_process": {
+          "name": "creation_process",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "artworks_artist_id_artists_id_fk": {
+          "name": "artworks_artist_id_artists_id_fk",
+          "tableFrom": "artworks",
+          "tableTo": "artists",
+          "columnsFrom": ["artist_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "artworks_katha_id_unique": {
+          "name": "artworks_katha_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["katha_id"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "artworks_katha_id_format": {
+          "name": "artworks_katha_id_format",
+          "value": "\"artworks\".\"katha_id\" ~ ('^KATHA-' || \"artworks\".\"category\"::text || '-[0-9]{6}$') AND right(\"artworks\".\"katha_id\", 6) <> '000000'"
+        },
+        "artworks_title_nonblank": {
+          "name": "artworks_title_nonblank",
+          "value": "\"artworks\".\"title\" ~ '[^[:space:]]'"
+        },
+        "artworks_creation_year_range": {
+          "name": "artworks_creation_year_range",
+          "value": "\"artworks\".\"creation_year\" BETWEEN 1 AND 9999"
+        },
+        "artworks_creator_wallet_format": {
+          "name": "artworks_creator_wallet_format",
+          "value": "\"artworks\".\"creator_wallet\" IS NULL OR \"artworks\".\"creator_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "artworks_authorship_hash_format": {
+          "name": "artworks_authorship_hash_format",
+          "value": "\"artworks\".\"authorship_evidence_hash\" IS NULL OR \"artworks\".\"authorship_evidence_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "artworks_dimensions_valid": {
+          "name": "artworks_dimensions_valid",
+          "value": "(\"artworks\".\"height_mm\" IS NULL AND \"artworks\".\"width_mm\" IS NULL AND \"artworks\".\"depth_mm\" IS NULL) OR (\"artworks\".\"height_mm\" IS NOT NULL AND \"artworks\".\"width_mm\" IS NOT NULL AND \"artworks\".\"height_mm\" > 0 AND \"artworks\".\"width_mm\" > 0 AND (\"artworks\".\"depth_mm\" IS NULL OR \"artworks\".\"depth_mm\" > 0))"
+        },
+        "artworks_country_code_format": {
+          "name": "artworks_country_code_format",
+          "value": "\"artworks\".\"origin_country_code\" ~ '^[A-Z]{2}$'"
+        },
+        "artworks_origin_region_nonblank": {
+          "name": "artworks_origin_region_nonblank",
+          "value": "\"artworks\".\"origin_region\" IS NULL OR \"artworks\".\"origin_region\" ~ '[^[:space:]]'"
+        },
+        "artworks_origin_locality_nonblank": {
+          "name": "artworks_origin_locality_nonblank",
+          "value": "\"artworks\".\"origin_locality\" IS NULL OR \"artworks\".\"origin_locality\" ~ '[^[:space:]]'"
+        },
+        "artworks_technique_nonblank": {
+          "name": "artworks_technique_nonblank",
+          "value": "\"artworks\".\"technique\" IS NULL OR \"artworks\".\"technique\" ~ '[^[:space:]]'"
+        },
+        "artworks_story_nonblank": {
+          "name": "artworks_story_nonblank",
+          "value": "\"artworks\".\"story\" IS NULL OR \"artworks\".\"story\" ~ '[^[:space:]]'"
+        },
+        "artworks_meaning_nonblank": {
+          "name": "artworks_meaning_nonblank",
+          "value": "\"artworks\".\"meaning\" IS NULL OR \"artworks\".\"meaning\" ~ '[^[:space:]]'"
+        },
+        "artworks_cultural_context_nonblank": {
+          "name": "artworks_cultural_context_nonblank",
+          "value": "\"artworks\".\"cultural_context\" IS NULL OR \"artworks\".\"cultural_context\" ~ '[^[:space:]]'"
+        },
+        "artworks_creation_process_nonblank": {
+          "name": "artworks_creation_process_nonblank",
+          "value": "\"artworks\".\"creation_process\" IS NULL OR \"artworks\".\"creation_process\" ~ '[^[:space:]]'"
+        },
+        "artworks_timestamp_order": {
+          "name": "artworks_timestamp_order",
+          "value": "\"artworks\".\"updated_at\" >= \"artworks\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.condition_reports": {
+      "name": "condition_reports",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "attestation_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "authority_wallet": {
+          "name": "authority_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "canonical_document": {
+          "name": "canonical_document",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "document_hash": {
+          "name": "document_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_cluster": {
+          "name": "chain_cluster",
+          "type": "attestation_cluster",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_signature": {
+          "name": "chain_signature",
+          "type": "varchar(88)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_slot": {
+          "name": "chain_slot",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_recorded_at": {
+          "name": "chain_recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalized_at": {
+          "name": "finalized_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "version": {
+          "name": "version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chain_version": {
+          "name": "chain_version",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "inspector_id": {
+          "name": "inspector_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "grade": {
+          "name": "grade",
+          "type": "condition_grade",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "condition_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "inspected_at": {
+          "name": "inspected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reported_at": {
+          "name": "reported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "media_hashes": {
+          "name": "media_hashes",
+          "type": "varchar(64)[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "owner_wallet": {
+          "name": "owner_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "custody_revision": {
+          "name": "custody_revision",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "condition_reports_chain_version_unique": {
+          "name": "condition_reports_chain_version_unique",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chain_cluster",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "chain_version",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"condition_reports\".\"status\" = 'FINALIZED'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "condition_reports_artwork_id_artworks_id_fk": {
+          "name": "condition_reports_artwork_id_artworks_id_fk",
+          "tableFrom": "condition_reports",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "condition_reports_artwork_version_unique": {
+          "name": "condition_reports_artwork_version_unique",
+          "nullsNotDistinct": false,
+          "columns": ["artwork_id", "version"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "condition_reports_authority_format": {
+          "name": "condition_reports_authority_format",
+          "value": "\"condition_reports\".\"authority_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "condition_reports_document_integrity": {
+          "name": "condition_reports_document_integrity",
+          "value": "\n      (\"condition_reports\".\"canonical_document\" IS NULL AND \"condition_reports\".\"document_hash\" IS NULL AND \"condition_reports\".\"status\" = 'DRAFT') OR\n      (\"condition_reports\".\"canonical_document\" IS NOT NULL AND \"condition_reports\".\"document_hash\" IS NOT NULL\n       AND octet_length(convert_to(\"condition_reports\".\"canonical_document\", 'UTF8')) BETWEEN 2 AND 1048576\n       AND jsonb_typeof(\"condition_reports\".\"canonical_document\"::jsonb) = 'object'\n       AND \"condition_reports\".\"document_hash\" ~ '^[0-9a-f]{64}$'\n       AND \"condition_reports\".\"document_hash\" = encode(sha256(convert_to(\"condition_reports\".\"canonical_document\", 'UTF8')), 'hex'))"
+        },
+        "condition_reports_receipt_complete": {
+          "name": "condition_reports_receipt_complete",
+          "value": "\n      (\"condition_reports\".\"status\" <> 'FINALIZED' AND \"condition_reports\".\"chain_cluster\" IS NULL AND \"condition_reports\".\"chain_signature\" IS NULL AND \"condition_reports\".\"chain_slot\" IS NULL\n       AND \"condition_reports\".\"chain_recorded_at\" IS NULL AND \"condition_reports\".\"finalized_at\" IS NULL) OR\n      (\"condition_reports\".\"status\" = 'FINALIZED' AND \"condition_reports\".\"chain_cluster\" IS NOT NULL AND \"condition_reports\".\"chain_signature\" IS NOT NULL AND \"condition_reports\".\"chain_slot\" IS NOT NULL\n       AND \"condition_reports\".\"chain_recorded_at\" IS NOT NULL AND \"condition_reports\".\"finalized_at\" IS NOT NULL\n       AND \"condition_reports\".\"chain_signature\" ~ '^[1-9A-HJ-NP-Za-km-z]{64,88}$'\n       AND \"condition_reports\".\"chain_slot\" >= 0 AND \"condition_reports\".\"finalized_at\" >= \"condition_reports\".\"chain_recorded_at\")"
+        },
+        "condition_reports_timestamp_order": {
+          "name": "condition_reports_timestamp_order",
+          "value": "\"condition_reports\".\"updated_at\" >= \"condition_reports\".\"created_at\" AND (\"condition_reports\".\"finalized_at\" IS NULL OR \"condition_reports\".\"finalized_at\" <= \"condition_reports\".\"updated_at\")"
+        },
+        "condition_reports_chain_version_valid": {
+          "name": "condition_reports_chain_version_valid",
+          "value": "(\"condition_reports\".\"status\" <> 'FINALIZED' AND \"condition_reports\".\"chain_version\" IS NULL) OR (\"condition_reports\".\"status\" = 'FINALIZED' AND \"condition_reports\".\"chain_version\" IS NOT NULL AND \"condition_reports\".\"chain_version\" BETWEEN 1 AND 4294967295)"
+        },
+        "condition_reports_version_valid": {
+          "name": "condition_reports_version_valid",
+          "value": "\"condition_reports\".\"version\" BETWEEN 1 AND 4294967295"
+        },
+        "condition_reports_notes_nonblank": {
+          "name": "condition_reports_notes_nonblank",
+          "value": "\"condition_reports\".\"notes\" ~ '[^[:space:]]'"
+        },
+        "condition_reports_media_hashes_valid": {
+          "name": "condition_reports_media_hashes_valid",
+          "value": "\n      cardinality(\"condition_reports\".\"media_hashes\") BETWEEN 1 AND 20 AND array_ndims(\"condition_reports\".\"media_hashes\") = 1\n      AND array_position(\"condition_reports\".\"media_hashes\", NULL) IS NULL\n      AND array_to_string(\"condition_reports\".\"media_hashes\", ',') ~ '^[0-9a-f]{64}(,[0-9a-f]{64})*$'"
+        },
+        "condition_reports_inspection_order": {
+          "name": "condition_reports_inspection_order",
+          "value": "\"condition_reports\".\"reported_at\" >= \"condition_reports\".\"inspected_at\" AND \"condition_reports\".\"updated_at\" >= \"condition_reports\".\"reported_at\" AND (\"condition_reports\".\"chain_recorded_at\" IS NULL OR \"condition_reports\".\"chain_recorded_at\" >= \"condition_reports\".\"inspected_at\")"
+        },
+        "condition_reports_owner_scope_valid": {
+          "name": "condition_reports_owner_scope_valid",
+          "value": "\n      (\"condition_reports\".\"owner_wallet\" IS NULL AND \"condition_reports\".\"custody_revision\" IS NULL) OR\n      (\"condition_reports\".\"owner_wallet\" IS NOT NULL AND \"condition_reports\".\"custody_revision\" IS NOT NULL\n       AND \"condition_reports\".\"owner_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'\n       AND \"condition_reports\".\"custody_revision\" BETWEEN 1 AND 4294967295)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.custody_events": {
+      "name": "custody_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revision": {
+          "name": "revision",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "from_state": {
+          "name": "from_state",
+          "type": "physical_custody_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "to_state": {
+          "name": "to_state",
+          "type": "physical_custody_state",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "custodian_wallet": {
+          "name": "custodian_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_by_wallet": {
+          "name": "recorded_by_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_hash": {
+          "name": "evidence_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recorded_at": {
+          "name": "recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "custody_events_artwork_id_artworks_id_fk": {
+          "name": "custody_events_artwork_id_artworks_id_fk",
+          "tableFrom": "custody_events",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "custody_events_artwork_revision_unique": {
+          "name": "custody_events_artwork_revision_unique",
+          "nullsNotDistinct": false,
+          "columns": ["artwork_id", "revision"]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "custody_events_revision_valid": {
+          "name": "custody_events_revision_valid",
+          "value": "\"custody_events\".\"revision\" BETWEEN 1 AND 4294967295"
+        },
+        "custody_events_transition_valid": {
+          "name": "custody_events_transition_valid",
+          "value": "\n    (\"custody_events\".\"from_state\" = 'UNKNOWN' AND \"custody_events\".\"to_state\" IN ('KATHA_HELD', 'COLLECTOR_HELD')) OR\n    (\"custody_events\".\"from_state\" IN ('KATHA_HELD', 'COLLECTOR_HELD') AND \"custody_events\".\"to_state\" = 'IN_TRANSIT') OR\n    (\"custody_events\".\"from_state\" = 'IN_TRANSIT' AND \"custody_events\".\"to_state\" IN ('KATHA_HELD', 'COLLECTOR_HELD'))"
+        },
+        "custody_events_custodian_format": {
+          "name": "custody_events_custodian_format",
+          "value": "\"custody_events\".\"custodian_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "custody_events_recorder_format": {
+          "name": "custody_events_recorder_format",
+          "value": "\"custody_events\".\"recorded_by_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "custody_events_evidence_hash_format": {
+          "name": "custody_events_evidence_hash_format",
+          "value": "\"custody_events\".\"evidence_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "custody_events_time_order": {
+          "name": "custody_events_time_order",
+          "value": "\"custody_events\".\"occurred_at\" <= \"custody_events\".\"recorded_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.fulfillment_requests": {
+      "name": "fulfillment_requests",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "requester_wallet": {
+          "name": "requester_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "kind": {
+          "name": "kind",
+          "type": "fulfillment_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "fulfillment_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'REQUESTED'"
+        },
+        "recipient_name": {
+          "name": "recipient_name",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contact_email": {
+          "name": "contact_email",
+          "type": "varchar(254)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_phone": {
+          "name": "contact_phone",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "address_lines": {
+          "name": "address_lines",
+          "type": "varchar(200)[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city": {
+          "name": "city",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "region": {
+          "name": "region",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "postal_code": {
+          "name": "postal_code",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "country_code": {
+          "name": "country_code",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delivery_instructions": {
+          "name": "delivery_instructions",
+          "type": "varchar(2000)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "courier": {
+          "name": "courier",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tracking_reference": {
+          "name": "tracking_reference",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "handled_by_wallet": {
+          "name": "handled_by_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "fulfillment_requests_requester_index": {
+          "name": "fulfillment_requests_requester_index",
+          "columns": [
+            {
+              "expression": "requester_wallet",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "fulfillment_requests_artwork_index": {
+          "name": "fulfillment_requests_artwork_index",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "fulfillment_requests_artwork_id_artworks_id_fk": {
+          "name": "fulfillment_requests_artwork_id_artworks_id_fk",
+          "tableFrom": "fulfillment_requests",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "fulfillment_requests_requester_format": {
+          "name": "fulfillment_requests_requester_format",
+          "value": "\"fulfillment_requests\".\"requester_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "fulfillment_requests_handler_valid": {
+          "name": "fulfillment_requests_handler_valid",
+          "value": "(\"fulfillment_requests\".\"handled_by_wallet\" IS NULL AND \"fulfillment_requests\".\"status\" IN ('REQUESTED', 'CANCELLED')) OR (\"fulfillment_requests\".\"handled_by_wallet\" IS NOT NULL AND \"fulfillment_requests\".\"handled_by_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$')"
+        },
+        "fulfillment_requests_recipient_nonblank": {
+          "name": "fulfillment_requests_recipient_nonblank",
+          "value": "\"fulfillment_requests\".\"recipient_name\" ~ '[^[:space:]]'"
+        },
+        "fulfillment_requests_contact_valid": {
+          "name": "fulfillment_requests_contact_valid",
+          "value": "\n    (\"fulfillment_requests\".\"contact_email\" IS NOT NULL OR \"fulfillment_requests\".\"contact_phone\" IS NOT NULL)\n    AND (\"fulfillment_requests\".\"contact_email\" IS NULL OR \"fulfillment_requests\".\"contact_email\" ~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$')\n    AND (\"fulfillment_requests\".\"contact_phone\" IS NULL OR \"fulfillment_requests\".\"contact_phone\" ~ '^[+0-9][0-9 ()-]{4,39}$')"
+        },
+        "fulfillment_requests_address_valid": {
+          "name": "fulfillment_requests_address_valid",
+          "value": "\n    cardinality(\"fulfillment_requests\".\"address_lines\") BETWEEN 1 AND 5 AND array_ndims(\"fulfillment_requests\".\"address_lines\") = 1\n    AND array_position(\"fulfillment_requests\".\"address_lines\", NULL) IS NULL\n    AND array_to_string(\"fulfillment_requests\".\"address_lines\", chr(31)) !~ ('(^|' || chr(31) || ')[[:space:]]*(' || chr(31) || '|$)')"
+        },
+        "fulfillment_requests_city_nonblank": {
+          "name": "fulfillment_requests_city_nonblank",
+          "value": "\"fulfillment_requests\".\"city\" ~ '[^[:space:]]'"
+        },
+        "fulfillment_requests_country_format": {
+          "name": "fulfillment_requests_country_format",
+          "value": "\"fulfillment_requests\".\"country_code\" ~ '^[A-Z]{2}$'"
+        },
+        "fulfillment_requests_region_nonblank": {
+          "name": "fulfillment_requests_region_nonblank",
+          "value": "\"fulfillment_requests\".\"region\" IS NULL OR \"fulfillment_requests\".\"region\" ~ '[^[:space:]]'"
+        },
+        "fulfillment_requests_postal_nonblank": {
+          "name": "fulfillment_requests_postal_nonblank",
+          "value": "\"fulfillment_requests\".\"postal_code\" IS NULL OR \"fulfillment_requests\".\"postal_code\" ~ '[^[:space:]]'"
+        },
+        "fulfillment_requests_instructions_nonblank": {
+          "name": "fulfillment_requests_instructions_nonblank",
+          "value": "\"fulfillment_requests\".\"delivery_instructions\" IS NULL OR \"fulfillment_requests\".\"delivery_instructions\" ~ '[^[:space:]]'"
+        },
+        "fulfillment_requests_courier_nonblank": {
+          "name": "fulfillment_requests_courier_nonblank",
+          "value": "\"fulfillment_requests\".\"courier\" IS NULL OR \"fulfillment_requests\".\"courier\" ~ '[^[:space:]]'"
+        },
+        "fulfillment_requests_tracking_nonblank": {
+          "name": "fulfillment_requests_tracking_nonblank",
+          "value": "\"fulfillment_requests\".\"tracking_reference\" IS NULL OR \"fulfillment_requests\".\"tracking_reference\" ~ '[^[:space:]]'"
+        },
+        "fulfillment_requests_timestamp_order": {
+          "name": "fulfillment_requests_timestamp_order",
+          "value": "\"fulfillment_requests\".\"updated_at\" >= \"fulfillment_requests\".\"created_at\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.verifications": {
+      "name": "verifications",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "artwork_id": {
+          "name": "artwork_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "attestation_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'DRAFT'"
+        },
+        "authority_wallet": {
+          "name": "authority_wallet",
+          "type": "varchar(44)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "canonical_document": {
+          "name": "canonical_document",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "document_hash": {
+          "name": "document_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_cluster": {
+          "name": "chain_cluster",
+          "type": "attestation_cluster",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_signature": {
+          "name": "chain_signature",
+          "type": "varchar(88)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_slot": {
+          "name": "chain_slot",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "chain_recorded_at": {
+          "name": "chain_recorded_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalized_at": {
+          "name": "finalized_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "inspected_at": {
+          "name": "inspected_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "evidence_hash": {
+          "name": "evidence_hash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "notes": {
+          "name": "notes",
+          "type": "varchar(5000)",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "verifications_finalized_artwork_unique": {
+          "name": "verifications_finalized_artwork_unique",
+          "columns": [
+            {
+              "expression": "artwork_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"verifications\".\"status\" = 'FINALIZED'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "verifications_artwork_id_artworks_id_fk": {
+          "name": "verifications_artwork_id_artworks_id_fk",
+          "tableFrom": "verifications",
+          "tableTo": "artworks",
+          "columnsFrom": ["artwork_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "restrict"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "verifications_authority_format": {
+          "name": "verifications_authority_format",
+          "value": "\"verifications\".\"authority_wallet\" ~ '^[1-9A-HJ-NP-Za-km-z]{32,44}$'"
+        },
+        "verifications_document_integrity": {
+          "name": "verifications_document_integrity",
+          "value": "\n      (\"verifications\".\"canonical_document\" IS NULL AND \"verifications\".\"document_hash\" IS NULL AND \"verifications\".\"status\" = 'DRAFT') OR\n      (\"verifications\".\"canonical_document\" IS NOT NULL AND \"verifications\".\"document_hash\" IS NOT NULL\n       AND octet_length(convert_to(\"verifications\".\"canonical_document\", 'UTF8')) BETWEEN 2 AND 1048576\n       AND jsonb_typeof(\"verifications\".\"canonical_document\"::jsonb) = 'object'\n       AND \"verifications\".\"document_hash\" ~ '^[0-9a-f]{64}$'\n       AND \"verifications\".\"document_hash\" = encode(sha256(convert_to(\"verifications\".\"canonical_document\", 'UTF8')), 'hex'))"
+        },
+        "verifications_receipt_complete": {
+          "name": "verifications_receipt_complete",
+          "value": "\n      (\"verifications\".\"status\" <> 'FINALIZED' AND \"verifications\".\"chain_cluster\" IS NULL AND \"verifications\".\"chain_signature\" IS NULL AND \"verifications\".\"chain_slot\" IS NULL\n       AND \"verifications\".\"chain_recorded_at\" IS NULL AND \"verifications\".\"finalized_at\" IS NULL) OR\n      (\"verifications\".\"status\" = 'FINALIZED' AND \"verifications\".\"chain_cluster\" IS NOT NULL AND \"verifications\".\"chain_signature\" IS NOT NULL AND \"verifications\".\"chain_slot\" IS NOT NULL\n       AND \"verifications\".\"chain_recorded_at\" IS NOT NULL AND \"verifications\".\"finalized_at\" IS NOT NULL\n       AND \"verifications\".\"chain_signature\" ~ '^[1-9A-HJ-NP-Za-km-z]{64,88}$'\n       AND \"verifications\".\"chain_slot\" >= 0 AND \"verifications\".\"finalized_at\" >= \"verifications\".\"chain_recorded_at\")"
+        },
+        "verifications_timestamp_order": {
+          "name": "verifications_timestamp_order",
+          "value": "\"verifications\".\"updated_at\" >= \"verifications\".\"created_at\" AND (\"verifications\".\"finalized_at\" IS NULL OR \"verifications\".\"finalized_at\" <= \"verifications\".\"updated_at\")"
+        },
+        "verifications_evidence_hash_format": {
+          "name": "verifications_evidence_hash_format",
+          "value": "\"verifications\".\"evidence_hash\" ~ '^[0-9a-f]{64}$'"
+        },
+        "verifications_notes_nonblank": {
+          "name": "verifications_notes_nonblank",
+          "value": "\"verifications\".\"notes\" IS NULL OR \"verifications\".\"notes\" ~ '[^[:space:]]'"
+        },
+        "verifications_inspection_order": {
+          "name": "verifications_inspection_order",
+          "value": "\"verifications\".\"inspected_at\" <= \"verifications\".\"updated_at\" AND (\"verifications\".\"chain_recorded_at\" IS NULL OR \"verifications\".\"inspected_at\" <= \"verifications\".\"chain_recorded_at\")"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.artist_verification_status": {
+      "name": "artist_verification_status",
+      "schema": "public",
+      "values": ["UNVERIFIED", "VERIFIED"]
+    },
+    "public.artwork_category": {
+      "name": "artwork_category",
+      "schema": "public",
+      "values": ["MANDALA", "PAUBHA", "THANGKA"]
+    },
+    "public.artwork_media_kind": {
+      "name": "artwork_media_kind",
+      "schema": "public",
+      "values": ["IMAGE", "VIDEO", "DOCUMENT"]
+    },
+    "public.artwork_media_role": {
+      "name": "artwork_media_role",
+      "schema": "public",
+      "values": [
+        "HERO",
+        "FRONT",
+        "BACK",
+        "DETAIL",
+        "ARTIST",
+        "PROCESS",
+        "CERTIFICATE",
+        "CONDITION",
+        "DOCUMENTARY",
+        "OTHER"
+      ]
+    },
+    "public.attestation_cluster": {
+      "name": "attestation_cluster",
+      "schema": "public",
+      "values": ["LOCALNET", "DEVNET"]
+    },
+    "public.attestation_status": {
+      "name": "attestation_status",
+      "schema": "public",
+      "values": ["DRAFT", "PREPARED", "FINALIZED"]
+    },
+    "public.condition_grade": {
+      "name": "condition_grade",
+      "schema": "public",
+      "values": ["EXCELLENT", "GOOD", "FAIR", "POOR", "DAMAGED"]
+    },
+    "public.condition_reason": {
+      "name": "condition_reason",
+      "schema": "public",
+      "values": [
+        "INITIAL_VERIFICATION",
+        "PRE_SALE",
+        "POST_DELIVERY",
+        "PRE_RESALE",
+        "RETURN_TO_CUSTODY",
+        "INSURANCE"
+      ]
+    },
+    "public.fulfillment_kind": {
+      "name": "fulfillment_kind",
+      "schema": "public",
+      "values": ["DELIVERY", "RETURN_TO_KATHA"]
+    },
+    "public.fulfillment_status": {
+      "name": "fulfillment_status",
+      "schema": "public",
+      "values": ["REQUESTED", "APPROVED", "DISPATCHED", "RECEIVED", "CANCELLED"]
+    },
+    "public.media_visibility": {
+      "name": "media_visibility",
+      "schema": "public",
+      "values": ["PRIVATE", "PUBLIC"]
+    },
+    "public.physical_custody_state": {
+      "name": "physical_custody_state",
+      "schema": "public",
+      "values": ["UNKNOWN", "KATHA_HELD", "COLLECTOR_HELD", "IN_TRANSIT"]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

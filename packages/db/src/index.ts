@@ -39,3 +39,14 @@ export {
   type ConditionReportRecord,
   type NewConditionReportRecord,
 } from "./schema/artwork-attestations.js";
+export {
+  custodyEvents,
+  fulfillmentRequests,
+  physicalCustodyState,
+  fulfillmentKind,
+  fulfillmentStatus,
+  type CustodyEventRecord,
+  type NewCustodyEventRecord,
+  type FulfillmentRequestRecord,
+  type NewFulfillmentRequestRecord,
+} from "./schema/custody-fulfillment.js";

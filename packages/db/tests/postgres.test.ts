@@ -9,6 +9,9 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
 import {
   artists,
+  custodyEvents,
+  fulfillmentRequests,
+  type NewFulfillmentRequestRecord,
   artworkMetadataVersions,
   verifications,
   conditionReports,
@@ -48,7 +51,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(4);
+    expect(applicationCount).toBe(5);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -64,7 +67,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(5);
+    expect(result[0]?.count).toBe(6);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -119,7 +122,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(5);
+    ).toBe(6);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -1210,5 +1213,316 @@ it("preserves prepared and finalized metadata, verification and condition docume
     ).toBe(artwork.kathaId);
   } finally {
     await connection.close();
+  }
+}, 30_000);
+
+it("serializes append-only manual custody and separates private fulfillment", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const second = createDatabase(url);
+  const db = connection.db;
+  const wallet = "Vote111111111111111111111111111111111111111";
+  const occurredAt = new Date("2026-10-01T10:00:00.000Z");
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "custody-artist",
+        displayName: "Synthetic artist",
+        biography: "Synthetic biography",
+        region: "Patan",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork, other] = await db
+      .insert(artworks)
+      .values([
+        {
+          artistId: artist.id,
+          category: "PAUBHA",
+          title: "Custody test",
+          creationYear: 2026,
+        },
+        {
+          artistId: artist.id,
+          category: "PAUBHA",
+          title: "Other custody test",
+          creationYear: 2026,
+        },
+      ])
+      .returning();
+    if (!artwork || !other) throw new Error("Artwork missing");
+    const input = {
+      artworkId: artwork.id,
+      fromState: "UNKNOWN" as const,
+      toState: "KATHA_HELD" as const,
+      custodianWallet: wallet,
+      recordedByWallet: wallet,
+      evidenceHash: "15".repeat(32),
+      occurredAt,
+    };
+    const [initial] = await db.insert(custodyEvents).values(input).returning();
+    if (!initial) throw new Error("Custody missing");
+    expect(initial.revision).toBe(1);
+    await db
+      .insert(custodyEvents)
+      .values({ ...input, artworkId: other.id, toState: "COLLECTOR_HELD" });
+    await expect(db.insert(custodyEvents).values(input)).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "custody_events_previous_state" },
+    });
+    await expect(
+      db
+        .insert(custodyEvents)
+        .values({ ...input, fromState: "KATHA_HELD", toState: "COLLECTOR_HELD" }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "custody_events_transition_valid" },
+    });
+    await expect(
+      db.insert(custodyEvents).values({
+        ...input,
+        fromState: "KATHA_HELD",
+        toState: "IN_TRANSIT",
+        revision: 10,
+      }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "custody_events_revision_allocated" },
+    });
+    const dispatch = {
+      ...input,
+      fromState: "KATHA_HELD" as const,
+      toState: "IN_TRANSIT" as const,
+    };
+    const race = await Promise.allSettled([
+      db.insert(custodyEvents).values(dispatch),
+      second.db.insert(custodyEvents).values(dispatch),
+    ]);
+    expect(race.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const failure = race.find((result) => result.status === "rejected");
+    if (!failure || failure.status !== "rejected")
+      throw new Error("Expected stale custody rejection");
+    expect(failure.reason).toMatchObject({
+      cause: { code: "23514", constraint_name: "custody_events_previous_state" },
+    });
+    const receive = {
+      ...input,
+      fromState: "IN_TRANSIT" as const,
+      toState: "COLLECTOR_HELD" as const,
+    };
+    await expect(
+      db.transaction(async (tx) => {
+        await tx.insert(custodyEvents).values(receive);
+        throw new Error("Synthetic rollback");
+      }),
+    ).rejects.toThrow("Synthetic rollback");
+    await db.insert(custodyEvents).values(receive);
+    const history = await db
+      .select()
+      .from(custodyEvents)
+      .where(eq(custodyEvents.artworkId, artwork.id))
+      .orderBy(asc(custodyEvents.revision));
+    expect(history.map((row) => row.revision)).toEqual([1, 2, 3]);
+    expect(history.map((row) => row.toState)).toEqual([
+      "KATHA_HELD",
+      "IN_TRANSIT",
+      "COLLECTOR_HELD",
+    ]);
+    await expect(
+      db
+        .update(custodyEvents)
+        .set({ evidenceHash: "16".repeat(32) })
+        .where(eq(custodyEvents.id, initial.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "custody_events_immutable" },
+    });
+    await expect(
+      db.delete(custodyEvents).where(eq(custodyEvents.id, initial.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "custody_events_immutable" },
+    });
+    await expect(
+      db.insert(custodyEvents).values({
+        ...input,
+        fromState: "COLLECTOR_HELD",
+        toState: "IN_TRANSIT",
+        occurredAt: new Date("2026-09-30T10:00:00.000Z"),
+      }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "custody_events_history_order" },
+    });
+    await expect(
+      db
+        .insert(custodyEvents)
+        .values({ ...input, artworkId: "123e4567-e89b-42d3-a456-426614174000" }),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+
+    const requestInput: NewFulfillmentRequestRecord = {
+      artworkId: artwork.id,
+      requesterWallet: wallet,
+      kind: "DELIVERY",
+      recipientName: "Synthetic Recipient",
+      contactEmail: "synthetic@example.invalid",
+      addressLines: ["Synthetic address only"],
+      city: "Synthetic City",
+      countryCode: "NP",
+    };
+    const [request] = await db
+      .insert(fulfillmentRequests)
+      .values(requestInput)
+      .returning();
+    if (!request) throw new Error("Request missing");
+    expect(request.status).toBe("REQUESTED");
+    // Private fields have no column or relation in the public custody timeline.
+    expect(Object.keys(initial)).not.toContain("recipientName");
+    expect(Object.keys(initial)).not.toContain("addressLines");
+    expect(Object.keys(initial)).not.toContain("contactEmail");
+    await expect(
+      db
+        .update(fulfillmentRequests)
+        .set({ status: "RECEIVED", handledByWallet: wallet })
+        .where(eq(fulfillmentRequests.id, request.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "fulfillment_requests_transition" },
+    });
+    await expect(
+      db
+        .update(fulfillmentRequests)
+        .set({ status: "APPROVED" })
+        .where(eq(fulfillmentRequests.id, request.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "fulfillment_requests_handler_valid" },
+    });
+    await db
+      .update(fulfillmentRequests)
+      .set({ status: "APPROVED", handledByWallet: wallet })
+      .where(eq(fulfillmentRequests.id, request.id));
+    await expect(
+      db.delete(fulfillmentRequests).where(eq(fulfillmentRequests.id, request.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "fulfillment_requests_active" },
+    });
+    await db
+      .update(fulfillmentRequests)
+      .set({
+        status: "DISPATCHED",
+        courier: "Synthetic courier",
+        trackingReference: "SYNTHETIC-ONLY",
+      })
+      .where(eq(fulfillmentRequests.id, request.id));
+    await expect(
+      db
+        .update(fulfillmentRequests)
+        .set({ addressLines: ["Changed address"] })
+        .where(eq(fulfillmentRequests.id, request.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "fulfillment_requests_details_locked" },
+    });
+    await expect(
+      db
+        .update(fulfillmentRequests)
+        .set({ status: "CANCELLED" })
+        .where(eq(fulfillmentRequests.id, request.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "fulfillment_requests_transition" },
+    });
+    await db
+      .update(fulfillmentRequests)
+      .set({ status: "RECEIVED" })
+      .where(eq(fulfillmentRequests.id, request.id));
+    expect(
+      await db
+        .select()
+        .from(custodyEvents)
+        .where(eq(custodyEvents.artworkId, artwork.id)),
+    ).toHaveLength(3);
+    await db.delete(fulfillmentRequests).where(eq(fulfillmentRequests.id, request.id));
+    const [returned] = await db
+      .insert(fulfillmentRequests)
+      .values({
+        ...requestInput,
+        kind: "RETURN_TO_KATHA",
+        contactEmail: null,
+        contactPhone: "+977 0000000000",
+      })
+      .returning();
+    if (!returned) throw new Error("Return request missing");
+    await db
+      .update(fulfillmentRequests)
+      .set({ status: "CANCELLED" })
+      .where(eq(fulfillmentRequests.id, returned.id));
+    await expect(
+      db
+        .update(fulfillmentRequests)
+        .set({ status: "REQUESTED" })
+        .where(eq(fulfillmentRequests.id, returned.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "fulfillment_requests_transition" },
+    });
+    const invalid: {
+      change: Partial<NewFulfillmentRequestRecord>;
+      constraint: string;
+    }[] = [
+      {
+        change: { recipientName: " " },
+        constraint: "fulfillment_requests_recipient_nonblank",
+      },
+      {
+        change: { contactEmail: null, contactPhone: null },
+        constraint: "fulfillment_requests_contact_valid",
+      },
+      {
+        change: { contactEmail: "malformed" },
+        constraint: "fulfillment_requests_contact_valid",
+      },
+      {
+        change: { addressLines: [] },
+        constraint: "fulfillment_requests_address_valid",
+      },
+      {
+        change: { addressLines: [" "] },
+        constraint: "fulfillment_requests_address_valid",
+      },
+      {
+        change: { countryCode: "np" },
+        constraint: "fulfillment_requests_country_format",
+      },
+      {
+        change: { requesterWallet: "bad-wallet" },
+        constraint: "fulfillment_requests_requester_format",
+      },
+      {
+        change: { status: "DISPATCHED", handledByWallet: wallet },
+        constraint: "fulfillment_requests_transition",
+      },
+    ];
+    for (const { change, constraint } of invalid) {
+      await expect(
+        db.insert(fulfillmentRequests).values({ ...requestInput, ...change }),
+      ).rejects.toMatchObject({
+        cause: { code: "23514", constraint_name: constraint },
+      });
+    }
+    await expect(
+      db
+        .insert(fulfillmentRequests)
+        .values({ ...requestInput, artworkId: "123e4567-e89b-42d3-a456-426614174000" }),
+    ).rejects.toMatchObject({ cause: { code: "23503" } });
+    await expect(
+      db
+        .update(fulfillmentRequests)
+        .set({ requesterWallet: "11111111111111111111111111111111" })
+        .where(eq(fulfillmentRequests.id, returned.id)),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "fulfillment_requests_identity" },
+    });
+    expect(
+      (await db.select().from(artworks).where(eq(artworks.id, artwork.id)))[0]
+        ?.artistId,
+    ).toBe(artist.id);
+  } finally {
+    await connection.close();
+    await second.close();
   }
 }, 30_000);

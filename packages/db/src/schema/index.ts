@@ -16,3 +16,10 @@ export {
   conditionGrade,
   conditionReason,
 } from "./artwork-attestations.js";
+export {
+  custodyEvents,
+  fulfillmentRequests,
+  physicalCustodyState,
+  fulfillmentKind,
+  fulfillmentStatus,
+} from "./custody-fulfillment.js";
