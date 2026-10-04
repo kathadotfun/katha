@@ -20,8 +20,10 @@ not read environment variables or start services. Only the entry point reads
 
 Database URLs allow `postgres:` or `postgresql:` and reject fragments and surrounding
 whitespace. Validation does not connect to PostgreSQL or establish readiness;
-connection ownership/readiness follows in a later step. RPC endpoints, role wallets,
-session settings and storage/payment configuration will be added when used.
+the running service owns readiness checks. Role wallets and optional paired RPC
+endpoints are validated by the
+[authorization configuration](api-authorization.md); storage/payment settings remain
+planned.
 
 Public origins must be absolute HTTP(S) origins, with no credentials, path,
 query parameters or fragment. An optional trailing slash is normalized away.
@@ -70,7 +72,8 @@ This cannot classify every possible secret; safe exposure depends on the allowli
 It also does not validate a separately configured Next.js process.
 
 No public configuration endpoint or frontend wiring is added by this step. The
-service still responds with Hono's default 404. Later REST contracts and frontend
+service exposes health and wallet authentication routes, with reserved protected
+admin/verifier namespaces. Later REST contracts and frontend
 API access will consume the allowed configuration without publishing server inputs.
 Mainnet and testnet cluster values are rejected.
 
@@ -97,3 +100,9 @@ Wallet authentication derives its domain from the configured app origin. Its
 authority must be a DNS name or IPv4 address, optionally a port, at most 253 characters
 to fit existing challenge storage. IPv6 app origins are rejected before listening;
 the API listener can still use IPv6. See [wallet authentication](wallet-authentication.md).
+
+Server-only `KATHA_ADMIN_WALLETS` and `KATHA_VERIFIER_WALLETS` default to empty,
+frozen allowlists. Optional `KATHA_RPC_URL` and `KATHA_RPC_SUBSCRIPTIONS_URL` must
+be supplied together and fit the selected localnet/Devnet protocols. None are
+included in public configuration. Public aliases containing ADMIN, VERIFIER or
+RPC are also rejected. See [administrative authorization](api-authorization.md).

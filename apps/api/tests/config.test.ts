@@ -120,3 +120,70 @@ it("rejects app authorities unsupported by challenge persistence before listenin
     }),
   ).toThrow("KATHA_PUBLIC_APP_ORIGIN");
 });
+
+it("defaults to empty frozen role allowlists and keeps them out of public settings", () => {
+  const config = readServerConfiguration(environment);
+  expect(config.KATHA_ADMIN_WALLETS).toEqual([]);
+  expect(config.KATHA_VERIFIER_WALLETS).toEqual([]);
+  expect(Object.isFrozen(config.KATHA_ADMIN_WALLETS)).toBe(true);
+  expect(Object.keys(toPublicConfiguration(config))).toEqual([
+    "cluster",
+    "appOrigin",
+    "apiOrigin",
+  ]);
+});
+it("accepts separate server-configured role wallets and paired cluster endpoints", () => {
+  const config = readServerConfiguration({
+    ...environment,
+    KATHA_ADMIN_WALLETS: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    KATHA_VERIFIER_WALLETS: "Vote111111111111111111111111111111111111111",
+    KATHA_RPC_URL: "http://127.0.0.1:8899",
+    KATHA_RPC_SUBSCRIPTIONS_URL: "ws://127.0.0.1:8900",
+  });
+  expect(config.KATHA_ADMIN_WALLETS).toHaveLength(1);
+  expect(config.KATHA_VERIFIER_WALLETS).toHaveLength(1);
+  expect(JSON.stringify(toPublicConfiguration(config))).not.toContain("Tokenkeg");
+  expect(JSON.stringify(toPublicConfiguration(config))).not.toContain("8899");
+});
+it.each([
+  "private key",
+  "z".repeat(44),
+  "11111111111111111111111111111111",
+  " TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA,",
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA,TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+])("rejects malformed or duplicated role wallets %s", (value) => {
+  for (const field of ["KATHA_ADMIN_WALLETS", "KATHA_VERIFIER_WALLETS"])
+    expect(() => readServerConfiguration({ ...environment, [field]: value })).toThrow(
+      field,
+    );
+});
+it.each([
+  { KATHA_RPC_URL: "http://127.0.0.1:8899" },
+  {
+    KATHA_CLUSTER: "devnet",
+    KATHA_RPC_URL: "http://rpc.example",
+    KATHA_RPC_SUBSCRIPTIONS_URL: "ws://rpc.example",
+  },
+  {
+    KATHA_RPC_URL: "https://user:secret@rpc.example",
+    KATHA_RPC_SUBSCRIPTIONS_URL: "wss://rpc.example",
+  },
+  {
+    KATHA_RPC_URL: "https://api.mainnet-beta.solana.com",
+    KATHA_RPC_SUBSCRIPTIONS_URL: "wss://api.mainnet-beta.solana.com",
+  },
+])("rejects unsafe or incomplete RPC pairs", (settings) => {
+  expect(() => readServerConfiguration({ ...environment, ...settings })).toThrow(
+    "KATHA_RPC_URL",
+  );
+});
+it.each([
+  "NEXT_PUBLIC_KATHA_ADMIN_WALLETS",
+  "NEXT_PUBLIC_KATHA_VERIFIER_WALLETS",
+  "NEXT_PUBLIC_KATHA_RPC_URL",
+])("rejects public authority/provider aliases %s", (key) => {
+  expect(() => readServerConfiguration({ ...environment, [key]: "synthetic" })).toThrow(
+    "Server-only",
+  );
+});

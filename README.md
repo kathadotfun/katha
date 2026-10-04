@@ -59,7 +59,8 @@ public configuration allowlist, fixed domain error responses, server-generated
 request IDs, structured logs that omit private request data, separate liveness and
 database readiness endpoints, bounded HTTP/database shutdown, shared REST contracts,
 restricted CORS, request-size limits, pagination validation, and signed wallet
-challenges with replay-protected bearer sessions.
+challenges with replay-protected bearer sessions, server-configured admin/verifier
+guards, and finalized Registry authority checks.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -91,6 +92,7 @@ outside the current scope.
 - [API health and shutdown](docs/development/api-health.md)
 - [REST validation, CORS and limits](docs/development/api-rest.md)
 - [Signed wallet authentication](docs/development/wallet-authentication.md)
+- [Administrative authorization](docs/development/api-authorization.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

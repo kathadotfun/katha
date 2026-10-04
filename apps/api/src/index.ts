@@ -1,4 +1,6 @@
 import { createWalletSessions } from "./wallet-session.js";
+import { createAuthorization } from "./authorization.js";
+import { createRegistryAuthorityReader } from "@katha/solana";
 import { createDatabase, createWalletSessionStore } from "@katha/db";
 import { createReadiness } from "./readiness.js";
 import { createShutdown } from "./shutdown.js";
@@ -31,6 +33,21 @@ function startApi() {
     readiness,
     [config.KATHA_PUBLIC_APP_ORIGIN, config.KATHA_PUBLIC_API_ORIGIN],
     sessions,
+    createAuthorization(
+      sessions,
+      {
+        cluster: config.KATHA_CLUSTER,
+        adminWallets: config.KATHA_ADMIN_WALLETS,
+        verifierWallets: config.KATHA_VERIFIER_WALLETS,
+      },
+      createRegistryAuthorityReader({
+        cluster: config.KATHA_CLUSTER,
+        ...(config.KATHA_RPC_URL === undefined ? {} : { rpcUrl: config.KATHA_RPC_URL }),
+        ...(config.KATHA_RPC_SUBSCRIPTIONS_URL === undefined
+          ? {}
+          : { rpcSubscriptionsUrl: config.KATHA_RPC_SUBSCRIPTIONS_URL }),
+      }),
+    ),
   );
   const port = config.API_PORT;
 

@@ -64,3 +64,11 @@ export type {
 } from "./lifecycle.js";
 
 export { validateWalletAddress, verifyWalletSignature } from "./wallet-signature.js";
+export {
+  createRegistryAuthorityReader,
+  readRegistryAuthorities,
+} from "./registry-authorities.js";
+export type {
+  RegistryAuthorities,
+  RegistryAuthorityRole,
+} from "./registry-authorities.js";

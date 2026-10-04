@@ -2,7 +2,8 @@
 
 The API authenticates Solana wallet message signatures through the existing
 [wallet/challenge/session tables](wallet-sessions.md). It does not sign transactions,
-read wallet keys, check artwork ownership, or assign administrative roles.
+read wallet keys, check artwork ownership, or assign administrative roles from signatures. Protected administrative access
+uses the separate [authorization boundary](api-authorization.md).
 
 ## HTTP contract
 
@@ -75,7 +76,8 @@ The planned web boundary should keep it in memory and clear it on sign-out; do
 not put tokens in URLs, logs, public documents or browser persistence. Bearer
 possession authorizes use until expiry/revocation, so use HTTPS outside trusted
 local development. There is no ambient cookie credential or cookie-based CSRF flow.
-Role enforcement remains step 055; signing in alone gives no admin/verifier power.
+The separate authorization guards require explicit server-configured permission;
+signing in alone gives no admin/verifier power.
 
 The store has no cleanup scheduler or rate limiting in this step. Expired records
 are ineffective but retained; the service does not promise resistance to unbounded

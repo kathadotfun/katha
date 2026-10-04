@@ -1,4 +1,6 @@
 import type { WalletSessionBoundary } from "./wallet-session.js";
+import type { AuthorizationBoundary } from "./authorization.js";
+import type { WalletSession } from "@katha/shared";
 import { walletChallengeRequestSchema, walletVerifyRequestSchema } from "@katha/shared";
 import { parseJson } from "./http.js";
 import { restrictedCors, requestBodyLimit } from "./http.js";
@@ -8,13 +10,20 @@ import { describeError, DomainError, type ApiErrorCode } from "./errors.js";
 import type { Readiness } from "./readiness.js";
 import { createLogger, type ApiLogger } from "./logger.js";
 
-type ApiEnvironment = { Variables: { requestId: string; errorCode: ApiErrorCode } };
+export type ApiEnvironment = {
+  Variables: {
+    requestId: string;
+    errorCode: ApiErrorCode;
+    walletSession: WalletSession;
+  };
+};
 
 export function createApi(
   logger: ApiLogger = createLogger(),
   readiness?: Readiness,
   origins: readonly string[] = [],
   sessions?: WalletSessionBoundary,
+  authorization?: AuthorizationBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -52,8 +61,29 @@ export function createApi(
       await next();
     });
   }
+  for (const role of ["admin", "verifier"] as const) {
+    app.use(`/${role}/*`, async (c, next) => {
+      c.header("Cache-Control", "no-store");
+      await next();
+    });
+  }
   app.use("*", restrictedCors(origins));
   app.use("*", requestBodyLimit());
+  // Reserve both namespaces before any future write handlers are registered.
+  for (const role of ["admin", "verifier"] as const) {
+    app.use(`/${role}/*`, async (c, next) => {
+      if (!authorization) {
+        if (!sessions) throw new DomainError("UNAUTHENTICATED");
+        await sessions.authenticate(c.req.header("Authorization"));
+        throw new DomainError("FORBIDDEN");
+      }
+      c.set(
+        "walletSession",
+        await authorization.requireRole(c.req.header("Authorization"), role),
+      );
+      await next();
+    });
+  }
   app.get("/health/live", (context) => {
     context.header("Cache-Control", "no-store");
     return context.json({ status: "alive" });
