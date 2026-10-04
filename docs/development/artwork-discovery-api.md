@@ -1,7 +1,8 @@
 # Public artwork discovery
 
 `GET /artworks` is anonymous and returns a bounded page of published artwork
-summaries. `GET /artworks/:kathaId` is not implemented yet.
+summaries. [Artwork details](artwork-details-api.md) use the same publication
+predicate at `GET /artworks/:kathaId`.
 
 ```http
 GET /artworks?category=PAUBHA&limit=20&offset=0

@@ -64,8 +64,9 @@ guards, finalized Registry authority checks, and authorized artist creation and
 manual profile verification, public verified-artist queries with safe field projections,
 and admin artwork draft creation and editing with retry-safe permanent IDs,
 protected attribution, optimistic concurrency checks, and public artwork discovery
-with category filtering and a publication gate.
-Artwork detail browsing, remaining API behavior, and Marketplace
+with category filtering and a publication gate, plus public artwork details with
+finalized attestation summaries and explicit indexed ownership/freshness.
+Remaining API behavior and Marketplace
 business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -102,6 +103,7 @@ outside the current scope.
 - [Artwork draft creation](docs/development/artwork-drafts-api.md)
 - [Artwork draft editing](docs/development/artwork-draft-editing-api.md)
 - [Public artwork discovery](docs/development/artwork-discovery-api.md)
+- [Public artwork details](docs/development/artwork-details-api.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

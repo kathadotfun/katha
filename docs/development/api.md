@@ -45,4 +45,5 @@ protect [artist creation and manual approval](artist-management-api.md). [Public
 [Admin draft editing](artwork-draft-editing-api.md) preserves identity and rejects
 stale, published or lifecycle-bound edits.
 [Public artwork discovery](artwork-discovery-api.md) supports category filtering and
-bounded pagination. Artwork detail responses remain the next step.
+bounded pagination. [Public artwork details](artwork-details-api.md) expose approved
+content, finalized summaries and explicit indexed ownership/freshness.

@@ -1,3 +1,4 @@
+import { createArtworkDetails } from "../src/artwork-details.js";
 import { randomUUID, createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -7,6 +8,10 @@ import {
   validateDatabaseUrl,
   createArtistStore,
   createPublicArtworkStore,
+  createPublicArtworkDetailStore,
+  artworkMaterials,
+  custodyEvents,
+  indexerCheckpoints,
   createArtworkDraftStore,
   artworks,
   artworkMedia,
@@ -16,7 +21,10 @@ import {
   indexedEvents,
   artworkOwnership,
 } from "@katha/db";
-import { artworkDiscoveryResponseSchema } from "@katha/shared";
+import {
+  artworkDiscoveryResponseSchema,
+  publicArtworkDetailSchema,
+} from "@katha/shared";
 import { createApi } from "../src/app.js";
 import { createLogger } from "../src/logger.js";
 import { createArtworkDiscovery } from "../src/artwork-discovery.js";
@@ -34,6 +42,7 @@ type FixtureOptions = {
   ownership: boolean;
   hero: "PUBLIC" | "PRIVATE" | "MISSING";
   metadataVersions: number;
+  conditionVersions: number;
 };
 
 it("discovers only explicitly published, finalized artworks on the configured cluster without private media or duplicate rows", async () => {
@@ -61,6 +70,7 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     undefined,
     undefined,
     createArtworkDiscovery(store),
+    createArtworkDetails(createPublicArtworkDetailStore(database.db, "LOCALNET")),
   );
   const hash = (document: string) =>
     createHash("sha256").update(document).digest("hex");
@@ -77,6 +87,7 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       ownership: true,
       hero: "PUBLIC",
       metadataVersions: 1,
+      conditionVersions: 1,
       ...overrides,
     };
     const number = ++fixtureNumber;
@@ -100,6 +111,14 @@ it("discovers only explicitly published, finalized artworks on the configured cl
         category: options.category,
         title: `Synthetic artwork ${number}`,
         creationYear: 2026,
+        story: "Public synthetic story",
+        meaning: "Public synthetic meaning",
+        culturalContext: "Public synthetic context",
+        creationProcess: "Public synthetic process",
+        heightMm: 720,
+        widthMm: 510,
+        technique: "Traditional synthetic painting",
+        originRegion: "Bagmati",
         authorshipEvidenceHash: "e".repeat(64),
         createdAt: now,
         updatedAt: now,
@@ -177,43 +196,45 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       }
     }
     if (options.inspection) {
-      const id = randomUUID();
-      const inspectorId = randomUUID();
-      const document = JSON.stringify({
-        kathaId: record.kathaId,
-        reportId: id,
-        inspectorId,
-        verifierWallet: wallet.address,
-        grade: "EXCELLENT",
-        reason: "INITIAL_VERIFICATION",
-        inspectedAt: at.toISOString(),
-        reportedAt: at.toISOString(),
-        notes: "PRIVATE INSPECTION NOTES",
-        mediaHashes: ["e".repeat(64)],
-      });
-      const [inspection] = await database.db
-        .insert(conditionReports)
-        .values({
-          authorityWallet: wallet.address,
-          createdAt: at,
-          updatedAt: at,
-          id,
-          artworkId: record.id,
-          status: "PREPARED",
-          version: 1,
+      for (let version = 1; version <= options.conditionVersions; version++) {
+        const id = randomUUID();
+        const inspectorId = randomUUID();
+        const document = JSON.stringify({
+          kathaId: record.kathaId,
+          reportId: id,
           inspectorId,
-          grade: "EXCELLENT",
-          reason: "INITIAL_VERIFICATION",
-          inspectedAt: at,
-          reportedAt: at,
+          verifierWallet: wallet.address,
+          grade: version === 1 ? "EXCELLENT" : "GOOD",
+          reason: version === 1 ? "INITIAL_VERIFICATION" : "PRE_RESALE",
+          inspectedAt: at.toISOString(),
+          reportedAt: at.toISOString(),
           notes: "PRIVATE INSPECTION NOTES",
           mediaHashes: ["e".repeat(64)],
-          canonicalDocument: document,
-          documentHash: hash(document),
-        })
-        .returning();
-      if (!inspection) throw new Error("Expected prepared inspection");
-      await finalize("condition_reports", inspection.id, 1);
+        });
+        const [inspection] = await database.db
+          .insert(conditionReports)
+          .values({
+            authorityWallet: wallet.address,
+            createdAt: at,
+            updatedAt: at,
+            id,
+            artworkId: record.id,
+            status: "PREPARED",
+            version,
+            inspectorId,
+            grade: version === 1 ? "EXCELLENT" : "GOOD",
+            reason: version === 1 ? "INITIAL_VERIFICATION" : "PRE_RESALE",
+            inspectedAt: at,
+            reportedAt: at,
+            notes: "PRIVATE INSPECTION NOTES",
+            mediaHashes: ["e".repeat(64)],
+            canonicalDocument: document,
+            documentHash: hash(document),
+          })
+          .returning();
+        if (!inspection) throw new Error("Expected prepared inspection");
+        await finalize("condition_reports", inspection.id, version);
+      }
     }
     if (options.ownership) {
       const assetAddress = temporaryWallet().address;
@@ -287,7 +308,11 @@ it("discovers only explicitly published, finalized artworks on the configured cl
         timeout: 30000,
       },
     );
-    const mandala = await fixture({ category: "MANDALA", metadataVersions: 2 });
+    const mandala = await fixture({
+      category: "MANDALA",
+      metadataVersions: 2,
+      conditionVersions: 2,
+    });
     const paubha = await fixture();
     const privateHero = await fixture({ hero: "PRIVATE" });
     const thangka = await fixture({ category: "THANGKA", hero: "MISSING" });
@@ -302,6 +327,91 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       fixture({ future: true }),
     ]);
     const devnet = await fixture({ cluster: "DEVNET" });
+    await database.db.insert(artworkMaterials).values([
+      { artworkId: mandala.id, name: "Mineral pigments", position: 1 },
+      { artworkId: mandala.id, name: "Canvas", position: 0 },
+    ]);
+    await database.db.insert(custodyEvents).values({
+      artworkId: mandala.id,
+      fromState: "UNKNOWN",
+      toState: "KATHA_HELD",
+      custodianWallet: wallet.address,
+      recordedByWallet: wallet.address,
+      evidenceHash: "e".repeat(64),
+      occurredAt: new Date(),
+    });
+    // A newer prepared revision must not replace finalized public metadata.
+    const preparedDocument = JSON.stringify({ kathaId: mandala.kathaId });
+    await database.db.insert(artworkMetadataVersions).values({
+      artworkId: mandala.id,
+      authorityWallet: wallet.address,
+      version: 3,
+      status: "PREPARED",
+      uri: "https://example.com/prepared.json",
+      canonicalDocument: preparedDocument,
+      documentHash: hash(preparedDocument),
+    });
+    const detailResponse = await app.request(`/artworks/${mandala.kathaId}`);
+    expect(detailResponse.status).toBe(200);
+    const detail = publicArtworkDetailSchema.parse(await detailResponse.json());
+    expect(detail.materials).toEqual(["Canvas", "Mineral pigments"]);
+    expect(detail.story).toBe("Public synthetic story");
+    expect(detail.dimensions).toEqual({ heightMm: 720, widthMm: 510, depthMm: null });
+    expect(detail.metadata.version).toBe(2);
+    expect(detail.condition).toMatchObject({
+      version: 2,
+      reason: "PRE_RESALE",
+      grade: "GOOD",
+    });
+    expect(detail.metadata.uri).toContain("/2.json");
+    expect(detail.custody).toMatchObject({
+      state: "KATHA_HELD",
+      source: "MANUAL_OBSERVATION",
+    });
+    expect(detail.ownership.ownerWallet).toBe(wallet.address);
+    expect(detail.indexing).toEqual({ freshness: "UNKNOWN", checkpoint: null });
+    expect(detail.media.map((row) => row.role)).toEqual(["HERO"]);
+    expect(JSON.stringify(detail)).not.toContain("PRIVATE");
+    for (const record of [...hidden, devnet])
+      expect((await app.request(`/artworks/${record.kathaId}`)).status).toBe(404);
+    expect((await app.request("/artworks/KATHA-MANDALA-999999")).status).toBe(404);
+    const privateDetail = publicArtworkDetailSchema.parse(
+      await (await app.request(`/artworks/${privateHero.kathaId}`)).json(),
+    );
+    expect(privateDetail.media).toEqual([]);
+    expect(privateDetail.custody).toEqual({
+      state: "UNKNOWN",
+      source: "UNKNOWN",
+      observedAt: null,
+    });
+    const devnetDetail = await createPublicArtworkDetailStore(
+      database.db,
+      "DEVNET",
+    ).findByKathaId(devnet.kathaId);
+    expect(devnetDetail?.cluster).toBe("DEVNET");
+    expect(
+      await createPublicArtworkDetailStore(database.db, "DEVNET").findByKathaId(
+        mandala.kathaId,
+      ),
+    ).toBeNull();
+    await database.db.insert(indexerCheckpoints).values({
+      cluster: "LOCALNET",
+      programAddress: wallet.address,
+      fromSlot: 0n,
+      scannedThroughSlot: 10n,
+      gapFromSlot: 2n,
+      gapThroughSlot: 3n,
+    });
+    const gapDetail = publicArtworkDetailSchema.parse(
+      await (await app.request(`/artworks/${mandala.kathaId}`)).json(),
+    );
+    expect(gapDetail.indexing.freshness).toBe("GAP_DETECTED");
+    expect(gapDetail.indexing.checkpoint).toMatchObject({
+      scannedThroughSlot: "10",
+      gapFromSlot: "2",
+      gapThroughSlot: "3",
+    });
+
     const page = artworkDiscoveryResponseSchema.parse(
       await (await app.request("/artworks")).json(),
     );

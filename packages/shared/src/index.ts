@@ -137,3 +137,10 @@ export type {
   ArtworkDiscoveryQuery,
   PublicArtworkSummary,
 } from "./artwork-discovery-api.js";
+
+export {
+  artworkDetailParamsSchema,
+  artworkDetailQuerySchema,
+  publicArtworkDetailSchema,
+  type PublicArtworkDetail,
+} from "./artwork-detail-api.js";

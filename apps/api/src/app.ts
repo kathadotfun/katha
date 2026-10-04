@@ -1,3 +1,5 @@
+import type { ArtworkDetailsBoundary } from "./artwork-details.js";
+import { artworkDetailParamsSchema, artworkDetailQuerySchema } from "@katha/shared";
 import type { ArtworkDiscoveryBoundary } from "./artwork-discovery.js";
 import { artworkDiscoveryQuerySchema } from "@katha/shared";
 import type { ArtworkDraftsBoundary } from "./artwork-drafts.js";
@@ -44,6 +46,7 @@ export function createApi(
   publicArtists?: PublicArtistsBoundary,
   artworkDrafts?: ArtworkDraftsBoundary,
   discovery?: ArtworkDiscoveryBoundary,
+  details?: ArtworkDetailsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -176,6 +179,13 @@ export function createApi(
     app.get("/artworks", async (c) =>
       c.json(await discovery.list(parseQuery(c, artworkDiscoveryQuerySchema))),
     );
+  }
+  if (details) {
+    app.get("/artworks/:kathaId", async (c) => {
+      parseQuery(c, artworkDetailQuerySchema);
+      const { kathaId } = parseParams(c, artworkDetailParamsSchema);
+      return c.json(await details.detail(kathaId));
+    });
   }
   app.onError(errorResponse);
   app.notFound((context) => errorResponse(new DomainError("NOT_FOUND"), context));

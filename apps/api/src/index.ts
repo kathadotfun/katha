@@ -1,3 +1,5 @@
+import { createArtworkDetails } from "./artwork-details.js";
+import { createPublicArtworkDetailStore } from "@katha/db";
 import { createArtworkDiscovery } from "./artwork-discovery.js";
 import { createPublicArtworkStore } from "@katha/db";
 import { createArtworkDrafts } from "./artwork-drafts.js";
@@ -60,6 +62,12 @@ function startApi() {
     createArtworkDrafts(createArtworkDraftStore(database.db)),
     createArtworkDiscovery(
       createPublicArtworkStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
+    ),
+    createArtworkDetails(
+      createPublicArtworkDetailStore(
         database.db,
         config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
       ),

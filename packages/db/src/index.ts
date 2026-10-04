@@ -113,3 +113,8 @@ export {
   createPublicArtworkStore,
   type PublicArtworkStore,
 } from "./public-artwork-store.js";
+
+export {
+  createPublicArtworkDetailStore,
+  type PublicArtworkDetailStore,
+} from "./public-artwork-store.js";
