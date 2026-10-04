@@ -1,3 +1,5 @@
+import { createArtworkDrafts } from "./artwork-drafts.js";
+import { createArtworkDraftStore } from "@katha/db";
 import { createWalletSessions } from "./wallet-session.js";
 import { createPublicArtists } from "./public-artists.js";
 import { createPublicArtistStore } from "@katha/db";
@@ -53,6 +55,7 @@ function startApi() {
     ),
     createArtists(createArtistStore(database.db)),
     createPublicArtists(createPublicArtistStore(database.db)),
+    createArtworkDrafts(createArtworkDraftStore(database.db)),
   );
   const port = config.API_PORT;
 

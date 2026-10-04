@@ -34,6 +34,10 @@ export const artworks = pgTable(
       .notNull()
       .default("")
       .unique("artworks_katha_id_unique"),
+    // Optional for historical rows; API creation requires a retry-safe request UUID.
+    creationRequestId: uuid("creation_request_id").unique(
+      "artworks_creation_request_unique",
+    ),
     artistId: uuid("artist_id")
       .notNull()
       .references(() => artists.id, { onDelete: "restrict", onUpdate: "restrict" }),

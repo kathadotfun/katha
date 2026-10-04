@@ -1,3 +1,6 @@
+import { createArtworkDraftStore } from "@katha/db";
+import { artworkDraftResponseSchema } from "@katha/shared";
+import { createArtworkDrafts } from "../src/artwork-drafts.js";
 import { artworks } from "@katha/db";
 import { paginatedResponseSchema, publicArtistSummarySchema } from "@katha/shared";
 import { createPublicArtistStore } from "@katha/db";
@@ -15,7 +18,7 @@ import {
 import { createWalletSessionStore } from "@katha/db";
 import { createWalletSessions, hashSessionValue } from "../src/wallet-session.js";
 import { temporaryWallet } from "./fixtures/wallet.js";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -515,3 +518,245 @@ it("publishes only verified artist profiles with stable pagination and safe deta
     await database.close();
   }
 });
+
+it("creates private drafts with signed admin authorization, retry rollback and concurrent permanent IDs", async () => {
+  const url = validateDatabaseUrl(process.env.KATHA_TEST_DATABASE_URL);
+  const target = new URL(url);
+  if (target.hostname !== "127.0.0.1" || target.pathname !== "/katha_test")
+    throw new Error("Expected disposable target");
+  const adminDatabase = createDatabase(url);
+  const databaseName = `katha_draft_${randomUUID().replaceAll("-", "")}`;
+  const freshUrl = new URL(url);
+  freshUrl.pathname = `/${databaseName}`;
+  const database = createDatabase(freshUrl.toString());
+  let databaseCreated = false;
+  const admin = temporaryWallet();
+  const creator = temporaryWallet();
+  const sessions = createWalletSessions(createWalletSessionStore(database.db), {
+    origin: "http://localhost:3000",
+    cluster: "localnet",
+  });
+  const chainRead = vi.fn(async () => {
+    throw new Error("Draft creation is off-chain");
+  });
+  const authorization = createAuthorization(
+    sessions,
+    {
+      cluster: "localnet",
+      adminWallets: [admin.address],
+      verifierWallets: [],
+    },
+    chainRead,
+  );
+  const logs: string[] = [];
+  const app = createApi(
+    createLogger((line) => logs.push(line)),
+    undefined,
+    [],
+    sessions,
+    authorization,
+    undefined,
+    createPublicArtists(createPublicArtistStore(database.db)),
+    createArtworkDrafts(createArtworkDraftStore(database.db)),
+  );
+  const post = (path: string, body: unknown, token?: string) =>
+    app.request(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  try {
+    // Generated identifier only; this database is owned and removed by this case.
+    await adminDatabase.db.execute(`CREATE DATABASE "${databaseName}"`);
+    databaseCreated = true;
+    execFileSync(
+      process.execPath,
+      [
+        fileURLToPath(
+          new URL(
+            "../../../packages/db/node_modules/drizzle-kit/bin.cjs",
+            import.meta.url,
+          ),
+        ),
+        "migrate",
+      ],
+      {
+        cwd: fileURLToPath(new URL("../../../packages/db/", import.meta.url)),
+        env: { ...process.env, DATABASE_URL: freshUrl.toString() },
+        stdio: "pipe",
+        timeout: 30000,
+      },
+    );
+    const writer = createArtistStore(database.db);
+    const profile = {
+      slug: `synthetic-draft-${randomUUID()}`,
+      displayName: "Synthetic artist",
+      biography: "Synthetic biography",
+      region: "Patan",
+      traditions: ["Paubha"],
+    };
+    const artist = await writer.create(profile);
+    const walletArtist = await writer.create({
+      ...profile,
+      slug: `${profile.slug}-wallet`,
+      creatorWallet: creator.address,
+    });
+    if (!artist || !walletArtist) throw new Error("Expected fixture artists");
+    const challenge = await sessions.challenge({
+      walletAddress: admin.address,
+      cluster: "localnet",
+    });
+    const session = await sessions.verify({
+      challengeId: challenge.challengeId,
+      walletAddress: admin.address,
+      signature: admin.signMessage(challenge.message),
+    });
+    const draft = {
+      creationRequestId: randomUUID(),
+      artistId: artist.id,
+      category: "PAUBHA",
+      title: "Synthetic private draft",
+      creationYear: 2026,
+    };
+    expect((await post("/admin/artworks", draft)).status).toBe(401);
+    expect(
+      (
+        await post(
+          "/admin/artworks",
+          { ...draft, kathaId: "KATHA-PAUBHA-000001" },
+          session.token,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await post(
+          "/admin/artworks",
+          { ...draft, artistId: randomUUID() },
+          session.token,
+        )
+      ).status,
+    ).toBe(404);
+    const creation = await post("/admin/artworks", draft, session.token);
+    expect(creation.status).toBe(201);
+    const result = artworkDraftResponseSchema.parse(await creation.json());
+    expect(result.creatorWallet).toBeNull();
+    expect(result.dimensions).toBeNull();
+    expect(result.kathaId).toMatch(/^KATHA-PAUBHA-[0-9]{6}$/);
+    const before = await database.db.query.artworkIdCounters.findFirst({
+      where: (row, { eq }) => eq(row.category, "PAUBHA"),
+    });
+    expect((await post("/admin/artworks", draft, session.token)).status).toBe(409);
+    const after = await database.db.query.artworkIdCounters.findFirst({
+      where: (row, { eq }) => eq(row.category, "PAUBHA"),
+    });
+    expect(after?.lastValue).toBe(before?.lastValue);
+    const linked = await database.db.query.artworks.findMany({
+      where: (row, { eq }) => eq(row.creationRequestId, draft.creationRequestId),
+    });
+    expect(linked).toHaveLength(1);
+    expect(linked[0]?.id).toBe(result.id);
+    const retry = {
+      ...draft,
+      creationRequestId: randomUUID(),
+      artistId: walletArtist.id,
+      dimensions: { heightMm: 300, widthMm: 200 },
+      story: "Synthetic story",
+    };
+    const race = await Promise.all([
+      post("/admin/artworks", retry, session.token),
+      post("/admin/artworks", retry, session.token),
+    ]);
+    expect(race.map((response) => response.status).sort()).toEqual([201, 409]);
+    const winner = artworkDraftResponseSchema.parse(
+      await race.find((response) => response.status === 201)!.json(),
+    );
+    expect(winner.creatorWallet).toBe(creator.address);
+    expect(winner.dimensions).toEqual({ heightMm: 300, widthMm: 200, depthMm: null });
+    const raceCounter = await database.db.query.artworkIdCounters.findFirst({
+      where: (row, { eq }) => eq(row.category, "PAUBHA"),
+    });
+    expect(raceCounter?.lastValue).toBe((before?.lastValue ?? 0) + 1);
+    const concurrent = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        post(
+          "/admin/artworks",
+          { ...draft, creationRequestId: randomUUID() },
+          session.token,
+        ),
+      ),
+    );
+    expect(concurrent.every((response) => response.status === 201)).toBe(true);
+    const created = await Promise.all(
+      concurrent.map(async (response) =>
+        artworkDraftResponseSchema.parse(await response.json()),
+      ),
+    );
+    expect(new Set(created.map((row) => row.kathaId)).size).toBe(12);
+    // Same title is valid for distinct physical works; creation request UUID controls retries.
+    for (const category of ["MANDALA", "THANGKA"])
+      expect(
+        (
+          await post(
+            "/admin/artworks",
+            { ...draft, category, creationRequestId: randomUUID() },
+            session.token,
+          )
+        ).status,
+      ).toBe(201);
+    await writer.verify(artist.id, admin.address);
+    const detail = publicArtistDetailSchema.parse(
+      await (await app.request(`/artists/${artist.slug}`)).json(),
+    );
+    expect(detail.artworks).toEqual([]);
+    expect((await app.request(`/artworks/${result.kathaId}`)).status).toBe(404);
+    await expect(
+      database.db.update(artworks).set({ creationRequestId: randomUUID() }),
+    ).rejects.toMatchObject({
+      cause: { code: "23514", constraint_name: "artworks_creation_request_immutable" },
+    });
+    // Only this disposable test database is modified; exhaust the final category after successful cases.
+    await database.db.execute(
+      "UPDATE artwork_id_counters SET last_value = 999999 WHERE category = 'THANGKA'",
+    );
+    const exhaustedId = randomUUID();
+    expect(
+      (
+        await post(
+          "/admin/artworks",
+          { ...draft, category: "THANGKA", creationRequestId: exhaustedId },
+          session.token,
+        )
+      ).status,
+    ).toBe(409);
+    expect(
+      await database.db.query.artworks.findFirst({
+        where: (row, { eq }) => eq(row.creationRequestId, exhaustedId),
+      }),
+    ).toBeUndefined();
+    await sessions.logout(`Bearer ${session.token}`);
+    expect(
+      (
+        await post(
+          "/admin/artworks",
+          { ...draft, creationRequestId: randomUUID() },
+          session.token,
+        )
+      ).status,
+    ).toBe(401);
+    expect(chainRead).not.toHaveBeenCalled();
+    for (const secret of [session.token, challenge.message, draft.title])
+      expect(logs.join("")).not.toContain(secret);
+  } finally {
+    await database.close();
+    try {
+      if (databaseCreated)
+        await adminDatabase.db.execute(`DROP DATABASE "${databaseName}"`);
+    } finally {
+      await adminDatabase.close();
+    }
+  }
+}, 15000);

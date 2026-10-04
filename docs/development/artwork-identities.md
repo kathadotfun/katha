@@ -27,6 +27,12 @@ updates cannot decrease the value or change category, and counter deletion is
 blocked. Allocation belongs to the database, rather than an application-side
 read-then-increment sequence.
 
+The [admin draft API](artwork-drafts-api.md) requires a unique `creationRequestId`.
+Migration `0008_artwork_draft_requests.sql` adds its nullable storage column for
+historical compatibility, uniqueness constraint and immutable request identity
+trigger. Duplicate API requests roll back the attempted allocation and return a
+conflict. Direct fixture inserts may leave the column null.
+
 ## Permanent attribution and editable content
 
 Update/delete triggers protect UUID, Katha ID, artist UUID, category, creator

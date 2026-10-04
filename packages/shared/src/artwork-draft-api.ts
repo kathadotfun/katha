@@ -1,0 +1,67 @@
+import { z } from "zod";
+import { artworkCategorySchema, kathaIdSchema } from "./artwork-identity.js";
+import { artistIdParamsSchema } from "./artist-api.js";
+import {
+  artworkDimensionsSchema,
+  artworkOriginSchema,
+  artworkPublicContentSchema,
+  artworkSchema,
+  walletAddressSchema,
+} from "./artwork-domain.js";
+
+const content = (schema: z.ZodString) =>
+  schema.refine(
+    // eslint-disable-next-line no-control-regex -- Reject text controls unsupported by profile/document storage.
+    (value) => !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value),
+  );
+const dimensions = artworkDimensionsSchema.extend({
+  heightMm: artworkDimensionsSchema.shape.heightMm.max(2147483647),
+  widthMm: artworkDimensionsSchema.shape.widthMm.max(2147483647),
+  depthMm: z.number().int().positive().max(2147483647).nullish(),
+});
+const origin = artworkOriginSchema.extend({
+  region: content(artworkOriginSchema.shape.region).nullish(),
+  locality: content(artworkOriginSchema.shape.locality.unwrap().unwrap()).nullish(),
+});
+const draftFields = {
+  artistId: artistIdParamsSchema.shape.artistId,
+  category: artworkCategorySchema,
+  title: content(artworkSchema.shape.title),
+  creationYear: artworkSchema.shape.creationYear,
+  authorshipEvidenceHash: artworkSchema.shape.authorshipEvidenceHash.nullish(),
+  dimensions: dimensions.nullish(),
+  origin: origin.optional(),
+  technique: content(artworkSchema.shape.technique).nullish(),
+  story: content(artworkPublicContentSchema.shape.story).nullish(),
+  meaning: content(artworkPublicContentSchema.shape.meaning).nullish(),
+  culturalContext: content(artworkPublicContentSchema.shape.culturalContext).nullish(),
+  creationProcess: content(artworkPublicContentSchema.shape.creationProcess).nullish(),
+};
+export const artworkDraftCreateRequestSchema = z.strictObject({
+  // Retain this UUID when retrying an uncertain creation request.
+  creationRequestId: z.uuid().transform((value) => value.toLowerCase()),
+  ...draftFields,
+});
+export const artworkDraftResponseSchema = z
+  .strictObject({
+    ...draftFields,
+    id: z.uuid(),
+    kathaId: kathaIdSchema,
+    creatorWallet: walletAddressSchema.nullable(),
+    authorshipEvidenceHash: artworkSchema.shape.authorshipEvidenceHash.nullable(),
+    dimensions: dimensions.nullable(),
+    origin: origin,
+    technique: draftFields.technique.unwrap().unwrap().nullable(),
+    story: draftFields.story.unwrap().unwrap().nullable(),
+    meaning: draftFields.meaning.unwrap().unwrap().nullable(),
+    culturalContext: draftFields.culturalContext.unwrap().unwrap().nullable(),
+    creationProcess: draftFields.creationProcess.unwrap().unwrap().nullable(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .refine((record) => record.kathaId.startsWith(`KATHA-${record.category}-`), {
+    path: ["kathaId"],
+    error: "Category must match permanent ID",
+  });
+export type ArtworkDraftCreateRequest = z.infer<typeof artworkDraftCreateRequestSchema>;
+export type ArtworkDraftResponse = z.infer<typeof artworkDraftResponseSchema>;

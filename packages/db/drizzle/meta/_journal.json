@@ -57,6 +57,13 @@
       "when": 1791050040036,
       "tag": "0007_blockchain_read_models",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791151448406,
+      "tag": "0008_artwork_draft_requests",
+      "breakpoints": true
     }
   ]
 }

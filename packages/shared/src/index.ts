@@ -112,3 +112,12 @@ export {
   publicArtistDetailSchema,
 } from "./artist-api.js";
 export type { PublicArtistSummary, PublicArtistDetail } from "./artist-api.js";
+
+export {
+  artworkDraftCreateRequestSchema,
+  artworkDraftResponseSchema,
+} from "./artwork-draft-api.js";
+export type {
+  ArtworkDraftCreateRequest,
+  ArtworkDraftResponse,
+} from "./artwork-draft-api.js";

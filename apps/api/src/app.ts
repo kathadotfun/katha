@@ -1,3 +1,5 @@
+import type { ArtworkDraftsBoundary } from "./artwork-drafts.js";
+import { artworkDraftCreateRequestSchema } from "@katha/shared";
 import type { WalletSessionBoundary } from "./wallet-session.js";
 import type { AuthorizationBoundary } from "./authorization.js";
 import type { ArtistsBoundary } from "./artists.js";
@@ -34,6 +36,7 @@ export function createApi(
   authorization?: AuthorizationBoundary,
   artists?: ArtistsBoundary,
   publicArtists?: PublicArtistsBoundary,
+  artworkDrafts?: ArtworkDraftsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -143,6 +146,14 @@ export function createApi(
     );
     app.get("/artists/:slug", async (c) =>
       c.json(await publicArtists.detail(parseParams(c, artistSlugParamsSchema).slug)),
+    );
+  }
+  if (artworkDrafts) {
+    app.post("/admin/artworks", async (c) =>
+      c.json(
+        await artworkDrafts.create(await parseJson(c, artworkDraftCreateRequestSchema)),
+        201,
+      ),
     );
   }
   app.onError(errorResponse);

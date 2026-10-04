@@ -105,7 +105,8 @@ must be consistent. Shared request/response schemas live in
 `packages/shared/src/artist-api.ts`; the database schema remains unchanged.
 
 [Public verified-artist queries](public-artists-api.md) are available separately. There is no
-edit, delete, revoke, self-onboarding or artwork endpoint in this change.
+artist edit, delete, revoke or self-onboarding endpoint.
+[Artwork draft creation](artwork-drafts-api.md) is available through a separate admin route.
 
 ## Verification
 
