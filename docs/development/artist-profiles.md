@@ -32,8 +32,8 @@ Database URL/address checks enforce textual shape. API inputs must still use the
 shared profile schemas and full URL parsing, while chain-facing operations must
 decode wallet addresses to 32-byte Solana keys. A verifier wallet stored here is
 an application attribution field; it is not by itself an authenticated session
-or on-chain verification event. Authorized API onboarding and verification are
-implemented in later steps. Only approved public media URLs belong in this table;
+or on-chain verification event. Authorized [API onboarding and verification](artist-management-api.md) use
+configured admin/verifier sessions; chain artwork verification remains separate. Only approved public media URLs belong in this table;
 private evidence and contact/shipping details remain outside public records.
 
 ## Apply and verify

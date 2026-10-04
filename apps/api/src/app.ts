@@ -1,5 +1,11 @@
 import type { WalletSessionBoundary } from "./wallet-session.js";
 import type { AuthorizationBoundary } from "./authorization.js";
+import type { ArtistsBoundary } from "./artists.js";
+import {
+  artistCreateRequestSchema,
+  artistIdParamsSchema,
+  artistVerificationRequestSchema,
+} from "@katha/shared";
 import type { WalletSession } from "@katha/shared";
 import { walletChallengeRequestSchema, walletVerifyRequestSchema } from "@katha/shared";
 import { parseJson } from "./http.js";
@@ -24,6 +30,7 @@ export function createApi(
   origins: readonly string[] = [],
   sessions?: WalletSessionBoundary,
   authorization?: AuthorizationBoundary,
+  artists?: ArtistsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -109,6 +116,22 @@ export function createApi(
     app.post("/auth/logout", async (c) => {
       await sessions.logout(c.req.header("Authorization"));
       return c.body(null, 204);
+    });
+  }
+  if (artists) {
+    app.post("/admin/artists", async (c) =>
+      c.json(await artists.create(await parseJson(c, artistCreateRequestSchema)), 201),
+    );
+    app.post("/verifier/artists/:artistId/verification", async (c) => {
+      const parsed = artistIdParamsSchema.safeParse(c.req.param());
+      if (!parsed.success) throw new DomainError("INVALID_REQUEST");
+      return c.json(
+        await artists.verify(
+          parsed.data.artistId,
+          await parseJson(c, artistVerificationRequestSchema),
+          c.get("walletSession"),
+        ),
+      );
     });
   }
   app.onError(errorResponse);

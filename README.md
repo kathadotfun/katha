@@ -60,7 +60,8 @@ request IDs, structured logs that omit private request data, separate liveness a
 database readiness endpoints, bounded HTTP/database shutdown, shared REST contracts,
 restricted CORS, request-size limits, pagination validation, and signed wallet
 challenges with replay-protected bearer sessions, server-configured admin/verifier
-guards, and finalized Registry authority checks.
+guards, finalized Registry authority checks, and authorized artist creation and
+manual profile verification.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -93,6 +94,7 @@ outside the current scope.
 - [REST validation, CORS and limits](docs/development/api-rest.md)
 - [Signed wallet authentication](docs/development/wallet-authentication.md)
 - [Administrative authorization](docs/development/api-authorization.md)
+- [Artist creation and manual verification](docs/development/artist-management-api.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

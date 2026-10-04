@@ -1,3 +1,8 @@
+import { randomUUID } from "node:crypto";
+import { createArtistStore } from "@katha/db";
+import { artistResponseSchema } from "@katha/shared";
+import { createArtists } from "../src/artists.js";
+import { createAuthorization } from "../src/authorization.js";
 import {
   walletChallengeResponseSchema,
   walletSessionResponseSchema,
@@ -10,7 +15,7 @@ import { once } from "node:events";
 import { createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { createDatabase, validateDatabaseUrl } from "@katha/db";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createApi } from "../src/app.js";
 import { createLogger } from "../src/logger.js";
 import { createReadiness } from "../src/readiness.js";
@@ -231,3 +236,204 @@ it("authenticates signed wallets with atomic replay protection and rollback in P
     await database.close();
   }
 }, 10_000);
+
+it("creates and manually verifies artists through real signed sessions with race-safe PostgreSQL writes", async () => {
+  const url = validateDatabaseUrl(process.env.KATHA_TEST_DATABASE_URL);
+  const target = new URL(url);
+  if (target.hostname !== "127.0.0.1" || target.pathname !== "/katha_test")
+    throw new Error("Expected disposable target");
+  const database = createDatabase(url);
+  const admin = temporaryWallet();
+  const verifierA = temporaryWallet();
+  const verifierB = temporaryWallet();
+  const outsider = temporaryWallet();
+  const config = { origin: "http://localhost:3000", cluster: "localnet" as const };
+  const sessions = createWalletSessions(createWalletSessionStore(database.db), config);
+  const chainRead = vi.fn(async () => {
+    throw new Error("Artist profile approval is off-chain");
+  });
+  const authorization = createAuthorization(
+    sessions,
+    {
+      cluster: "localnet",
+      adminWallets: [admin.address],
+      verifierWallets: [verifierA.address, verifierB.address],
+    },
+    chainRead,
+  );
+  const store = createArtistStore(database.db);
+  const logs: string[] = [];
+  const app = createApi(
+    createLogger((line) => logs.push(line)),
+    undefined,
+    [config.origin],
+    sessions,
+    authorization,
+    createArtists(store),
+  );
+  const post = (path: string, body: unknown, token?: string) =>
+    app.request(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  async function login(wallet: ReturnType<typeof temporaryWallet>) {
+    const challenge = walletChallengeResponseSchema.parse(
+      await (
+        await post("/auth/challenge", {
+          walletAddress: wallet.address,
+          cluster: "localnet",
+        })
+      ).json(),
+    );
+    const verified = await post("/auth/verify", {
+      challengeId: challenge.challengeId,
+      walletAddress: wallet.address,
+      signature: wallet.signMessage(challenge.message),
+    });
+    expect(verified.status).toBe(200);
+    return walletSessionResponseSchema.parse(await verified.json()).token;
+  }
+  try {
+    const adminToken = await login(admin);
+    const verifierTokenA = await login(verifierA);
+    const verifierTokenB = await login(verifierB);
+    const outsiderToken = await login(outsider);
+    const profile = {
+      slug: `synthetic-api-${randomUUID()}`,
+      displayName: "Fictional test artist",
+      biography: "Synthetic biography, approved public content.",
+      region: "Patan",
+      traditions: ["Paubha"],
+      publicLinks: ["https://example.com/fictional-artist"],
+    };
+    expect((await post("/admin/artists", profile)).status).toBe(401);
+    expect((await post("/admin/artists", profile, outsiderToken)).status).toBe(403);
+    expect((await post("/admin/artists", profile, verifierTokenA)).status).toBe(403);
+    expect(
+      await database.db.query.artists.findFirst({
+        where: (row, { eq }) => eq(row.slug, profile.slug),
+      }),
+    ).toBeUndefined();
+    expect(
+      (
+        await post(
+          "/admin/artists",
+          { ...profile, verificationStatus: "VERIFIED" },
+          adminToken,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await post(
+          "/admin/artists",
+          { ...profile, payoutWallet: "z".repeat(44) },
+          adminToken,
+        )
+      ).status,
+    ).toBe(400);
+
+    const creationRace = await Promise.all([
+      post("/admin/artists", profile, adminToken),
+      post("/admin/artists", profile, adminToken),
+    ]);
+    expect(creationRace.map((result) => result.status).sort()).toEqual([201, 409]);
+    const created = artistResponseSchema.parse(
+      await creationRace.find((result) => result.status === 201)!.json(),
+    );
+    expect(created.creatorWallet).toBeNull();
+    expect(created.payoutWallet).toBeNull();
+    expect(created.verificationStatus).toBe("UNVERIFIED");
+    const path = `/verifier/artists/${created.id}/verification`;
+    for (const token of [adminToken, outsiderToken])
+      expect((await post(path, { confirmed: true }, token)).status).toBe(403);
+    expect(
+      (
+        await post(
+          path,
+          { confirmed: true, verifiedByWallet: admin.address },
+          verifierTokenA,
+        )
+      ).status,
+    ).toBe(400);
+    const unchanged = await database.db.query.artists.findFirst({
+      where: (row, { eq }) => eq(row.id, created.id),
+    });
+    expect(unchanged?.verificationStatus).toBe("UNVERIFIED");
+    expect(unchanged?.verifiedByWallet).toBeNull();
+    expect(unchanged?.verifiedAt).toBeNull();
+
+    const approvals = await Promise.all([
+      post(path, { confirmed: true }, verifierTokenA),
+      post(path, { confirmed: true }, verifierTokenB),
+    ]);
+    expect(approvals.map((result) => result.status).sort()).toEqual([200, 409]);
+    const approved = artistResponseSchema.parse(
+      await approvals.find((result) => result.status === 200)!.json(),
+    );
+    expect([verifierA.address, verifierB.address]).toContain(approved.verifiedByWallet);
+    expect(approved.verifiedAt).not.toBeNull();
+    expect(Date.parse(approved.verifiedAt!)).toBeGreaterThanOrEqual(
+      Date.parse(created.createdAt),
+    );
+    expect(approved.verifiedAt).toBe(approved.updatedAt);
+    expect(approved.id).toBe(created.id);
+    expect(approved.createdAt).toBe(created.createdAt);
+    expect(approved.biography).toBe(created.biography);
+    expect((await post(path, { confirmed: true }, verifierTokenB)).status).toBe(409);
+    const stored = await database.db.query.artists.findFirst({
+      where: (row, { eq }) => eq(row.id, created.id),
+    });
+    expect(stored?.verifiedByWallet).toBe(approved.verifiedByWallet);
+    expect(stored?.verifiedAt?.toISOString()).toBe(approved.verifiedAt);
+    expect(
+      (
+        await post(
+          `/verifier/artists/${randomUUID()}/verification`,
+          { confirmed: true },
+          verifierTokenA,
+        )
+      ).status,
+    ).toBe(404);
+    const payoutOnly = await post(
+      "/admin/artists",
+      {
+        ...profile,
+        slug: `synthetic-payout-${randomUUID()}`,
+        payoutWallet: admin.address,
+      },
+      adminToken,
+    );
+    expect(payoutOnly.status).toBe(201);
+    expect(artistResponseSchema.parse(await payoutOnly.json())).toMatchObject({
+      creatorWallet: null,
+      payoutWallet: admin.address,
+      verificationStatus: "UNVERIFIED",
+    });
+    await sessions.logout(`Bearer ${adminToken}`);
+    expect(
+      (
+        await post(
+          "/admin/artists",
+          { ...profile, slug: `synthetic-revoked-${randomUUID()}` },
+          adminToken,
+        )
+      ).status,
+    ).toBe(401);
+    expect(chainRead).not.toHaveBeenCalled();
+    for (const value of [
+      adminToken,
+      verifierTokenA,
+      verifierTokenB,
+      outsiderToken,
+      profile.biography,
+    ])
+      expect(logs.join("")).not.toContain(value);
+  } finally {
+    await database.close();
+  }
+}, 10000);

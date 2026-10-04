@@ -33,9 +33,9 @@ return the existing fixed 401; authenticated wallets lacking permission return
 fixed 403. Protected responses use `Cache-Control: no-store`. Missing authorization
 wiring also denies access. Health and wallet sign-in remain available without roles.
 
-Both namespaces are reserved by middleware before future write handlers. This
-step adds no artist/artwork write endpoint, role-management endpoint, frontend,
-or new database schema. Future handlers must stay behind these guards and use
+Both namespaces are reserved by middleware before future write handlers. The [artist management API](artist-management-api.md) now uses these guards for
+creation and manual approval. Artwork write endpoints, role-management endpoints
+and frontend administration remain planned. Future handlers must stay behind these guards and use
 strict request schemas rather than accepting role or actor claims.
 
 ## Registry authority checks

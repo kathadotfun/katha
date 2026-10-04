@@ -1,4 +1,6 @@
 export { createDatabase, validateDatabaseUrl, type Database } from "./connection.js";
+export { createArtistStore } from "./artist-store.js";
+export type { ArtistStore } from "./artist-store.js";
 export {
   artists,
   artistVerificationStatus,

@@ -37,7 +37,8 @@ pnpm --filter @katha/api start
 `build` emits JavaScript to the ignored `apps/api/dist` directory, and `start`
 runs that compiled entry point. Environment validation and public configuration separation are implemented;
 domain error responses, request IDs, and private-data-safe structured logs are implemented.
-Database readiness and [REST boundaries](api-rest.md) are implemented; product
-artist/artwork endpoints remain later steps.
-[Wallet authentication](wallet-authentication.md) adds challenge, verification,
-session lookup and logout routes; role enforcement remains planned.
+Database readiness and [REST boundaries](api-rest.md) are implemented.
+[Wallet authentication](wallet-authentication.md) provides challenge, verification,
+session lookup and logout routes. [Administrative guards](api-authorization.md)
+protect [artist creation and manual approval](artist-management-api.md). Public
+artist queries and artwork endpoints remain later steps.

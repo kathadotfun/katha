@@ -82,6 +82,14 @@ export {
   paginatedResponseSchema,
 } from "./http.js";
 export type { ApiErrorCode, ApiErrorResponse, Pagination } from "./http.js";
+export {
+  artistSlugSchema,
+  artistIdParamsSchema,
+  artistCreateRequestSchema,
+  artistVerificationRequestSchema,
+  artistResponseSchema,
+} from "./artist-api.js";
+export type { ArtistCreateRequest, ArtistResponse } from "./artist-api.js";
 
 export {
   walletClusterSchema,

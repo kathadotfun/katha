@@ -1,7 +1,8 @@
 import { createWalletSessions } from "./wallet-session.js";
+import { createArtists } from "./artists.js";
 import { createAuthorization } from "./authorization.js";
 import { createRegistryAuthorityReader } from "@katha/solana";
-import { createDatabase, createWalletSessionStore } from "@katha/db";
+import { createDatabase, createWalletSessionStore, createArtistStore } from "@katha/db";
 import { createReadiness } from "./readiness.js";
 import { createShutdown } from "./shutdown.js";
 import { createServer } from "node:http";
@@ -48,6 +49,7 @@ function startApi() {
           : { rpcSubscriptionsUrl: config.KATHA_RPC_SUBSCRIPTIONS_URL }),
       }),
     ),
+    createArtists(createArtistStore(database.db)),
   );
   const port = config.API_PORT;
 
