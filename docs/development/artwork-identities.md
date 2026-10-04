@@ -86,3 +86,12 @@ artists, forged IDs and attribution, invalid dimensions, immutable fields,
 editable content, preserved creator snapshots, capacity exhaustion and counter
 protection. Failures assert concrete SQLSTATE values and named constraints where
 applicable. These synthetic tests never use the development data volume.
+
+## Publication marker
+
+Migration `0009_artwork_publication.sql` adds nullable `published_at`, defaulting
+to NULL for existing records and new drafts. Finite timestamps must be at least
+`created_at`. Draft inputs cannot change it; the draft store rejects edits whenever
+it is set. The [discovery API](artwork-discovery-api.md) also checks finalized
+cluster-specific attestations, artist approval and indexed ownership. The
+authorized publication workflow is implemented in its later administration step.

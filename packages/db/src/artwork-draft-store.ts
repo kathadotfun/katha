@@ -73,6 +73,7 @@ export function createArtworkDraftStore(db: Database) {
           .for("update");
         if (!record) return { status: "not_found" };
         if (
+          record.publishedAt !== null ||
           record.updatedAt.toISOString() !== expectedUpdatedAt ||
           (record.authorshipEvidenceHash !== null &&
             changes.authorshipEvidenceHash !== undefined &&

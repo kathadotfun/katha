@@ -51,7 +51,7 @@ without changing content, timestamps or category counters. Do not invent a new
 timestamp to bypass a conflict; inspect the current administrative record first.
 Administrative browsing interfaces arrive in their later workflow steps.
 
-This endpoint stops editing once the artwork has any metadata version,
+This endpoint stops editing once the artwork has a publication marker or any metadata version,
 verification, condition report, custody event, blockchain operation, indexed
 activity or ownership record. This includes draft documents and failed operations:
 reserved or historical expectations must be reviewed through the appropriate

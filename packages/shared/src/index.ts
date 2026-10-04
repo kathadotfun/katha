@@ -127,3 +127,13 @@ export {
   artworkDraftUpdateRequestSchema,
 } from "./artwork-draft-api.js";
 export type { ArtworkDraftUpdateRequest } from "./artwork-draft-api.js";
+
+export {
+  artworkDiscoveryQuerySchema,
+  publicArtworkSummarySchema,
+  artworkDiscoveryResponseSchema,
+} from "./artwork-discovery-api.js";
+export type {
+  ArtworkDiscoveryQuery,
+  PublicArtworkSummary,
+} from "./artwork-discovery-api.js";

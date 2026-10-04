@@ -62,6 +62,8 @@ export const artworks = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
+    // Publication is explicit; existing drafts remain private until approved.
+    publishedAt: timestamp("published_at", { withTimezone: true, mode: "date" }),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
@@ -113,6 +115,10 @@ export const artworks = pgTable(
     check(
       "artworks_creation_process_nonblank",
       sql`${t.creationProcess} IS NULL OR ${t.creationProcess} ~ '[^[:space:]]'`,
+    ),
+    check(
+      "artworks_publication_time_valid",
+      sql`${t.publishedAt} IS NULL OR (isfinite(${t.publishedAt}) AND ${t.publishedAt} >= ${t.createdAt})`,
     ),
     check("artworks_timestamp_order", sql`${t.updatedAt} >= ${t.createdAt}`),
   ],

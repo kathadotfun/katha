@@ -43,4 +43,6 @@ session lookup and logout routes. [Administrative guards](api-authorization.md)
 protect [artist creation and manual approval](artist-management-api.md). [Public verified-artist queries](public-artists-api.md) are available without a wallet session.
 [Admin artwork draft creation](artwork-drafts-api.md) allocates permanent IDs.
 [Admin draft editing](artwork-draft-editing-api.md) preserves identity and rejects
-stale or lifecycle-bound edits. Public artwork queries remain later steps.
+stale, published or lifecycle-bound edits.
+[Public artwork discovery](artwork-discovery-api.md) supports category filtering and
+bounded pagination. Artwork detail responses remain the next step.

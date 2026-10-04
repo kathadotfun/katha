@@ -1,0 +1,2 @@
+ALTER TABLE "artworks" ADD COLUMN "published_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "artworks" ADD CONSTRAINT "artworks_publication_time_valid" CHECK ("artworks"."published_at" IS NULL OR (isfinite("artworks"."published_at") AND "artworks"."published_at" >= "artworks"."created_at"));

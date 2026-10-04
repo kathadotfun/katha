@@ -1,3 +1,5 @@
+import type { ArtworkDiscoveryBoundary } from "./artwork-discovery.js";
+import { artworkDiscoveryQuerySchema } from "@katha/shared";
 import type { ArtworkDraftsBoundary } from "./artwork-drafts.js";
 import {
   artworkDraftCreateRequestSchema,
@@ -41,6 +43,7 @@ export function createApi(
   artists?: ArtistsBoundary,
   publicArtists?: PublicArtistsBoundary,
   artworkDrafts?: ArtworkDraftsBoundary,
+  discovery?: ArtworkDiscoveryBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -167,6 +170,11 @@ export function createApi(
         await artworkDrafts.create(await parseJson(c, artworkDraftCreateRequestSchema)),
         201,
       ),
+    );
+  }
+  if (discovery) {
+    app.get("/artworks", async (c) =>
+      c.json(await discovery.list(parseQuery(c, artworkDiscoveryQuerySchema))),
     );
   }
   app.onError(errorResponse);

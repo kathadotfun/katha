@@ -9,8 +9,8 @@
     "start": "node --env-file-if-exists=../../.env dist/index.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude tests/service-postgres.test.ts",
-    "test:integration": "vitest run tests/service-postgres.test.ts"
+    "test": "vitest run --exclude 'tests/*-postgres.test.ts'",
+    "test:integration": "vitest run tests/service-postgres.test.ts tests/artwork-discovery-postgres.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.3",

@@ -64,6 +64,13 @@
       "when": 1791151448406,
       "tag": "0008_artwork_draft_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791155662866,
+      "tag": "0009_artwork_publication",
+      "breakpoints": true
     }
   ]
 }

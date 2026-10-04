@@ -1,3 +1,5 @@
+import { createArtworkDiscovery } from "./artwork-discovery.js";
+import { createPublicArtworkStore } from "@katha/db";
 import { createArtworkDrafts } from "./artwork-drafts.js";
 import { createArtworkDraftStore } from "@katha/db";
 import { createWalletSessions } from "./wallet-session.js";
@@ -56,6 +58,12 @@ function startApi() {
     createArtists(createArtistStore(database.db)),
     createPublicArtists(createPublicArtistStore(database.db)),
     createArtworkDrafts(createArtworkDraftStore(database.db)),
+    createArtworkDiscovery(
+      createPublicArtworkStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
+    ),
   );
   const port = config.API_PORT;
 

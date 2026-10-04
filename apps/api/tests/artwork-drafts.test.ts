@@ -22,6 +22,7 @@ function fixture() {
     category: "PAUBHA",
     id: randomUUID(),
     kathaId: "KATHA-PAUBHA-000001",
+    publishedAt: null,
     creatorWallet: null,
     authorshipEvidenceHash: null,
     heightMm: null,
@@ -143,6 +144,7 @@ it.each([
   { verificationStatus: "VERIFIED" },
   { privateEvidence: "secret" },
   { materials: ["gold"] },
+  { publishedAt: new Date().toISOString() },
 ])("rejects malformed or privileged creation %j", async (invalid) => {
   const f = fixture();
   expect((await f.post({ ...input, ...invalid }, "admin")).status).toBe(400);
@@ -313,6 +315,7 @@ it.each([
   { verificationStatus: "VERIFIED" },
   { materials: ["Gold"] },
   { privateEvidence: "secret" },
+  { publishedAt: new Date().toISOString() },
 ])("rejects invalid or privileged edit %j before persistence", async (invalid) => {
   const f = fixture();
   const body = { expectedUpdatedAt: f.record.updatedAt.toISOString(), ...invalid };
