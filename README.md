@@ -61,7 +61,7 @@ database readiness endpoints, bounded HTTP/database shutdown, shared REST contra
 restricted CORS, request-size limits, pagination validation, and signed wallet
 challenges with replay-protected bearer sessions, server-configured admin/verifier
 guards, finalized Registry authority checks, and authorized artist creation and
-manual profile verification.
+manual profile verification, and public verified-artist queries with safe field projections.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -95,6 +95,7 @@ outside the current scope.
 - [Signed wallet authentication](docs/development/wallet-authentication.md)
 - [Administrative authorization](docs/development/api-authorization.md)
 - [Artist creation and manual verification](docs/development/artist-management-api.md)
+- [Public artist profiles](docs/development/public-artists-api.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

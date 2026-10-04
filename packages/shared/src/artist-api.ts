@@ -73,3 +73,24 @@ export const artistResponseSchema = z
   );
 export type ArtistCreateRequest = z.infer<typeof artistCreateRequestSchema>;
 export type ArtistResponse = z.infer<typeof artistResponseSchema>;
+
+export const artistSlugParamsSchema = z.strictObject({ slug: artistSlugSchema });
+export const publicArtistSummarySchema = z.strictObject({
+  id: artistResponseSchema.shape.id,
+  slug: artistSlugSchema,
+  displayName: artistResponseSchema.shape.displayName,
+  region: artistResponseSchema.shape.region,
+  traditions: artistResponseSchema.shape.traditions,
+  profileImageUrl: artistResponseSchema.shape.profileImageUrl,
+  verificationStatus: z.literal("VERIFIED"),
+});
+export const publicArtistDetailSchema = publicArtistSummarySchema.extend({
+  biography: artistResponseSchema.shape.biography,
+  publicLinks: artistResponseSchema.shape.publicLinks,
+  creatorWallet: artistResponseSchema.shape.creatorWallet,
+  verifiedAt: z.iso.datetime(),
+  // Draft artworks have no publication gate yet and must never appear here.
+  artworks: z.tuple([]),
+});
+export type PublicArtistSummary = z.infer<typeof publicArtistSummarySchema>;
+export type PublicArtistDetail = z.infer<typeof publicArtistDetailSchema>;

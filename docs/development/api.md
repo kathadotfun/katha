@@ -40,5 +40,5 @@ domain error responses, request IDs, and private-data-safe structured logs are i
 Database readiness and [REST boundaries](api-rest.md) are implemented.
 [Wallet authentication](wallet-authentication.md) provides challenge, verification,
 session lookup and logout routes. [Administrative guards](api-authorization.md)
-protect [artist creation and manual approval](artist-management-api.md). Public
-artist queries and artwork endpoints remain later steps.
+protect [artist creation and manual approval](artist-management-api.md). [Public verified-artist queries](public-artists-api.md) are available without a wallet session.
+Artwork endpoints remain later steps.

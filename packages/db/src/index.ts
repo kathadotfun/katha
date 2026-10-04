@@ -98,3 +98,8 @@ export {
   createWalletSessionStore,
   type WalletSessionStore,
 } from "./wallet-session-store.js";
+
+export {
+  createPublicArtistStore,
+  type PublicArtistStore,
+} from "./public-artist-store.js";

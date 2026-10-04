@@ -8,7 +8,9 @@ import {
 } from "@katha/shared";
 import type { WalletSession } from "@katha/shared";
 import { walletChallengeRequestSchema, walletVerifyRequestSchema } from "@katha/shared";
-import { parseJson } from "./http.js";
+import type { PublicArtistsBoundary } from "./public-artists.js";
+import { paginationQuerySchema, artistSlugParamsSchema } from "@katha/shared";
+import { parseJson, parseQuery, parseParams } from "./http.js";
 import { restrictedCors, requestBodyLimit } from "./http.js";
 import { randomUUID } from "node:crypto";
 import { Hono, type Context } from "hono";
@@ -31,6 +33,7 @@ export function createApi(
   sessions?: WalletSessionBoundary,
   authorization?: AuthorizationBoundary,
   artists?: ArtistsBoundary,
+  publicArtists?: PublicArtistsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -133,6 +136,14 @@ export function createApi(
         ),
       );
     });
+  }
+  if (publicArtists) {
+    app.get("/artists", async (c) =>
+      c.json(await publicArtists.list(parseQuery(c, paginationQuerySchema))),
+    );
+    app.get("/artists/:slug", async (c) =>
+      c.json(await publicArtists.detail(parseParams(c, artistSlugParamsSchema).slug)),
+    );
   }
   app.onError(errorResponse);
   app.notFound((context) => errorResponse(new DomainError("NOT_FOUND"), context));

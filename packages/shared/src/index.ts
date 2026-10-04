@@ -105,3 +105,10 @@ export type {
   WalletVerifyRequest,
   WalletSession,
 } from "./wallet-session.js";
+
+export {
+  artistSlugParamsSchema,
+  publicArtistSummarySchema,
+  publicArtistDetailSchema,
+} from "./artist-api.js";
+export type { PublicArtistSummary, PublicArtistDetail } from "./artist-api.js";

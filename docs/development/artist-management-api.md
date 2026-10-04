@@ -104,7 +104,7 @@ not returned by spreading database records. Verification status and its attribut
 must be consistent. Shared request/response schemas live in
 `packages/shared/src/artist-api.ts`; the database schema remains unchanged.
 
-Public artist queries are the next separate step. There is no list, public detail,
+[Public verified-artist queries](public-artists-api.md) are available separately. There is no
 edit, delete, revoke, self-onboarding or artwork endpoint in this change.
 
 ## Verification

@@ -1,4 +1,6 @@
 import { createWalletSessions } from "./wallet-session.js";
+import { createPublicArtists } from "./public-artists.js";
+import { createPublicArtistStore } from "@katha/db";
 import { createArtists } from "./artists.js";
 import { createAuthorization } from "./authorization.js";
 import { createRegistryAuthorityReader } from "@katha/solana";
@@ -50,6 +52,7 @@ function startApi() {
       }),
     ),
     createArtists(createArtistStore(database.db)),
+    createPublicArtists(createPublicArtistStore(database.db)),
   );
   const port = config.API_PORT;
 

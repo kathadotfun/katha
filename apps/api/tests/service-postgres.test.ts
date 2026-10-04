@@ -1,3 +1,8 @@
+import { artworks } from "@katha/db";
+import { paginatedResponseSchema, publicArtistSummarySchema } from "@katha/shared";
+import { createPublicArtistStore } from "@katha/db";
+import { publicArtistDetailSchema } from "@katha/shared";
+import { createPublicArtists } from "../src/public-artists.js";
 import { randomUUID } from "node:crypto";
 import { createArtistStore } from "@katha/db";
 import { artistResponseSchema } from "@katha/shared";
@@ -437,3 +442,76 @@ it("creates and manually verifies artists through real signed sessions with race
     await database.close();
   }
 }, 10000);
+
+it("publishes only verified artist profiles with stable pagination and safe detail fields", async () => {
+  const url = validateDatabaseUrl(process.env.KATHA_TEST_DATABASE_URL);
+  const target = new URL(url);
+  if (target.hostname !== "127.0.0.1" || target.pathname !== "/katha_test")
+    throw new Error("Expected disposable target");
+  const database = createDatabase(url);
+  const writer = createArtistStore(database.db);
+  const reader = createPublicArtistStore(database.db);
+  const app = createApi(
+    createLogger(() => {}),
+    undefined,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    createPublicArtists(reader),
+  );
+  const prefix = `aaa-public-${randomUUID()}`;
+  const wallet = temporaryWallet();
+  try {
+    const profiles = [];
+    for (const suffix of ["c", "a", "b"]) {
+      const profile = await writer.create({
+        slug: `${prefix}-${suffix}`,
+        displayName: "Synthetic Public Artist",
+        biography: "Synthetic public biography",
+        region: "Patan",
+        traditions: ["Paubha"],
+        payoutWallet: wallet.address,
+      });
+      if (!profile) throw new Error("Expected fixture artist");
+      profiles.push(profile);
+      if (suffix !== "b") await writer.verify(profile.id, wallet.address);
+    }
+    const unverified = profiles.find((profile) => profile.slug.endsWith("-b"))!;
+    expect((await app.request(`/artists/${unverified.slug}`)).status).toBe(404);
+    expect((await app.request(`/artists/${prefix}-missing`)).status).toBe(404);
+    const page = paginatedResponseSchema(publicArtistSummarySchema).parse(
+      await (await app.request("/artists?limit=1")).json(),
+    );
+    expect(page.pagination.hasMore).toBe(true);
+    expect(page.items[0]?.slug).toBe(`${prefix}-a`);
+    const next = paginatedResponseSchema(publicArtistSummarySchema).parse(
+      await (await app.request("/artists?limit=1&offset=1")).json(),
+    );
+    expect(next.items[0]?.slug).toBe(`${prefix}-c`);
+    await database.db.insert(artworks).values({
+      artistId: profiles.find((profile) => profile.slug.endsWith("-a"))!.id,
+      category: "PAUBHA",
+      title: "PRIVATE DRAFT ARTWORK",
+      creationYear: 2026,
+    });
+    const detailResponse = await app.request(`/artists/${prefix}-a`);
+    expect(detailResponse.status).toBe(200);
+    const detail = publicArtistDetailSchema.parse(await detailResponse.json());
+    expect(detail.creatorWallet).toBeNull();
+    expect(detail.verifiedAt).toBeTypeOf("string");
+    expect(detail.artworks).toEqual([]);
+    const selected = await reader.findBySlug(`${prefix}-a`);
+    for (const key of ["payoutWallet", "verifiedByWallet", "createdAt", "updatedAt"])
+      expect(selected).not.toHaveProperty(key);
+    expect(JSON.stringify(detail)).not.toContain(wallet.address);
+    expect(
+      (await reader.list({ limit: 100, offset: 0 })).some(
+        (row) => row.id === unverified.id,
+      ),
+    ).toBe(false);
+    expect((await app.request("/artists?offset=100000")).status).toBe(200);
+  } finally {
+    await database.close();
+  }
+});
