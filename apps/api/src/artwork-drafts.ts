@@ -1,12 +1,79 @@
-import type { ArtworkDraftStore } from "@katha/db";
+import type { ArtworkRecord, ArtworkDraftStore } from "@katha/db";
 import {
   artworkDraftCreateRequestSchema,
   artworkDraftResponseSchema,
+  artworkDraftParamsSchema,
+  artworkDraftUpdateRequestSchema,
 } from "@katha/shared";
 import { DomainError } from "./errors.js";
 
+function response(record: ArtworkRecord) {
+  return artworkDraftResponseSchema.parse({
+    id: record.id,
+    kathaId: record.kathaId,
+    artistId: record.artistId,
+    category: record.category,
+    title: record.title,
+    creationYear: record.creationYear,
+    creatorWallet: record.creatorWallet,
+    authorshipEvidenceHash: record.authorshipEvidenceHash,
+    dimensions:
+      record.heightMm === null
+        ? null
+        : {
+            heightMm: record.heightMm,
+            widthMm: record.widthMm,
+            depthMm: record.depthMm,
+          },
+    origin: {
+      countryCode: record.originCountryCode,
+      region: record.originRegion,
+      locality: record.originLocality,
+    },
+    technique: record.technique,
+    story: record.story,
+    meaning: record.meaning,
+    culturalContext: record.culturalContext,
+    creationProcess: record.creationProcess,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  });
+}
+
 export function createArtworkDrafts(store: ArtworkDraftStore) {
   return {
+    async update(kathaId: string, input: unknown) {
+      const path = artworkDraftParamsSchema.safeParse({ kathaId });
+      const parsed = artworkDraftUpdateRequestSchema.safeParse(input);
+      if (!path.success || !parsed.success) throw new DomainError("INVALID_REQUEST");
+      const data = parsed.data;
+      const result = await store.update(path.data.kathaId, data.expectedUpdatedAt, {
+        title: data.title,
+        authorshipEvidenceHash: data.authorshipEvidenceHash,
+        ...(data.dimensions !== undefined
+          ? {
+              heightMm: data.dimensions?.heightMm ?? null,
+              widthMm: data.dimensions?.widthMm ?? null,
+              depthMm: data.dimensions?.depthMm ?? null,
+            }
+          : {}),
+        ...(data.origin !== undefined
+          ? {
+              originCountryCode: data.origin.countryCode,
+              originRegion: data.origin.region ?? null,
+              originLocality: data.origin.locality ?? null,
+            }
+          : {}),
+        technique: data.technique,
+        story: data.story,
+        meaning: data.meaning,
+        culturalContext: data.culturalContext,
+        creationProcess: data.creationProcess,
+      });
+      if (result.status === "not_found") throw new DomainError("NOT_FOUND");
+      if (result.status !== "updated") throw new DomainError("CONFLICT");
+      return response(result.record);
+    },
     async create(input: unknown) {
       const parsed = artworkDraftCreateRequestSchema.safeParse(input);
       if (!parsed.success) throw new DomainError("INVALID_REQUEST");
@@ -33,36 +100,7 @@ export function createArtworkDrafts(store: ArtworkDraftStore) {
       if (result.status === "artist_not_found") throw new DomainError("NOT_FOUND");
       if (result.status !== "created") throw new DomainError("CONFLICT");
       const record = result.record;
-      return artworkDraftResponseSchema.parse({
-        id: record.id,
-        kathaId: record.kathaId,
-        artistId: record.artistId,
-        category: record.category,
-        title: record.title,
-        creationYear: record.creationYear,
-        creatorWallet: record.creatorWallet,
-        authorshipEvidenceHash: record.authorshipEvidenceHash,
-        dimensions:
-          record.heightMm === null
-            ? null
-            : {
-                heightMm: record.heightMm,
-                widthMm: record.widthMm,
-                depthMm: record.depthMm,
-              },
-        origin: {
-          countryCode: record.originCountryCode,
-          region: record.originRegion,
-          locality: record.originLocality,
-        },
-        technique: record.technique,
-        story: record.story,
-        meaning: record.meaning,
-        culturalContext: record.culturalContext,
-        creationProcess: record.creationProcess,
-        createdAt: record.createdAt.toISOString(),
-        updatedAt: record.updatedAt.toISOString(),
-      });
+      return response(record);
     },
   };
 }

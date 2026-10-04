@@ -65,3 +65,28 @@ export const artworkDraftResponseSchema = z
   });
 export type ArtworkDraftCreateRequest = z.infer<typeof artworkDraftCreateRequestSchema>;
 export type ArtworkDraftResponse = z.infer<typeof artworkDraftResponseSchema>;
+
+export const artworkDraftParamsSchema = z.strictObject({ kathaId: kathaIdSchema });
+export const artworkDraftUpdateRequestSchema = z
+  .strictObject({
+    expectedUpdatedAt: z.iso.datetime({ precision: 3 }),
+    title: draftFields.title.optional(),
+    authorshipEvidenceHash: draftFields.authorshipEvidenceHash,
+    dimensions: draftFields.dimensions,
+    origin: draftFields.origin,
+    technique: draftFields.technique,
+    story: draftFields.story,
+    meaning: draftFields.meaning,
+    culturalContext: draftFields.culturalContext,
+    creationProcess: draftFields.creationProcess,
+  })
+  .refine(
+    (input) =>
+      Object.entries(input).some(
+        ([key, value]) => key !== "expectedUpdatedAt" && value !== undefined,
+      ),
+    {
+      error: "At least one content edit is required",
+    },
+  );
+export type ArtworkDraftUpdateRequest = z.infer<typeof artworkDraftUpdateRequestSchema>;

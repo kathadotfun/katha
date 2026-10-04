@@ -43,6 +43,10 @@ function fixture() {
     payoutWallet: "PRIVATE-PAYOUT",
   });
   const store: ArtworkDraftStore = {
+    update: vi.fn<ArtworkDraftStore["update"]>(async () => ({
+      status: "updated",
+      record,
+    })),
     create: vi.fn<ArtworkDraftStore["create"]>(async () => ({
       status: "created",
       record,
@@ -205,4 +209,156 @@ it("denies the real draft route when authorization wiring is missing", async () 
     ).status,
   ).toBe(401);
   expect(f.store.create).not.toHaveBeenCalled();
+});
+
+function patch(
+  f: ReturnType<typeof fixture>,
+  body: unknown,
+  token?: string,
+  kathaId = f.record.kathaId,
+) {
+  return f.app.request(`/admin/artworks/${kathaId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+}
+it("edits selected draft content with explicit null clearing and no identity overrides", async () => {
+  const f = fixture();
+  const expectedUpdatedAt = f.record.updatedAt.toISOString();
+  const updatedAt = new Date(f.record.updatedAt.getTime() + 1);
+  vi.mocked(f.store.update).mockResolvedValue({
+    status: "updated",
+    record: { ...f.record, title: "Revised synthetic title", updatedAt },
+  });
+  const response = await patch(
+    f,
+    {
+      expectedUpdatedAt,
+      title: "Revised synthetic title",
+      dimensions: null,
+      story: null,
+      origin: { countryCode: "NP", region: "Patan" },
+    },
+    "admin",
+  );
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  const result = artworkDraftResponseSchema.parse(await response.json());
+  expect(result).toMatchObject({
+    id: f.record.id,
+    kathaId: f.record.kathaId,
+    artistId: f.record.artistId,
+    creatorWallet: null,
+    creationYear: f.record.creationYear,
+    title: "Revised synthetic title",
+    updatedAt: updatedAt.toISOString(),
+  });
+  expect(f.store.update).toHaveBeenCalledWith(
+    f.record.kathaId,
+    expectedUpdatedAt,
+    expect.objectContaining({
+      title: "Revised synthetic title",
+      heightMm: null,
+      widthMm: null,
+      depthMm: null,
+      story: null,
+      originCountryCode: "NP",
+      originRegion: "Patan",
+      originLocality: null,
+      technique: undefined,
+    }),
+  );
+  expect(JSON.stringify(result)).not.toContain("PRIVATE");
+  expect(f.chain).not.toHaveBeenCalled();
+  expect(f.logs.join("")).not.toContain("Revised synthetic title");
+});
+it.each([undefined, "verifier", "outsider"])(
+  "denies draft edits by %s before persistence",
+  async (token) => {
+    const f = fixture();
+    expect(
+      (
+        await patch(
+          f,
+          { expectedUpdatedAt: f.record.updatedAt.toISOString(), title: "Edited" },
+          token,
+        )
+      ).status,
+    ).toBe(token ? 403 : 401);
+    expect(f.store.update).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  {},
+  { expectedUpdatedAt: "invalid", title: "Edited" },
+  { title: " " },
+  { dimensions: { widthMm: 100 } },
+  { dimensions: { heightMm: 1, widthMm: 1.2 } },
+  { origin: null },
+  { origin: { countryCode: "np" } },
+  { story: "\u0000" },
+  { id: randomUUID() },
+  { artistId: randomUUID() },
+  { kathaId: "KATHA-PAUBHA-000002" },
+  { category: "MANDALA" },
+  { creatorWallet: temporaryWallet().address },
+  { creationYear: 2025 },
+  { createdAt: new Date().toISOString() },
+  { updatedAt: new Date().toISOString() },
+  { creationRequestId: randomUUID() },
+  { verificationStatus: "VERIFIED" },
+  { materials: ["Gold"] },
+  { privateEvidence: "secret" },
+])("rejects invalid or privileged edit %j before persistence", async (invalid) => {
+  const f = fixture();
+  const body = { expectedUpdatedAt: f.record.updatedAt.toISOString(), ...invalid };
+  expect((await patch(f, body, "admin")).status).toBe(400);
+  expect(f.store.update).not.toHaveBeenCalled();
+});
+it("rejects a missing version or malformed permanent path", async () => {
+  const f = fixture();
+  expect((await patch(f, { title: "Edited" }, "admin")).status).toBe(400);
+  expect(
+    (
+      await patch(
+        f,
+        { expectedUpdatedAt: f.record.updatedAt.toISOString(), title: "Edited" },
+        "admin",
+        "bad-id",
+      )
+    ).status,
+  ).toBe(400);
+  expect(f.store.update).not.toHaveBeenCalled();
+});
+it.each([
+  ["not_found", 404],
+  ["conflict", 409],
+] as const)("maps edit result %s safely", async (status, expected) => {
+  const f = fixture();
+  vi.mocked(f.store.update).mockResolvedValue({ status });
+  expect(
+    (
+      await patch(
+        f,
+        { expectedUpdatedAt: f.record.updatedAt.toISOString(), title: "Edited" },
+        "admin",
+      )
+    ).status,
+  ).toBe(expected);
+});
+it("redacts edit storage failures", async () => {
+  const f = fixture();
+  vi.mocked(f.store.update).mockRejectedValue(new Error("PRIVATE-DATABASE-URL"));
+  const response = await patch(
+    f,
+    { expectedUpdatedAt: f.record.updatedAt.toISOString(), title: "Edited" },
+    "admin",
+  );
+  expect(response.status).toBe(500);
+  expect(await response.text()).not.toContain("PRIVATE");
+  expect(f.logs.join("")).not.toContain("PRIVATE");
 });

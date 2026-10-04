@@ -62,7 +62,8 @@ restricted CORS, request-size limits, pagination validation, and signed wallet
 challenges with replay-protected bearer sessions, server-configured admin/verifier
 guards, finalized Registry authority checks, and authorized artist creation and
 manual profile verification, public verified-artist queries with safe field projections,
-and admin artwork draft creation with retry-safe permanent IDs.
+and admin artwork draft creation and editing with retry-safe permanent IDs,
+protected attribution, and optimistic concurrency checks.
 Artwork browsing, API behavior, remaining domain tables, and Marketplace
 business instructions remain planned.
 
@@ -98,6 +99,7 @@ outside the current scope.
 - [Artist creation and manual verification](docs/development/artist-management-api.md)
 - [Public artist profiles](docs/development/public-artists-api.md)
 - [Artwork draft creation](docs/development/artwork-drafts-api.md)
+- [Artwork draft editing](docs/development/artwork-draft-editing-api.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

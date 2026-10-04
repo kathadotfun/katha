@@ -1,5 +1,9 @@
 import type { ArtworkDraftsBoundary } from "./artwork-drafts.js";
-import { artworkDraftCreateRequestSchema } from "@katha/shared";
+import {
+  artworkDraftCreateRequestSchema,
+  artworkDraftParamsSchema,
+  artworkDraftUpdateRequestSchema,
+} from "@katha/shared";
 import type { WalletSessionBoundary } from "./wallet-session.js";
 import type { AuthorizationBoundary } from "./authorization.js";
 import type { ArtistsBoundary } from "./artists.js";
@@ -149,6 +153,15 @@ export function createApi(
     );
   }
   if (artworkDrafts) {
+    app.patch("/admin/artworks/:kathaId", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      return c.json(
+        await artworkDrafts.update(
+          kathaId,
+          await parseJson(c, artworkDraftUpdateRequestSchema),
+        ),
+      );
+    });
     app.post("/admin/artworks", async (c) =>
       c.json(
         await artworkDrafts.create(await parseJson(c, artworkDraftCreateRequestSchema)),

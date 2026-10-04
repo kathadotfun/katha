@@ -46,7 +46,10 @@ walletless artist can have artwork records with a null creator wallet. Payout
 wallets remain separate artist-profile data. These records do not establish
 verification, Core ownership, custody, listing status or inspection approval.
 
-Title, descriptive content and dimensions remain editable. Update `updatedAt`
+The [admin editing API](artwork-draft-editing-api.md) permits title, descriptive
+content and dimension changes only before lifecycle records exist and with a matching
+last-update token. Committed content changes require versioned revision workflows.
+At the storage layer, title, descriptive content and dimensions remain editable. Update `updatedAt`
 explicitly when changing content. Titles must be nonblank and at most 200
 characters; creation years range from 1 to 9999. Optional story, technique,
 meaning, cultural context and creation process fields have the shared contract's

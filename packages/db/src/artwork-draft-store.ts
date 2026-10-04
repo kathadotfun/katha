@@ -1,4 +1,12 @@
-import { eq } from "drizzle-orm";
+import {
+  artworkMetadataVersions,
+  verifications,
+  conditionReports,
+} from "./schema/artwork-attestations.js";
+import { custodyEvents } from "./schema/custody-fulfillment.js";
+import { blockchainOperations } from "./schema/blockchain-operations.js";
+import { artworkOwnership, indexedEvents } from "./schema/blockchain-read-models.js";
+import { eq, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { artists } from "./schema/artists.js";
 import {
@@ -29,9 +37,88 @@ type DraftCreation = Pick<
 type CreationResult =
   | { status: "created"; record: ArtworkRecord }
   | { status: "artist_not_found" | "duplicate" | "capacity_exhausted" };
+type EditableDraft = Pick<
+  NewArtworkRecord,
+  | "title"
+  | "authorshipEvidenceHash"
+  | "heightMm"
+  | "widthMm"
+  | "depthMm"
+  | "originCountryCode"
+  | "originRegion"
+  | "originLocality"
+  | "technique"
+  | "story"
+  | "meaning"
+  | "culturalContext"
+  | "creationProcess"
+>;
+type DraftChanges = { [K in keyof EditableDraft]?: EditableDraft[K] | undefined };
+type UpdateResult =
+  { status: "updated"; record: ArtworkRecord } | { status: "not_found" | "conflict" };
 class DuplicateDraft extends Error {}
 export function createArtworkDraftStore(db: Database) {
   return {
+    async update(
+      kathaId: string,
+      expectedUpdatedAt: string,
+      changes: DraftChanges,
+    ): Promise<UpdateResult> {
+      return db.transaction(async (tx) => {
+        // FOR UPDATE also serializes new lifecycle rows through their artwork FKs.
+        const [record] = await tx
+          .select()
+          .from(artworks)
+          .where(eq(artworks.kathaId, kathaId))
+          .for("update");
+        if (!record) return { status: "not_found" };
+        if (
+          record.updatedAt.toISOString() !== expectedUpdatedAt ||
+          (record.authorshipEvidenceHash !== null &&
+            changes.authorshipEvidenceHash !== undefined &&
+            changes.authorshipEvidenceHash !== record.authorshipEvidenceHash)
+        )
+          return { status: "conflict" };
+        const [state] = await tx
+          .select({
+            frozen: sql<boolean>`
+          EXISTS (SELECT 1 FROM ${artworkMetadataVersions} WHERE ${artworkMetadataVersions.artworkId} = ${record.id}) OR
+          EXISTS (SELECT 1 FROM ${verifications} WHERE ${verifications.artworkId} = ${record.id}) OR
+          EXISTS (SELECT 1 FROM ${conditionReports} WHERE ${conditionReports.artworkId} = ${record.id}) OR
+          EXISTS (SELECT 1 FROM ${custodyEvents} WHERE ${custodyEvents.artworkId} = ${record.id}) OR
+          EXISTS (SELECT 1 FROM ${blockchainOperations} WHERE ${blockchainOperations.artworkId} = ${record.id}) OR
+          EXISTS (SELECT 1 FROM ${artworkOwnership} WHERE ${artworkOwnership.artworkId} = ${record.id}) OR
+          EXISTS (SELECT 1 FROM ${indexedEvents} WHERE ${indexedEvents.artworkId} = ${record.id})
+        `,
+          })
+          .from(artworks)
+          .where(eq(artworks.id, record.id));
+        if (!state || state.frozen) return { status: "conflict" };
+        const [updated] = await tx
+          .update(artworks)
+          .set({
+            title: changes.title,
+            authorshipEvidenceHash: changes.authorshipEvidenceHash,
+            heightMm: changes.heightMm,
+            widthMm: changes.widthMm,
+            depthMm: changes.depthMm,
+            originCountryCode: changes.originCountryCode,
+            originRegion: changes.originRegion,
+            originLocality: changes.originLocality,
+            technique: changes.technique,
+            story: changes.story,
+            meaning: changes.meaning,
+            culturalContext: changes.culturalContext,
+            creationProcess: changes.creationProcess,
+            // JS serializes milliseconds; ensure even rapid edits get distinct visible tokens.
+            updatedAt: sql`greatest(clock_timestamp(), ${artworks.updatedAt} + interval '1 millisecond')`,
+          })
+          .where(eq(artworks.id, record.id))
+          .returning();
+        if (!updated) throw new Error("Locked draft disappeared");
+        return { status: "updated", record: updated };
+      });
+    },
     async create(input: DraftCreation): Promise<CreationResult> {
       try {
         return await db.transaction(async (tx) => {

@@ -1,3 +1,4 @@
+import { artworkMetadataVersions, blockchainOperations } from "@katha/db";
 import { createArtworkDraftStore } from "@katha/db";
 import { artworkDraftResponseSchema } from "@katha/shared";
 import { createArtworkDrafts } from "../src/artwork-drafts.js";
@@ -6,7 +7,7 @@ import { paginatedResponseSchema, publicArtistSummarySchema } from "@katha/share
 import { createPublicArtistStore } from "@katha/db";
 import { publicArtistDetailSchema } from "@katha/shared";
 import { createPublicArtists } from "../src/public-artists.js";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { createArtistStore } from "@katha/db";
 import { artistResponseSchema } from "@katha/shared";
 import { createArtists } from "../src/artists.js";
@@ -519,7 +520,7 @@ it("publishes only verified artist profiles with stable pagination and safe deta
   }
 });
 
-it("creates private drafts with signed admin authorization, retry rollback and concurrent permanent IDs", async () => {
+it("creates and edits private drafts with signed admin authorization, retry rollback and concurrent permanent IDs", async () => {
   const url = validateDatabaseUrl(process.env.KATHA_TEST_DATABASE_URL);
   const target = new URL(url);
   if (target.hostname !== "127.0.0.1" || target.pathname !== "/katha_test")
@@ -562,6 +563,15 @@ it("creates private drafts with signed admin authorization, retry rollback and c
   const post = (path: string, body: unknown, token?: string) =>
     app.request(path, {
       method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  const patch = (kathaId: string, body: unknown, token?: string) =>
+    app.request(`/admin/artworks/${kathaId}`, {
+      method: "PATCH",
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -646,6 +656,108 @@ it("creates private drafts with signed admin authorization, retry rollback and c
     expect(result.creatorWallet).toBeNull();
     expect(result.dimensions).toBeNull();
     expect(result.kathaId).toMatch(/^KATHA-PAUBHA-[0-9]{6}$/);
+
+    const original = { ...result };
+    expect(
+      (
+        await patch(result.kathaId, {
+          expectedUpdatedAt: result.updatedAt,
+          title: "Edited",
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await patch(
+          result.kathaId,
+          { expectedUpdatedAt: result.updatedAt, artistId: walletArtist.id },
+          session.token,
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await patch(
+          "KATHA-PAUBHA-999999",
+          { expectedUpdatedAt: result.updatedAt, title: "Edited" },
+          session.token,
+        )
+      ).status,
+    ).toBe(404);
+    const edit = await patch(
+      result.kathaId,
+      {
+        expectedUpdatedAt: result.updatedAt,
+        title: "Revised synthetic artwork",
+        story: "Edited synthetic story",
+        dimensions: { heightMm: 300, widthMm: 200 },
+        origin: { countryCode: "NP", region: "Patan" },
+        authorshipEvidenceHash: "a".repeat(64),
+      },
+      session.token,
+    );
+    expect(edit.status).toBe(200);
+    let latest = artworkDraftResponseSchema.parse(await edit.json());
+    expect(latest).toMatchObject({
+      id: original.id,
+      kathaId: original.kathaId,
+      artistId: original.artistId,
+      category: original.category,
+      creatorWallet: original.creatorWallet,
+      creationYear: original.creationYear,
+      createdAt: original.createdAt,
+      title: "Revised synthetic artwork",
+      story: "Edited synthetic story",
+      dimensions: { heightMm: 300, widthMm: 200, depthMm: null },
+      origin: { countryCode: "NP", region: "Patan", locality: null },
+    });
+    expect(Date.parse(latest.updatedAt)).toBeGreaterThan(
+      Date.parse(original.updatedAt),
+    );
+    expect(
+      (
+        await patch(
+          result.kathaId,
+          { expectedUpdatedAt: original.updatedAt, title: "Stale overwrite" },
+          session.token,
+        )
+      ).status,
+    ).toBe(409);
+    for (const authorshipEvidenceHash of [null, "b".repeat(64)])
+      expect(
+        (
+          await patch(
+            result.kathaId,
+            { expectedUpdatedAt: latest.updatedAt, authorshipEvidenceHash },
+            session.token,
+          )
+        ).status,
+      ).toBe(409);
+    const edits = await Promise.all(
+      ["First concurrent title", "Second concurrent title"].map((title) =>
+        patch(
+          result.kathaId,
+          { expectedUpdatedAt: latest.updatedAt, title },
+          session.token,
+        ),
+      ),
+    );
+    expect(edits.map((response) => response.status).sort()).toEqual([200, 409]);
+    latest = artworkDraftResponseSchema.parse(
+      await edits.find((response) => response.status === 200)!.json(),
+    );
+    expect(latest.story).toBe("Edited synthetic story");
+    expect(latest.authorshipEvidenceHash).toBe("a".repeat(64));
+    const cleared = await patch(
+      result.kathaId,
+      { expectedUpdatedAt: latest.updatedAt, story: null, dimensions: null },
+      session.token,
+    );
+    expect(cleared.status).toBe(200);
+    latest = artworkDraftResponseSchema.parse(await cleared.json());
+    expect(latest.story).toBeNull();
+    expect(latest.dimensions).toBeNull();
+    expect(latest.origin.region).toBe("Patan");
     const before = await database.db.query.artworkIdCounters.findFirst({
       where: (row, { eq }) => eq(row.category, "PAUBHA"),
     });
@@ -707,6 +819,88 @@ it("creates private drafts with signed admin authorization, retry rollback and c
           )
         ).status,
       ).toBe(201);
+
+    await database.db
+      .insert(artworkMetadataVersions)
+      .values({ artworkId: result.id, version: 1, authorityWallet: admin.address });
+    expect(
+      (
+        await patch(
+          result.kathaId,
+          { expectedUpdatedAt: latest.updatedAt, title: "Cannot edit documented work" },
+          session.token,
+        )
+      ).status,
+    ).toBe(409);
+    const document = JSON.stringify({ kathaId: result.kathaId });
+    await database.db.update(artworkMetadataVersions).set({
+      status: "PREPARED",
+      canonicalDocument: document,
+      documentHash: createHash("sha256").update(document).digest("hex"),
+      uri: "https://example.com/synthetic-metadata.json",
+      updatedAt: new Date(),
+    });
+    expect(
+      (
+        await patch(
+          result.kathaId,
+          { expectedUpdatedAt: latest.updatedAt, title: "Cannot edit prepared work" },
+          session.token,
+        )
+      ).status,
+    ).toBe(409);
+    const finalizedAt = new Date();
+    await database.db.update(artworkMetadataVersions).set({
+      status: "FINALIZED",
+      chainVersion: 1,
+      chainCluster: "LOCALNET",
+      chainSignature: "3".repeat(88),
+      chainSlot: 1n,
+      chainRecordedAt: finalizedAt,
+      finalizedAt,
+      updatedAt: finalizedAt,
+    });
+    expect(
+      (
+        await patch(
+          result.kathaId,
+          {
+            expectedUpdatedAt: latest.updatedAt,
+            title: "Cannot edit committed metadata",
+          },
+          session.token,
+        )
+      ).status,
+    ).toBe(409);
+    const untouched = await database.db.query.artworks.findFirst({
+      where: (row, { eq }) => eq(row.id, result.id),
+    });
+    expect(untouched?.title).toBe(latest.title);
+    expect(untouched?.updatedAt.toISOString()).toBe(latest.updatedAt);
+    // Reserving an operation also prevents a later draft edit from invalidating its expectations.
+    await database.db.insert(blockchainOperations).values({
+      artworkId: winner.id,
+      walletId: session.session.walletId,
+      cluster: "LOCALNET",
+      kind: "REGISTER_ARTWORK",
+      idempotencyKey: `synthetic-${randomUUID()}`,
+      requestHash: "a".repeat(64),
+      programAddress: admin.address,
+      expectedAccounts: [admin.address],
+      expectedHashes: [],
+    });
+    expect(
+      (
+        await patch(
+          winner.kathaId,
+          {
+            expectedUpdatedAt: winner.updatedAt,
+            title: "Cannot edit reserved operation",
+          },
+          session.token,
+        )
+      ).status,
+    ).toBe(409);
     await writer.verify(artist.id, admin.address);
     const detail = publicArtistDetailSchema.parse(
       await (await app.request(`/artists/${artist.slug}`)).json(),

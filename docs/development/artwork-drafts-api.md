@@ -65,6 +65,9 @@ against the intended local database before running this endpoint. Earlier migrat
 are unchanged. The migration adds a unique request UUID and an immutability trigger;
 retain its custom SQL when generating subsequent migrations.
 
+Existing drafts can be [edited through the admin PATCH endpoint](artwork-draft-editing-api.md)
+while their documentation remains outside the lifecycle commitment workflow.
+
 ## Errors and verification
 
 - `400 INVALID_REQUEST`: malformed content or caller-supplied privileged fields.

@@ -1,3 +1,4 @@
+import { artworkDraftUpdateRequestSchema } from "../src/artwork-draft-api.js";
 import { expect, it } from "vitest";
 import {
   artworkDraftCreateRequestSchema,
@@ -68,4 +69,23 @@ it("rejects mismatched or forged response identities and private extra fields", 
     expect(
       artworkDraftResponseSchema.safeParse({ ...response, ...patch }).success,
     ).toBe(false);
+});
+
+it("accepts partial edits without replacing omitted fields", () => {
+  expect(
+    artworkDraftUpdateRequestSchema.parse({
+      expectedUpdatedAt: "2026-10-05T00:00:00.123Z",
+      story: null,
+    }),
+  ).toEqual({ expectedUpdatedAt: "2026-10-05T00:00:00.123Z", story: null });
+});
+it.each([
+  {},
+  { expectedUpdatedAt: "2026-10-05T00:00:00.123Z" },
+  { expectedUpdatedAt: "2026-10-05T00:00:00.123Z", title: undefined },
+  { expectedUpdatedAt: "2026-10-05T00:00:00Z", title: "Edited" },
+  { expectedUpdatedAt: "2026-10-05T00:00:00.123Z", artistId: input.artistId },
+  { expectedUpdatedAt: "2026-10-05T00:00:00.123Z", creationYear: 2025 },
+])("rejects empty, unversioned or identity-changing edits %j", (body) => {
+  expect(artworkDraftUpdateRequestSchema.safeParse(body).success).toBe(false);
 });

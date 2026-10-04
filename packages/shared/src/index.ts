@@ -121,3 +121,9 @@ export type {
   ArtworkDraftCreateRequest,
   ArtworkDraftResponse,
 } from "./artwork-draft-api.js";
+
+export {
+  artworkDraftParamsSchema,
+  artworkDraftUpdateRequestSchema,
+} from "./artwork-draft-api.js";
+export type { ArtworkDraftUpdateRequest } from "./artwork-draft-api.js";
