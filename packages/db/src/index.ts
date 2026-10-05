@@ -142,3 +142,5 @@ export {
   type ArtworkRegistrationStore,
   type ArtworkRegistrationSnapshot,
 } from "./artwork-registration-store.js";
+
+export * from "./artwork-verification-store.js";

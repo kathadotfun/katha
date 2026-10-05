@@ -164,3 +164,5 @@ export {
   artworkRegistrationRequestSchema,
   type ArtworkRegistrationRequest,
 } from "./artwork-registration-api.js";
+
+export * from "./artwork-verification-api.js";

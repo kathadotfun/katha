@@ -86,3 +86,5 @@ export {
   createArtworkRegistrationReaderFromRpc,
   type ArtworkRegistrationReader,
 } from "./artwork-registration-reader.js";
+
+export * from "./artwork-verification-reader.js";

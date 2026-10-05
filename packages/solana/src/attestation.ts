@@ -133,7 +133,7 @@ export function checkAccount(
 }
 
 export async function readAuthorizedArtwork(
-  context: RegistryTransactionContext,
+  context: Pick<RegistryTransactionContext, "authorityAddress">,
   accounts: VerifierArtworkAccounts,
   identity: string,
   role:

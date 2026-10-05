@@ -1,3 +1,6 @@
+import { createArtworkVerification } from "./artwork-verification.js";
+import { createArtworkVerificationStore } from "@katha/db";
+import { createArtworkVerificationReader } from "@katha/solana";
 import { createArtworkRegistration } from "./artwork-registration.js";
 import { createArtworkRegistrationStore } from "@katha/db";
 import { createOperationChain, createArtworkRegistrationReader } from "@katha/solana";
@@ -99,6 +102,17 @@ function startApi() {
       ),
       authorization,
       createArtworkRegistrationReader(rpcConfig),
+      createOperationChain(rpcConfig),
+      storage,
+      config.KATHA_CLUSTER,
+    ),
+    createArtworkVerification(
+      createArtworkVerificationStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
+      authorization,
+      createArtworkVerificationReader(rpcConfig),
       createOperationChain(rpcConfig),
       storage,
       config.KATHA_CLUSTER,

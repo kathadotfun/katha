@@ -71,8 +71,9 @@ namespaces. Authorized document preparation now preserves canonical public metad
 and private condition bytes; media upload workflows remain planned. Internal
 unsigned-operation helpers now authorize and simulate exact wallet transactions,
 preserving idempotent intents and immutable preparation history. The admin registration
-preparation endpoint now binds approved metadata and immutable identity; remaining
-HTTP operation routes are planned.
+preparation endpoint now binds approved metadata and immutable identity. A verifier
+endpoint prepares artwork authentication after explicit manual confirmation and
+validated registered attribution; remaining HTTP operation routes are planned.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -102,6 +103,7 @@ outside the current scope.
 - [Content API contracts and privacy boundaries](docs/development/content-api-contracts.md)
 - [Unsigned blockchain operation preparation](docs/development/blockchain-operation-preparation.md)
 - [Artwork registration preparation](docs/development/artwork-registration-api.md)
+- [Artwork verification preparation](docs/development/artwork-verification-api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

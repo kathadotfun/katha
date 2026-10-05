@@ -60,3 +60,8 @@ objects have no HTTP route.
 [Artwork registration preparation](artwork-registration-api.md) now provides an
 admin route with fresh Registry authorization and exact metadata/identity binding;
 the signing wallet submits the returned unsigned transaction.
+
+[Artwork verification preparation](artwork-verification-api.md) requires a current
+Registry verifier, explicit manual authenticity confirmation, matching registered
+attribution and exact prepared documentation. It returns an unsigned transaction
+without creating finalized verification history or publishing the artwork.

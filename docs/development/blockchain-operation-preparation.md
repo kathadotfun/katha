@@ -105,3 +105,7 @@ retries, immutable refreshed messages, conflicting intents, identity bindings,
 rollback and receipt-state guards. Tests use temporary/synthetic identities, no
 real signing material or artwork evidence. No dependency or program change is
 needed; registration HTTP preparation now uses this boundary.
+
+[Artwork verification preparation](artwork-verification-api.md) exposes the verifier
+operation route, binds manual confirmation and documented attribution, and rechecks
+eligibility during locked persistence. It does not finalize authentication.

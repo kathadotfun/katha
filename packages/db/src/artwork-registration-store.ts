@@ -7,7 +7,7 @@ import { blockchainOperations } from "./schema/blockchain-operations.js";
 import { createOperationPreparationStore } from "./operation-preparation-store.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
-async function snapshot(
+export async function loadArtworkRegistrationSnapshot(
   tx: Transaction,
   kathaId: string,
   cluster: "LOCALNET" | "DEVNET",
@@ -50,17 +50,22 @@ async function snapshot(
   };
 }
 export type ArtworkRegistrationSnapshot = NonNullable<
-  Awaited<ReturnType<typeof snapshot>>
+  Awaited<ReturnType<typeof loadArtworkRegistrationSnapshot>>
 >;
 export function createArtworkRegistrationStore(
   db: Database,
   cluster: "LOCALNET" | "DEVNET",
 ) {
   return {
-    load: (kathaId: string) => db.transaction((tx) => snapshot(tx, kathaId, cluster)),
+    load: (kathaId: string) =>
+      db.transaction((tx) => loadArtworkRegistrationSnapshot(tx, kathaId, cluster)),
     operations(expected: ArtworkRegistrationSnapshot) {
       return createOperationPreparationStore(db, async (tx) => {
-        const current = await snapshot(tx, expected.artwork.kathaId, cluster);
+        const current = await loadArtworkRegistrationSnapshot(
+          tx,
+          expected.artwork.kathaId,
+          cluster,
+        );
         // Recheck eligibility under the save transaction's parent/artist/metadata locks.
         return (
           current !== null &&

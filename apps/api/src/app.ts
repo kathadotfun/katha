@@ -1,3 +1,5 @@
+import type { ArtworkVerificationBoundary } from "./artwork-verification.js";
+import { artworkVerificationRequestSchema } from "@katha/shared";
 import type { ArtworkRegistrationBoundary } from "./artwork-registration.js";
 import { artworkRegistrationRequestSchema } from "@katha/shared";
 import type { PublicDocumentsBoundary } from "./public-documents.js";
@@ -58,6 +60,7 @@ export function createApi(
   documents?: DocumentPreparationBoundary,
   publicDocuments?: PublicDocumentsBoundary,
   registration?: ArtworkRegistrationBoundary,
+  verification?: ArtworkVerificationBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -241,6 +244,20 @@ export function createApi(
           c.req.header("Authorization"),
           kathaId,
           await parseJson(c, artworkRegistrationRequestSchema),
+        ),
+        201,
+      );
+    });
+  }
+  if (verification) {
+    app.post("/verifier/artworks/:kathaId/operations/verification", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await verification.prepare(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, artworkVerificationRequestSchema),
         ),
         201,
       );
