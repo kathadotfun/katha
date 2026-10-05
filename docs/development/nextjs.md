@@ -12,6 +12,7 @@ From the repository root, with the pinned Node.js and pnpm versions selected:
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm --filter @katha/shared build
 pnpm --filter @katha/web dev
 ```
 
@@ -20,6 +21,8 @@ Open <http://localhost:3000>. Stop the development server with `Ctrl+C`.
 ## Verify the web package
 
 ```bash
+pnpm --filter @katha/shared build
+pnpm --filter @katha/web test
 pnpm --filter @katha/web lint
 pnpm --filter @katha/web typecheck
 pnpm --filter @katha/web build
@@ -28,3 +31,6 @@ pnpm --filter @katha/web build
 `typecheck` generates Next.js route types before invoking TypeScript. Next.js
 builds use Turbopack by default. Generated route declarations and build output
 remain local and are excluded from Git.
+
+The [public API client](public-api-client.md) validates shared response contracts
+and supplies route loading, error and not-found states for the upcoming pages.

@@ -93,7 +93,9 @@ history with immutable attribution, validated bindings, two-stream gaps/lag and
 persisted ownership-check freshness. Private report content remains excluded. The web scaffold now uses an editorial
 design foundation with warm ivory, charcoal, the approved Katha emblem and reusable
 visual tokens. A responsive public header, visible navigation, keyboard skip link
-and project footer now form the application shell; full public pages follow later.
+and project footer now form the application shell. A read-only public API client
+validates shared schemas and provides safe route loading, error and not-found
+states; full public pages follow later.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -144,6 +146,7 @@ outside the current scope.
 - [Public artwork details](docs/development/artwork-details-api.md)
 - [Web design system](docs/development/design-system.md)
 - [Public application shell](docs/development/application-shell.md)
+- [Public web API client](docs/development/public-api-client.md)
 - [Public provenance and condition timelines](docs/development/artwork-provenance-api.md)
 - [Local content-addressed storage](docs/development/local-storage.md)
 - [Canonical document preparation](docs/development/document-preparation.md)

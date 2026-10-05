@@ -3,9 +3,14 @@
   "extends": "../../tsconfig.web.json",
   "compilerOptions": {
     "jsx": "preserve",
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "types": ["node", "react", "react-dom"],
-    "incremental": true
+    "incremental": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "next-env.d.ts",
