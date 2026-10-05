@@ -18,6 +18,7 @@ const { metadataBytes, provenanceFixture } =
 const metadataHash = createHash("sha256").update(metadataBytes).digest("hex");
 let apiOrigin;
 let requests = 0;
+let homeMode = "READY";
 const api = createServer((request, response) => {
   requests++;
   response.setHeader("Content-Type", "application/json");
@@ -52,6 +53,11 @@ const api = createServer((request, response) => {
   if (path === "/artworks") {
     const query = new URL(request.url, "http://localhost").searchParams;
     const artistId = query.get("artistId");
+    const isHome = query.get("limit") === "3";
+    if (isHome && homeMode === "UNAVAILABLE") {
+      response.statusCode = 503;
+      return response.end(JSON.stringify({ message: "PRIVATE_UPSTREAM_SENTINEL" }));
+    }
     if (artistId === "ffffffff-1111-4111-8111-111111111111") {
       response.statusCode = 503;
       return response.end("{}");
@@ -78,13 +84,14 @@ const api = createServer((request, response) => {
     return response.end(
       JSON.stringify({
         items:
+          (isHome && homeMode === "EMPTY") ||
           category === "THANGKA" ||
           offset === 12 ||
           artistId === "dddddddd-1111-4111-8111-111111111111"
             ? []
             : [summary],
         pagination: {
-          limit: 12,
+          limit: Number(query.get("limit")),
           offset,
           hasMore: offset === 0 && category !== "THANGKA",
         },
@@ -192,7 +199,9 @@ try {
   for (let attempt = 0; attempt < 100 && web.exitCode === null; attempt++) {
     try {
       ready = (
-        await globalThis.fetch(origin, { signal: globalThis.AbortSignal.timeout(1000) })
+        await globalThis.fetch(`${origin}/brand/katha-profile.svg`, {
+          signal: globalThis.AbortSignal.timeout(1000),
+        })
       ).ok;
     } catch {
       /* Startup is asynchronous. */
@@ -320,6 +329,23 @@ try {
   );
   const home = await globalThis.fetch(origin).then((response) => response.text());
   assert.ok(home.includes('href="/explore"'));
+  assert.ok(home.includes('href="/art/KATHA-PAUBHA-000001"'));
+  assert.ok(home.includes('href="/artists/synthetic-artist"'));
+  assert.ok(home.includes('href="https://katha.fun/"'));
+  assert.ok(home.includes('id="purpose"') && home.includes('id="traditions"'));
+  assert.ok(home.includes("Real World Assets, rooted in Nepali culture."));
+  for (const [mode, message] of [
+    ["EMPTY", "No published artworks are available yet"],
+    ["UNAVAILABLE", "Featured artworks are temporarily unavailable"],
+  ]) {
+    homeMode = mode;
+    const fallback = await globalThis.fetch(origin).then((response) => response.text());
+    assert.ok(fallback.includes(message));
+    assert.ok(fallback.includes('id="traditions"'));
+    assert.ok(!fallback.includes("PRIVATE_UPSTREAM_SENTINEL"));
+    assert.ok(!fallback.includes('href="/art/KATHA-PAUBHA-000001"'));
+  }
+  homeMode = "READY";
   async function artistPage(slug) {
     const response = await globalThis.fetch(`${origin}/artists/${slug}`, {
       headers: { "User-Agent": "Twitterbot" },
@@ -377,7 +403,7 @@ try {
   assert.ok(success.html.includes(`href="/artists/${artistFixture.slug}"`));
   assert.ok(catalogue.html.includes(`href="/artists/${artistFixture.slug}"`));
   globalThis.console.log(
-    "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch; exploration filters, paging, images, empty/unavailable states, invalid query rejection and navigation; artist profile, scoped works, paging, empty/unavailable works, slug validation, missing/unverified profiles, outage, identity mismatch and artist links passed.",
+    "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch; exploration filters, paging, images, empty/unavailable states, invalid query rejection and navigation; artist profile, scoped works, paging, empty/unavailable works, slug validation, missing/unverified profiles, outage, identity mismatch and artist links; homepage cultural content, canonical URL, featured artwork/artist links, empty/unavailable catalogue states and safe upstream errors passed.",
   );
 } finally {
   if (web?.pid && web.exitCode === null) {

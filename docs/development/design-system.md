@@ -12,12 +12,12 @@ in Nepali culture.” Name Mandala, Paubha and Thangka in supporting copy. Prese
 specific traditions and artists' own explanations rather than treating them as
 interchangeable decoration. The approved Dhaka-inspired stepped emblem, warm paper
 and deep red establish the identity; artwork photography and documented cultural
-context will carry that identity through the later public pages. Avoid generic
+context carry that identity through the public pages. Avoid generic
 crypto imagery, invented cultural motifs, or claims that ownership grants copyright.
 
-The current page applies these foundations to the existing scaffold. The
-[application shell](application-shell.md) now provides responsive navigation and
-a footer; artwork photography and full public feature pages follow later.
+The [application shell](application-shell.md) provides responsive navigation and
+a footer. The [homepage](homepage.md), catalogue, artwork records and artist
+profiles apply these foundations to real published content.
 Do not imply that an unsigned operation, an NFC scan or an indexing observation
 independently proves physical authenticity. Keep authorship, ownership and physical
 custody visibly distinct. Show unavailable, unknown and stale states in plain words.

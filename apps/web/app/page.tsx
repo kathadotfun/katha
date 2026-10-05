@@ -1,24 +1,17 @@
-export default function HomePage() {
-  return (
-    <section
-      aria-labelledby="purpose"
-      className="page-container py-[var(--section-space)]"
-    >
-      <p className="eyebrow text-brand">Katha · Real World Assets</p>
-      <h1 id="purpose" tabIndex={-1} className="mt-8 max-w-4xl text-display">
-        Real World Assets, rooted in Nepali culture.
-      </h1>
-      <p
-        id="traditions"
-        tabIndex={-1}
-        className="mt-6 max-w-[42ch] text-lead text-muted"
-      >
-        Preserving Nepal&apos;s Mandala, Paubha and Thangka traditions through
-        documented artworks, permanent artist attribution and verifiable provenance.
-      </p>
-      <a href="/explore" className="button-primary mt-8 inline-flex">
-        Explore the artworks
-      </a>
-    </section>
-  );
+import type { Metadata } from "next";
+import { KathaHomepage } from "../components/home-page";
+import { loadFeaturedArtworks } from "../lib/home-page";
+import { serverApi, serverApiOrigin } from "../lib/server-api";
+
+export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Katha — Real World Assets, rooted in Nepali culture",
+  description:
+    "Discover documented Nepali artworks, their artists and cultural stories, with permanent attribution and verifiable provenance on Solana Devnet.",
+  alternates: { canonical: "https://katha.fun/" },
+};
+
+export default async function HomePage() {
+  const featured = await loadFeaturedArtworks((query) => serverApi().artworks(query));
+  return <KathaHomepage featured={featured} apiOrigin={serverApiOrigin()} />;
 }

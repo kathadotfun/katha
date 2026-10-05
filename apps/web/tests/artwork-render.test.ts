@@ -619,3 +619,79 @@ test("artist artwork failures, emptiness and invalid page queries preserve biogr
     assert.ok(html.includes(artistFixture.displayName));
   }
 });
+
+const homeModule = await viewModule("../components/home-page.tsx", {
+  "../lib/artwork-page": new URL("../lib/artwork-page.ts", import.meta.url).href,
+  "../lib/artwork-exploration": new URL(
+    "../lib/artwork-exploration.ts",
+    import.meta.url,
+  ).href,
+  "./artwork-photo": photoModule,
+});
+const { KathaHomepage } = await import(homeModule);
+
+test("homepage presents cultural purpose, real photographs, attribution and permanent routes", () => {
+  const html = renderToStaticMarkup(
+    createElement(KathaHomepage, {
+      featured: { kind: "READY", items: [summary] },
+      apiOrigin: "http://localhost:3001",
+    }),
+  );
+  for (const text of [
+    "Real World Assets, rooted in Nepali culture.",
+    'id="purpose"',
+    'id="traditions"',
+    'href="/explore?category=MANDALA"',
+    'href="/explore?category=PAUBHA"',
+    'href="/explore?category=THANGKA"',
+    'href="/art/KATHA-PAUBHA-000001"',
+    'href="/artists/synthetic-artist"',
+    summary.artist.displayName,
+    summary.title,
+    "Newar painting tradition",
+    "Tibetan hanging-scroll tradition",
+    "permanent Katha ID order",
+    "does not transfer authorship or copyright",
+    "This demonstration uses Devnet.",
+    `src="http://localhost:3001/storage/public/${summary.heroImage.contentHash}.png"`,
+    'alt="Synthetic catalogue photo"',
+  ])
+    assert.ok(html.includes(text), text);
+  assert.equal((html.match(/<h1(?:\s|>)/g) ?? []).length, 1);
+  assert.equal((html.match(/<main(?:\s|>)/g) ?? []).length, 0);
+  assert.ok(!html.includes(artworkFixture.ownership.ownerWallet));
+});
+
+test("homepage keeps culture and navigation available during empty or failed catalogue reads", () => {
+  for (const [featured, message] of [
+    [{ kind: "UNAVAILABLE" }, "Featured artworks are temporarily unavailable"],
+    [{ kind: "READY", items: [] }, "No published artworks are available yet"],
+  ]) {
+    const html = renderToStaticMarkup(
+      createElement(KathaHomepage, { featured, apiOrigin: "http://localhost:3001" }),
+    );
+    assert.ok(html.includes(message as string));
+    assert.ok(html.includes('id="traditions"'));
+    assert.ok(html.includes('href="/explore"'));
+    assert.ok(!html.includes(summary.title));
+    assert.ok(!html.includes("PRIVATE"));
+  }
+});
+
+test("homepage escapes public text and handles missing or unsupported photographs explicitly", () => {
+  for (const heroImage of [null, { ...summary.heroImage, mimeType: "image/svg+xml" }]) {
+    const html = renderToStaticMarkup(
+      createElement(KathaHomepage, {
+        featured: {
+          kind: "READY",
+          items: [{ ...summary, title: "<script>unsafe</script>", heroImage }],
+        },
+        apiOrigin: "http://localhost:3001",
+      }),
+    );
+    assert.ok(html.includes("&lt;script&gt;unsafe&lt;/script&gt;"));
+    assert.ok(!html.includes("<script>"));
+    assert.ok(html.includes("Artwork photograph is not available"));
+    assert.ok(!html.includes("/storage/public/"));
+  }
+});

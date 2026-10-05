@@ -97,7 +97,11 @@ and project footer now form the application shell. A read-only public API client
 validates shared schemas and provides safe route loading, error and not-found
 states. The permanent-ID artwork page now presents public photography, artist
 attribution and cultural documentation, with separate recorded verification,
-condition-inspection and physical custody summaries. Other public pages follow later.
+condition-inspection and physical custody summaries. The public catalogue supports
+category browsing, and artist profiles preserve attribution independently of
+collectors. The homepage introduces the cultural purpose, Mandala, Paubha and
+Thangka, with up to three published works from the catalogue and explicit
+empty/unavailable states.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -150,6 +154,7 @@ outside the current scope.
 - [Public application shell](docs/development/application-shell.md)
 - [Public web API client](docs/development/public-api-client.md)
 - [Public artist profile pages](docs/development/artist-profiles-web.md)
+- [Cultural homepage and featured artworks](docs/development/homepage.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)
 - [Canonical artwork page, provenance and metadata integrity](docs/development/artwork-page.md)
 - [Public provenance and condition timelines](docs/development/artwork-provenance-api.md)
