@@ -130,3 +130,8 @@ bytes under wallet-scoped idempotency and validates artwork identity. See
 [unsigned operation preparation](blockchain-operation-preparation.md) for concurrency,
 rollback and simulation boundaries. Apply forward migrations with `pnpm db:migrate`
 after starting local PostgreSQL; no development database is modified by tests.
+
+Migration `0011_indexer_recovery.sql` preserves network identities and stores Core
+ownership diagnostics with custom immutable/binding triggers. Commit its generated
+snapshot/journal and reviewed SQL together. See [indexer recovery](chain-activity-ingestion.md)
+for genesis binding, legacy checkpoint handling and isolated reset-chain setup.

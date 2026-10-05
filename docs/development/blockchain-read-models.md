@@ -6,8 +6,8 @@ Migration `0007_blockchain_read_models.sql` adds `indexedEvents`,
 successful finalized chain activity. They do not establish authoritative ownership
 or authenticate RPC data. Solana/Core remain the ownership source; the
 [polling/decoding boundary](chain-activity-ingestion.md) now supplies validated
-activity pages; atomic persistence, account reconciliation and marketplace ingestion
-remain later work.
+activity pages; atomic persistence, paginated backfill and account reconciliation
+are implemented. Marketplace ingestion remains separate work.
 
 ## Event identity and replay
 
@@ -34,8 +34,8 @@ originate outside the application's preparation flow.
 On replay, use the unique event identity to avoid duplicate rows and compare the
 existing immutable content with the decoded input. A conflicting payload under an
 existing identity is an integrity error, not a reason to overwrite history. Atomic
-worker replay/backfill behavior will be implemented and tested when the worker is
-added; this step verifies the database constraints and transaction primitives.
+worker replay/backfill compares retained evidence, inserts missing validated rows
+and advances projections and checkpoints atomically.
 
 ## Checkpoints and gaps
 
@@ -144,3 +144,30 @@ checkpoint write rolls back the entire batch. Registration, verification, metada
 condition and custody claims are retained here as chain events; private prepared
 documents and manual custody observations are not rewritten. Public timeline
 assembly, history recovery and marketplace projections have separate workflows.
+
+## Recovery and ownership diagnostics
+
+Migration `0011_indexer_recovery.sql` adds a bounded `gapReason`, network bindings
+and `ownershipReconciliations`. Bindings preserve the genesis, Registry program and
+collection. The finalized-slot high-water mark cannot rewind; a changed genesis
+permanently blocks ingestion into that dataset. A lagging node or same-genesis
+collection mismatch records a gap and stops without permanently replacing the
+binding. Existing unbound checkpoints are marked NETWORK_UNBOUND and cannot be
+silently adopted. Use an isolated database for a new chain; preserve old evidence.
+
+A complete backfill uses the original configured start, validates existing events
+and reaches the saved cursor before acknowledging the frozen upper slot. Gaps
+clear only in that transaction, after covering their stored upper bound. Insertion
+of older missing events does not rewind ownership. No range can rewind an existing
+scanned-through checkpoint. A failed backfill leaves events and cursors unchanged;
+its diagnostic gap remains. Scanned-through now means the completed frozen RPC
+window, including windows with no program transactions, rather than only its last
+observed signature slot. This relies on the RPC provider's retained address history.
+
+Ownership checks record MATCH, MISMATCH, MISSING or INVALID against the exact current
+source event and finalized account context. Stale/raced checks are rejected, and
+database triggers bind diagnostics to the current projection. A mismatch records a
+Core gap; it never creates a transfer or replaces the indexed owner. A later successful
+backfill and match can resolve it. A diagnostic referencing an older source event
+must be treated as stale by consumers. Prepared documents and physical custody
+remain separate. Public status/timeline responses are provided by the provenance API.

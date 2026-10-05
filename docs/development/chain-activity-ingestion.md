@@ -107,24 +107,22 @@ fresh consumer-selected requests each cycle, applies a bounded interval and
 supports abortable RPC/sleep shutdown. A read or consumer error stops the loop;
 it does not silently advance a cursor or hide unresolved evidence.
 
-`ingestActivityStream` reads the durable cursor, requests an inclusive page (no
-`until`), verifies that the exact saved signature and slot were reached, then
-selects newer transactions by actual block order. At first start it requires an
-observed transaction below the configured start slot. Empty/short pages alone
-never establish a boundary. A window that exceeds 100 signatures stops safely;
-there is no partial acknowledgement or discard-and-advance mode. Failed transactions
-can advance discovery but never generate successful events.
+`recoverActivityStream` freezes a finalized upper slot, reads inclusive pages from
+newest to oldest, then applies globally oldest-first observations in one transaction.
+Pagination links, same-slot block positions, duplicates, genesis and the saved
+signature/slot are checked. Newer activity outside the frozen window is handled
+on the next cycle. `ingestActivityStream` remains the simpler single-page boundary;
+the runnable worker uses the paginated recovery path.
 
-The adapter validates Registry configuration/artwork/asset/report/revision PDAs,
-filters other Core collections, and preserves chain-only claims as JSON. The
-[database store](blockchain-read-models.md#atomic-ingestion) commits retained events,
-ownership and the head together. Read/decode/write failures stop the worker; restart
-uses the last committed cursor. In-flight aborts before commit prevent writes; if
-shutdown arrives during commit, the database transaction completes or rolls back.
+The adapter validates generated Registry PDAs and preserves chain-only claims as
+JSON. The [database store](blockchain-read-models.md#atomic-ingestion) atomically
+commits events, ordered ownership and the scanned window. Abort before commit
+prevents writes; during commit, the transaction finishes or rolls back. No partial
+page acknowledgement occurs. Failed transactions contribute discovery only.
 
-## Run the bounded worker
+## Run, backfill and inspect recovery
 
-After applying migrations and building workspace packages, run alongside the API:
+After building packages and applying migrations, run alongside the API:
 
 ```bash
 pnpm build
@@ -132,24 +130,79 @@ pnpm db:migrate
 pnpm indexer:run <registered-collection-address> <start-slot>
 ```
 
-Both arguments are public configuration. Use the collection recorded in the
-initialized Registry and a start slot before the first artwork registration. The
-worker checks the finalized Registry collection every cycle, ingests Registry
-before Core, and waits five seconds between cycles. Each stream must reach its
-saved signature within one page. On first start, retained activity below the start
-slot must be observable in both streams (for example the Registry deployment).
-Slot zero cannot meet this initial boundary rule. The configured start cannot
-change after acknowledgement. Existing gap-marked checkpoints are refused.
+The start must include artwork registration. Collection and start are public
+configuration. Registry runs before Core. Every cycle validates the initialized
+Registry collection and reads the finalized genesis, ledger floor and upper slot.
+The default budget is 100 pages of 100 signatures per stream. `--max-pages=N`
+allows 1–1000 pages; a transaction batch still has a 10,000 scoped-event limit.
+Limits produce a PAGE_LIMIT gap and preserve the previous cursor. Busy global Core
+history may need a larger budget or a more suitable configured RPC endpoint.
 
-This is a deliberately bounded ingestion foundation. A busy global Core Devnet
-stream, an old cursor, an unknown locally registered artwork, a transfer without
-its retained mint, or missing RPC history stops with a redacted failure. The worker
-never skips those cases. Pagination/backfill, transient retries, gap reporting and
-Core reconciliation are the next recovery work. The stored scanned slot is the
-observed head slot, not proof that every historical slot was available. Localnet
-reset detection also belongs to recovery; do not reuse old checkpoints on a reset
-chain. No automatic worker starts with the HTTP service; no signing/submission,
-publication, shipping or manual custody change occurs.
+For a one-shot full replay from the configured start:
+
+```bash
+pnpm indexer:run <registered-collection-address> <start-slot> --backfill --once
+```
+
+For an initial historical range ending at an already finalized slot:
+
+```bash
+pnpm indexer:run <registered-collection-address> <start-slot> --backfill --once --through-slot=<end-slot>
+```
+
+Historical range mode does not compare historical ownership with a current account
+snapshot. Its upper bound cannot precede an existing scanned checkpoint. Normal
+polling subsequently catches up and reconciles current ownership. The original
+start cannot change after acknowledgement. An existing gap automatically selects
+full backfill, covering its entire stored range before clearing it.
+
+An initial empty/exhausted stream is accepted only when the reported ledger floor
+covers the configured start. `getFirstAvailableBlock` is the node's lowest retained
+confirmed block, as described in [Solana RPC documentation](https://solana.com/docs/rpc/http/getfirstavailableblock).
+A saved signature must be observed even after a short/exhausted page; pruning,
+missing boundaries, malformed evidence and page limits create persisted gaps.
+The retention check is conservative, including for archival providers. Neither an
+RPC response nor absence of a detected gap is independent proof of complete history.
+
+Only timeout, connection, HTTP 429/5xx and selected transient provider errors are
+retried, up to three attempts with 250/500 ms abortable delays. Validation and
+permission errors are not retried. Continuous polling waits five seconds after a
+recoverable gap or exhausted transient failure. One-shot mode exits unsuccessfully for unresolved gaps, exhausted transient
+failures or unresolved current ownership checks.
+Uninitialized/mismatched scope, database conflicts and changed network bindings
+stop the worker with a redacted failure.
+
+Finalized Core account reads verify context slot, program owner, layout and expected
+collection. MATCH/MISMATCH/MISSING/INVALID diagnostics bind the exact indexed source
+without inventing history. A race returns STALE and requests another recovery cycle.
+A mismatch may reflect activity after the frozen slot; the next backfill can recover
+it. Unsupported Core state changes or missing retained history remain explicit gaps.
+
+Inspect recovery through read-only SQL in your configured PostgreSQL client:
+
+```sql
+SELECT cluster, program_address, from_slot, scanned_through_slot,
+       gap_reason, gap_from_slot, gap_through_slot
+FROM indexer_checkpoints;
+SELECT cluster, registry_program, genesis_hash, finalized_slot, blocked
+FROM indexer_networks;
+SELECT cluster, artwork_id, source_event_id, status, observed_slot, checked_at
+FROM ownership_reconciliations;
+```
+
+Migration preserves checkpoints created before genesis binding as untrusted legacy
+state: they become NETWORK_UNBOUND rather than silently adopting today's chain.
+For a reset chain or legacy dataset, create a separate local database and apply the
+migrations, then backfill verified retained history there. Preserve the old database;
+this worker never deletes history or unblocks changed-genesis bindings. Same-genesis
+height regression also stops with a gap; catch-up and complete boundary verification
+are required before recovery. Same-genesis resets that reproduce identical retained
+history cannot be distinguished from that history; missing cursors/changed evidence
+remain guarded.
+
+No worker starts automatically with HTTP. No signing, submission, publication,
+shipping or manual custody change occurs. Public provenance/status endpoints and
+marketplace settlement indexing remain separate features.
 
 ## Verification
 
@@ -171,4 +224,5 @@ subprocess tests exercise inspector configuration and both program reads without
 connecting to an unavailable database. Persistence tests verify concurrent replay, exact-content conflicts, same-slot
 ownership order, restart, overlapping streams, stale cursor rejection and whole-batch
 rollback against disposable PostgreSQL. These use synthetic data; live Devnet
-ingestion and complete recovery are not claimed.
+ingestion is not claimed. Recovery tests cover multiple pages, frozen ranges,
+missing/pruned history, budgets, resets, retries, races and non-invented ownership.

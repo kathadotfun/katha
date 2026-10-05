@@ -34,6 +34,7 @@ export interface ActivityPage {
   cluster: KathaCluster;
   programAddress: Address;
   headSignature: string | null;
+  genesisHash?: string;
   nextBefore: string | null;
   transactions: (ActivityTransaction & { transactionIndex: number })[];
 }
@@ -62,7 +63,8 @@ export function createActivityReaderFromRpc(
     const abortSignal = signal
       ? AbortSignal.any([signal, AbortSignal.timeout(10000)])
       : AbortSignal.timeout(10000);
-    assertKathaRpcCluster(await rpc.getGenesisHash().send({ abortSignal }), cluster);
+    const genesisHash = await rpc.getGenesisHash().send({ abortSignal });
+    assertKathaRpcCluster(genesisHash, cluster);
     const rows = activityArray(
       await rpc
         .getSignaturesForAddress(request.programAddress, {
@@ -159,6 +161,7 @@ export function createActivityReaderFromRpc(
     );
     return {
       cluster,
+      genesisHash,
       programAddress: request.programAddress,
       headSignature: rows.length ? (rows[0]!.signature as string) : null,
       nextBefore: rows.length === limit ? (rows.at(-1)!.signature as string) : null,

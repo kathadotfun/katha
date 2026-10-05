@@ -135,3 +135,11 @@ export {
   type ActivityPageRequest,
 } from "./activity-reader.js";
 export { createRegistryCollectionReader } from "./registry-authorities.js";
+export {
+  createHistoryReader,
+  createHistoryReaderFromRpc,
+  type HistoryReader,
+  type HistorySnapshot,
+  type CoreOwnerObservation,
+} from "./history-reader.js";
+export { isRetryableRpcFailure } from "./rpc-retry.js";

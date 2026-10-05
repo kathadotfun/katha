@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
+import { indexerNetworks } from "./schema/indexer-recovery.js";
 import { artworks } from "./schema/artworks.js";
 import {
   indexedEvents,
@@ -22,6 +23,9 @@ export type ActivityBatch = ActivityStream & {
   expected: ActivityCursor;
   head: ActivityCursor;
   events: readonly StoredActivity[];
+  genesisHash?: string;
+  recovery?: boolean;
+  scannedThroughSlot?: bigint;
 };
 const sameCursor = (a: ActivityCursor, b: ActivityCursor) =>
   a?.signature === b?.signature && a?.slot === b?.slot;
@@ -72,7 +76,7 @@ export function createActivityStore(
       throw new ActivityStoreConflict();
   }
   return {
-    async cursor(stream: ActivityStream): Promise<ActivityCursor> {
+    async cursor(stream: ActivityStream, recovery = false): Promise<ActivityCursor> {
       validate(stream);
       const [row] = await db
         .select()
@@ -83,7 +87,10 @@ export function createActivityStore(
             eq(indexerCheckpoints.programAddress, stream.programAddress),
           ),
         );
-      if (row && (row.fromSlot !== stream.fromSlot || row.gapFromSlot !== null))
+      if (
+        row &&
+        (row.fromSlot !== stream.fromSlot || (row.gapFromSlot !== null && !recovery))
+      )
         throw new ActivityStoreConflict();
       return row?.lastSignature && row.lastSignatureSlot !== null
         ? { signature: row.lastSignature, slot: row.lastSignatureSlot }
@@ -94,6 +101,9 @@ export function createActivityStore(
       if (
         batch.events.length > 10000 ||
         (batch.head && batch.head.slot < batch.fromSlot) ||
+        (batch.scannedThroughSlot !== undefined &&
+          (batch.scannedThroughSlot < batch.fromSlot ||
+            (batch.head !== null && batch.scannedThroughSlot < batch.head.slot))) ||
         (batch.expected && (!batch.head || batch.head.slot < batch.expected.slot))
       )
         throw new ActivityStoreConflict();
@@ -103,6 +113,23 @@ export function createActivityStore(
         await tx.execute(
           sql`select pg_advisory_xact_lock(hashtextextended(${`katha-indexer:${batch.cluster}`}, 0))`,
         );
+        const [network] = await tx
+          .select()
+          .from(indexerNetworks)
+          .where(
+            and(
+              eq(indexerNetworks.cluster, batch.cluster),
+              eq(indexerNetworks.registryProgram, programs.registry),
+            ),
+          );
+        if (
+          (network &&
+            (network.blocked ||
+              network.genesisHash !== batch.genesisHash ||
+              network.collection !== programs.collection)) ||
+          (batch.genesisHash !== undefined && !network)
+        )
+          throw new ActivityStoreConflict();
         const where = and(
           eq(indexerCheckpoints.cluster, batch.cluster),
           eq(indexerCheckpoints.programAddress, batch.programAddress),
@@ -121,10 +148,11 @@ export function createActivityStore(
             : null;
         if (
           checkpoint &&
-          (checkpoint.fromSlot !== batch.fromSlot || checkpoint.gapFromSlot !== null)
+          (checkpoint.fromSlot !== batch.fromSlot ||
+            (checkpoint.gapFromSlot !== null && !batch.recovery))
         )
           throw new ActivityStoreConflict();
-        const replay = sameCursor(current, batch.head);
+        const replay = sameCursor(current, batch.head) && !batch.recovery;
         if (!sameCursor(current, batch.expected) && !replay)
           throw new ActivityStoreConflict();
         let inserted = 0;
@@ -295,23 +323,37 @@ export function createActivityStore(
             }
           }
         }
-        if (!replay && batch.head) {
+        if (
+          batch.recovery &&
+          checkpoint?.gapThroughSlot !== null &&
+          checkpoint?.gapThroughSlot !== undefined &&
+          (batch.scannedThroughSlot === undefined ||
+            batch.scannedThroughSlot < checkpoint.gapThroughSlot)
+        )
+          throw new ActivityStoreConflict();
+        if ((!replay && batch.head) || batch.scannedThroughSlot !== undefined) {
           await tx
             .insert(indexerCheckpoints)
             .values({
               cluster: batch.cluster,
               programAddress: batch.programAddress,
               fromSlot: batch.fromSlot,
-              scannedThroughSlot: batch.head.slot,
-              lastSignature: batch.head.signature,
-              lastSignatureSlot: batch.head.slot,
+              ...(batch.recovery
+                ? { gapFromSlot: null, gapThroughSlot: null, gapReason: null }
+                : {}),
+              scannedThroughSlot: batch.scannedThroughSlot ?? batch.head!.slot,
+              lastSignature: batch.head?.signature ?? null,
+              lastSignatureSlot: batch.head?.slot ?? null,
             })
             .onConflictDoUpdate({
               target: [indexerCheckpoints.cluster, indexerCheckpoints.programAddress],
               set: {
-                scannedThroughSlot: batch.head.slot,
-                lastSignature: batch.head.signature,
-                lastSignatureSlot: batch.head.slot,
+                ...(batch.recovery
+                  ? { gapFromSlot: null, gapThroughSlot: null, gapReason: null }
+                  : {}),
+                scannedThroughSlot: batch.scannedThroughSlot ?? batch.head!.slot,
+                lastSignature: batch.head?.signature ?? null,
+                lastSignatureSlot: batch.head?.slot ?? null,
               },
             });
         }

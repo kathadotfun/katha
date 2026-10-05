@@ -54,7 +54,9 @@ idempotent blockchain operations with retained transaction attempts. Database
 read models now preserve indexed events, gap-aware checkpoints, ownership,
 listings and sale distributions. Finalized Registry/Core polling and decoding now
 provide validated activity pages; an explicit bounded worker atomically persists
-events, ownership and replay-safe checkpoints. History recovery remains planned.
+events, ownership and replay-safe checkpoints. Paginated backfill, bounded RPC
+retries, persisted gaps, network binding and Core ownership diagnostics support
+recovery without replacing event-derived ownership with account snapshots.
 Fictional draft fixtures and fresh-database constraint tests complete the database
 foundation.
 The API now validates server settings before listening and provides an explicit

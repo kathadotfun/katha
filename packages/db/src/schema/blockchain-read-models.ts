@@ -119,6 +119,7 @@ export const indexerCheckpoints = pgTable(
     scannedThroughSlot: bigint("scanned_through_slot", { mode: "bigint" }),
     lastSignature: varchar("last_signature", { length: 88 }),
     lastSignatureSlot: bigint("last_signature_slot", { mode: "bigint" }),
+    gapReason: varchar("gap_reason", { length: 32 }),
     gapFromSlot: bigint("gap_from_slot", { mode: "bigint" }),
     gapThroughSlot: bigint("gap_through_slot", { mode: "bigint" }),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" })
@@ -138,6 +139,10 @@ export const indexerCheckpoints = pgTable(
     check(
       "indexer_checkpoints_gap_valid",
       sql`(${t.gapFromSlot} IS NULL AND ${t.gapThroughSlot} IS NULL) OR (${t.gapFromSlot} IS NOT NULL AND ${t.gapThroughSlot} IS NOT NULL AND ${t.gapFromSlot} >= ${t.fromSlot} AND ${t.gapThroughSlot} >= ${t.gapFromSlot})`,
+    ),
+    check(
+      "indexer_checkpoints_gap_reason_valid",
+      sql`${t.gapReason} IS NULL OR (${t.gapFromSlot} IS NOT NULL AND ${t.gapReason} IN ('HISTORY_UNAVAILABLE', 'BOUNDARY_MISSING', 'PAGE_LIMIT', 'EVIDENCE_INVALID', 'OWNER_MISMATCH', 'NETWORK_CHANGED', 'NETWORK_UNBOUND'))`,
     ),
     check("indexer_checkpoints_time_finite", sql`isfinite(${t.updatedAt})`),
   ],

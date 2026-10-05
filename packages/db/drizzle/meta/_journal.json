@@ -78,6 +78,13 @@
       "when": 1791192762309,
       "tag": "0010_operation_preparations",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1791218257631,
+      "tag": "0011_indexer_recovery",
+      "breakpoints": true
     }
   ]
 }

@@ -63,7 +63,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(11);
+    expect(applicationCount).toBe(12);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -79,7 +79,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(12);
+    expect(result[0]?.count).toBe(Number(applicationCount) + 1);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -134,7 +134,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(12);
+    ).toBe(Number(applicationCount) + 1);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -4188,6 +4188,249 @@ it("commits activity, ownership and cursors atomically across replay, races and 
         ),
       );
     await expect(store.cursor(stream)).rejects.toThrow("conflict");
+  } finally {
+    await connection.close();
+  }
+});
+
+it("binds indexer networks, repairs gaps by retained history and never invents ownership on reconciliation", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const {
+    createActivityStore,
+    createIndexerRecoveryStore,
+    indexerNetworks,
+    ownershipReconciliations,
+  } = await import("../src/index.js");
+  const key = (n: number) => "W".repeat(31) + n;
+  const programs = { registry: key(2), core: key(3), collection: key(4) },
+    genesis = key(5);
+  const stream = {
+    cluster: "LOCALNET" as const,
+    programAddress: programs.registry,
+    fromSlot: 10n,
+  };
+  const sig = (n: number) => "z".repeat(63) + n;
+  try {
+    const recovery = createIndexerRecoveryStore(db, programs),
+      store = createActivityStore(db, programs);
+    expect(await recovery.bindNetwork(stream.cluster, genesis, 40n)).toBe(true);
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "recovery-indexer-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Fixture missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic recovery",
+        creationYear: 2026,
+        authorshipEvidenceHash: "b".repeat(64),
+      })
+      .returning();
+    if (!artwork) throw new Error("Fixture missing");
+    const base = {
+      programAddress: programs.registry,
+      slot: 10n,
+      transactionIndex: 0,
+      outerInstructionIndex: 0,
+      innerInstructionIndex: -1,
+      eventIndex: 0,
+      kathaId: artwork.kathaId,
+      chainRecordedAt: new Date(1000),
+    };
+    const registered = {
+      ...base,
+      signature: sig(1),
+      kind: "REGISTRY" as const,
+      assetAddress: null,
+      payload: {
+        name: "ArtworkRegistered",
+        collection: programs.collection,
+        artistId: artist.id,
+        creatorWallet: null,
+        category: artwork.category,
+        creationYear: 2026,
+        authorshipEvidenceHash: artwork.authorshipEvidenceHash,
+      },
+    };
+    const minted = {
+      ...base,
+      slot: 20n,
+      signature: sig(2),
+      kind: "OWNERSHIP" as const,
+      assetAddress: key(6),
+      payload: {
+        name: "ArtworkMinted",
+        collection: programs.collection,
+        ownerWallet: key(7),
+      },
+    };
+    const head = { signature: minted.signature, slot: minted.slot };
+    await expect(
+      store.commit({ ...stream, expected: null, head, events: [registered, minted] }),
+    ).rejects.toThrow("conflict");
+    await store.commit({
+      ...stream,
+      expected: null,
+      head,
+      events: [registered, minted],
+      genesisHash: genesis,
+      scannedThroughSlot: 30n,
+    });
+    await recovery.gap(stream, "HISTORY_UNAVAILABLE", 40n);
+    await expect(store.cursor(stream)).rejects.toThrow("conflict");
+    const verified = {
+      ...registered,
+      slot: 15n,
+      signature: sig(3),
+      payload: { name: "ArtworkVerified" },
+    };
+    const repair = {
+      ...stream,
+      expected: head,
+      head,
+      events: [registered, verified, minted],
+      genesisHash: genesis,
+      recovery: true,
+      scannedThroughSlot: 40n,
+    };
+    expect(await store.commit(repair)).toEqual({ inserted: 1, replay: false });
+    expect(await store.commit(repair)).toEqual({ inserted: 0, replay: false });
+    expect((await recovery.checkpoint(stream))?.gapFromSlot).toBeNull();
+    const [owner] = await recovery.owners(stream.cluster);
+    if (!owner) throw new Error("Missing owner");
+    expect(
+      await recovery.reconcile(stream.cluster, genesis, owner, {
+        slot: 40n,
+        owner: key(8),
+        status: "PRESENT",
+      }),
+    ).toBe("MISMATCH");
+    expect(
+      await recovery.reconcile(stream.cluster, genesis, owner, {
+        slot: 39n,
+        owner: key(7),
+        status: "PRESENT",
+      }),
+    ).toBe("STALE");
+    expect(
+      await recovery.reconcile(stream.cluster, genesis, owner, {
+        slot: 40n,
+        owner: null,
+        status: "MISSING",
+      }),
+    ).toBe("MISSING");
+    const [stillOwner] = await db
+      .select()
+      .from(artworkOwnership)
+      .where(
+        and(
+          eq(artworkOwnership.cluster, stream.cluster),
+          eq(artworkOwnership.artworkId, artwork.id),
+        ),
+      );
+    expect(stillOwner?.ownerWallet).toBe(key(7));
+    expect(
+      await db
+        .select()
+        .from(indexedEvents)
+        .where(eq(indexedEvents.artworkId, artwork.id)),
+    ).toHaveLength(3);
+    await expect(
+      db
+        .update(ownershipReconciliations)
+        .set({ status: "MATCH", observedOwner: key(8) })
+        .where(eq(ownershipReconciliations.artworkId, artwork.id)),
+    ).rejects.toThrow();
+    const coreStream = { ...stream, programAddress: programs.core };
+    const transfer = {
+      ...base,
+      programAddress: programs.core,
+      slot: 40n,
+      signature: sig(4),
+      kathaId: null,
+      assetAddress: key(6),
+      kind: "OWNERSHIP" as const,
+      payload: {
+        name: "CoreTransfer",
+        collection: programs.collection,
+        ownerWallet: key(8),
+      },
+    };
+    await store.commit({
+      ...coreStream,
+      expected: null,
+      head: { signature: sig(4), slot: 40n },
+      events: [transfer],
+      genesisHash: genesis,
+      scannedThroughSlot: 40n,
+    });
+    expect(
+      await recovery.reconcile(stream.cluster, genesis, owner, {
+        slot: 40n,
+        owner: key(7),
+        status: "PRESENT",
+      }),
+    ).toBe("STALE");
+    const [nextOwner] = await recovery.owners(stream.cluster);
+    if (!nextOwner) throw new Error("Missing owner");
+    expect(
+      await recovery.reconcile(stream.cluster, genesis, nextOwner, {
+        slot: 40n,
+        owner: key(8),
+        status: "PRESENT",
+      }),
+    ).toBe("MATCH");
+    await expect(
+      db
+        .update(ownershipReconciliations)
+        .set({
+          sourceEventId: owner.sourceEventId,
+          indexedOwner: key(7),
+          observedOwner: key(7),
+        })
+        .where(eq(ownershipReconciliations.artworkId, artwork.id)),
+    ).rejects.toThrow();
+    // Lagging workers do not permanently poison a healthy genesis binding.
+    expect(await recovery.bindNetwork(stream.cluster, genesis, 39n)).toBe(false);
+    expect(await recovery.bindNetwork(stream.cluster, genesis, 40n)).toBe(true);
+    expect((await recovery.checkpoint(stream))?.gapReason).toBe("NETWORK_CHANGED");
+    // Different genesis permanently blocks this dataset and preserves all evidence.
+    expect(await recovery.bindNetwork(stream.cluster, key(9), 0n)).toBe(false);
+    expect(await recovery.bindNetwork(stream.cluster, genesis, 42n)).toBe(false);
+    await expect(store.commit(repair)).rejects.toThrow("conflict");
+    await expect(
+      db
+        .update(indexerNetworks)
+        .set({ blocked: false })
+        .where(eq(indexerNetworks.registryProgram, programs.registry)),
+    ).rejects.toThrow();
+    const legacyPrograms = {
+      ...programs,
+      registry: "X".repeat(32),
+      core: "Y".repeat(32),
+    };
+    await db
+      .insert(indexerCheckpoints)
+      .values({ ...stream, programAddress: legacyPrograms.registry });
+    const legacy = createIndexerRecoveryStore(db, legacyPrograms);
+    expect(await legacy.bindNetwork(stream.cluster, genesis, 40n)).toBe(false);
+    expect(
+      (await legacy.checkpoint({ ...stream, programAddress: legacyPrograms.registry }))
+        ?.gapReason,
+    ).toBe("NETWORK_UNBOUND");
   } finally {
     await connection.close();
   }

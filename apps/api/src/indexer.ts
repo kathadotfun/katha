@@ -1,7 +1,13 @@
-import { createActivityStore, createDatabase } from "@katha/db";
+import {
+  createActivityStore,
+  createIndexerRecoveryStore,
+  createDatabase,
+} from "@katha/db";
 import { walletAddressSchema } from "@katha/shared";
 import {
   createActivityReader,
+  createHistoryReader,
+  isRetryableRpcFailure,
   createRegistryCollectionReader,
   CORE_PROGRAM_ADDRESS,
 } from "@katha/solana";
@@ -9,7 +15,13 @@ import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "@katha/solana/registry";
 import { setTimeout } from "node:timers/promises";
 import { readServerConfiguration, ConfigurationError } from "./config.js";
 import { createLogger } from "./logger.js";
-import { ingestActivityStream } from "./activity-ingestion.js";
+import {
+  recoverActivityStream,
+  reconcileCoreOwnership,
+  retryRpc,
+  HistoryGap,
+  IndexerNetworkChanged,
+} from "./activity-recovery.js";
 
 async function run() {
   const logger = createLogger();
@@ -19,16 +31,40 @@ async function run() {
   process.once("SIGTERM", stop);
   let connection: ReturnType<typeof createDatabase> | undefined;
   try {
-    const [collectionArg, slotArg, ...extra] = process.argv.slice(2);
+    const [collectionArg, slotArg, ...flags] = process.argv.slice(2);
     const collection = walletAddressSchema.parse(collectionArg);
     if (
-      extra.length ||
+      flags.some(
+        (flag) =>
+          !["--once", "--backfill"].includes(flag) &&
+          !/^--through-slot=(0|[1-9][0-9]{0,18})$/.test(flag) &&
+          !/^--max-pages=[1-9][0-9]{0,3}$/.test(flag),
+      ) ||
+      new Set(flags).size !== flags.length ||
       !slotArg ||
       !/^(0|[1-9][0-9]{0,18})$/.test(slotArg) ||
       BigInt(slotArg) > 9223372036854775807n
     )
       throw new Error("Expected collection and start slot");
     const fromSlot = BigInt(slotArg);
+    const endFlags = flags.filter((flag) => flag.startsWith("--through-slot="));
+    if (
+      endFlags.length > 1 ||
+      (endFlags.length && (!flags.includes("--backfill") || !flags.includes("--once")))
+    )
+      throw new Error("Historical ranges require one-shot backfill");
+    const throughSlot = endFlags.length
+      ? BigInt(endFlags[0]!.split("=")[1]!)
+      : undefined;
+    if (
+      throughSlot !== undefined &&
+      (throughSlot < fromSlot || throughSlot > 9223372036854775807n)
+    )
+      throw new Error("Invalid backfill range");
+    const pageFlags = flags.filter((flag) => flag.startsWith("--max-pages="));
+    const maxPages = pageFlags.length ? Number(pageFlags[0]!.split("=")[1]) : 100;
+    if (pageFlags.length > 1 || maxPages > 1000) throw new Error("Invalid page budget");
+    const once = flags.includes("--once");
     const config = readServerConfiguration(process.env);
     const cluster = config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET";
     const rpcConfig = {
@@ -39,6 +75,7 @@ async function run() {
         : { rpcSubscriptionsUrl: config.KATHA_RPC_SUBSCRIPTIONS_URL }),
     };
     const read = createActivityReader(rpcConfig);
+    const history = createHistoryReader(rpcConfig);
     const readCollection = createRegistryCollectionReader(rpcConfig);
     connection = createDatabase(config.DATABASE_URL);
     const store = createActivityStore(connection.db, {
@@ -46,21 +83,69 @@ async function run() {
       core: CORE_PROGRAM_ADDRESS,
       collection,
     });
+    const recoveryStore = createIndexerRecoveryStore(connection.db, {
+      registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
+      core: CORE_PROGRAM_ADDRESS,
+      collection,
+    });
+    let backfill = flags.includes("--backfill");
     while (!controller.signal.aborted) {
-      if ((await readCollection()) !== collection)
-        throw new Error("Unexpected Registry collection");
-      // Mint bindings must be acknowledged before processing the Core stream.
-      for (const programAddress of [
-        KATHA_REGISTRY_PROGRAM_ADDRESS,
-        CORE_PROGRAM_ADDRESS,
-      ]) {
-        await ingestActivityStream({
-          read,
-          store,
-          stream: { cluster, programAddress, fromSlot },
-          collection,
-          signal: controller.signal,
-        });
+      try {
+        const snapshot = await retryRpc(
+          () => history.snapshot(controller.signal),
+          controller.signal,
+        );
+        if (
+          !(await recoveryStore.bindNetwork(
+            cluster,
+            snapshot.genesisHash,
+            snapshot.finalizedSlot,
+          ))
+        )
+          throw new IndexerNetworkChanged();
+        if ((await retryRpc(readCollection, controller.signal)) !== collection)
+          throw new Error("Unexpected Registry collection");
+        // Mint bindings must be acknowledged before processing the Core stream.
+        for (const programAddress of [
+          KATHA_REGISTRY_PROGRAM_ADDRESS,
+          CORE_PROGRAM_ADDRESS,
+        ]) {
+          await recoverActivityStream({
+            read,
+            history,
+            recoveryStore,
+            snapshot,
+            backfill,
+            maxPages,
+            ...(throughSlot === undefined ? {} : { throughSlot }),
+            store,
+            stream: { cluster, programAddress, fromSlot },
+            collection,
+            signal: controller.signal,
+          });
+        }
+        if (throughSlot === undefined) {
+          const result = await reconcileCoreOwnership({
+            history,
+            recoveryStore,
+            stream: { cluster, programAddress: CORE_PROGRAM_ADDRESS, fromSlot },
+            collection,
+            snapshot,
+            signal: controller.signal,
+          });
+          if (once && result.mismatches) throw new HistoryGap("OWNER_MISMATCH");
+        }
+        backfill = false;
+        if (once) break;
+      } catch (error) {
+        if (
+          controller.signal.aborted ||
+          once ||
+          error instanceof IndexerNetworkChanged ||
+          (!(error instanceof HistoryGap) && !isRetryableRpcFailure(error))
+        )
+          throw error;
+        logger.activityPollingFailed();
       }
       await setTimeout(5000, undefined, { signal: controller.signal });
     }

@@ -173,3 +173,12 @@ export {
   type ActivityBatch,
   type StoredActivity,
 } from "./activity-store.js";
+export {
+  indexerNetworks,
+  ownershipReconciliations,
+} from "./schema/indexer-recovery.js";
+export {
+  createIndexerRecoveryStore,
+  type IndexerRecoveryStore,
+  type IndexerGapReason,
+} from "./indexer-recovery-store.js";
