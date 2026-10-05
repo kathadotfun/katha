@@ -15,8 +15,9 @@ and deep red establish the identity; artwork photography and documented cultural
 context will carry that identity through the later public pages. Avoid generic
 crypto imagery, invented cultural motifs, or claims that ownership grants copyright.
 
-The current page applies these foundations to the existing scaffold. Navigation,
-artwork photography and public feature pages are implemented in subsequent steps.
+The current page applies these foundations to the existing scaffold. The
+[application shell](application-shell.md) now provides responsive navigation and
+a footer; artwork photography and full public feature pages follow later.
 Do not imply that an unsigned operation, an NFC scan or an indexing observation
 independently proves physical authenticity. Keep authorship, ownership and physical
 custody visibly distinct. Show unavailable, unknown and stale states in plain words.

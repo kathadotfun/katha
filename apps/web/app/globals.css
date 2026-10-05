@@ -166,3 +166,112 @@
     border-color: ButtonText;
   }
 }
+
+@layer components {
+  .site-frame {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100svh;
+  }
+
+  .site-header {
+    border-bottom: 1px solid var(--color-line);
+  }
+
+  .site-header-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding-block: 1.5rem 0.5rem;
+  }
+
+  .site-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: var(--control-height);
+    color: var(--color-ink);
+    text-decoration: none;
+  }
+
+  .site-brand img {
+    flex-shrink: 0;
+  }
+
+  .site-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-nav-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-height);
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+  }
+
+  .site-nav-link:hover,
+  .site-nav-link:focus-visible {
+    color: var(--color-brand);
+    text-decoration-color: currentColor;
+  }
+
+  .site-footer {
+    border-top: 1px solid var(--color-line);
+  }
+
+  .site-footer-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding-block: 2rem;
+  }
+
+  .skip-link {
+    position: fixed;
+    z-index: 50;
+    top: 1rem;
+    left: var(--page-gutter);
+    transform: translateY(-200%);
+    min-height: var(--control-height);
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--color-brand);
+    background: var(--color-surface);
+    color: var(--color-brand);
+  }
+
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+
+  #main-content,
+  #purpose,
+  #traditions {
+    scroll-margin-block-start: 1.5rem;
+  }
+
+  @media (min-width: 40rem) {
+    .site-header-inner {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      padding-block: 1.25rem;
+    }
+
+    .site-footer-inner {
+      flex-direction: row;
+      justify-content: space-between;
+      gap: 3rem;
+      padding-block: 2.5rem;
+    }
+  }
+}
