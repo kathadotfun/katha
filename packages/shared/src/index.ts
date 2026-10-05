@@ -160,3 +160,7 @@ export {
   type OperationIntent,
   type UnsignedOperationResponse,
 } from "./blockchain-operation.js";
+export {
+  artworkRegistrationRequestSchema,
+  type ArtworkRegistrationRequest,
+} from "./artwork-registration-api.js";

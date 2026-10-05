@@ -56,3 +56,7 @@ The [local storage provider](local-storage.md) supplies immutable validated byte
 for [canonical document preparation](document-preparation.md) and later media
 workflows. Public delivery resolves approved metadata/media references; private
 objects have no HTTP route.
+
+[Artwork registration preparation](artwork-registration-api.md) now provides an
+admin route with fresh Registry authorization and exact metadata/identity binding;
+the signing wallet submits the returned unsigned transaction.

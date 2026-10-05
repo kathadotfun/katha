@@ -137,3 +137,8 @@ export {
   createOperationPreparationStore,
   type OperationPreparationStore,
 } from "./operation-preparation-store.js";
+export {
+  createArtworkRegistrationStore,
+  type ArtworkRegistrationStore,
+  type ArtworkRegistrationSnapshot,
+} from "./artwork-registration-store.js";

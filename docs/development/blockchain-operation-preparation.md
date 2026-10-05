@@ -2,8 +2,9 @@
 
 `createBlockchainOperations` in `apps/api/src/blockchain-operations.ts` is an
 internal service boundary. It composes the PostgreSQL preparation store, existing
-wallet/Registry authorization and the Kit-only operation chain adapter. It installs
-no HTTP route. Feature handlers will supply their own validated domain inputs and
+wallet/Registry authorization and the Kit-only operation chain adapter. The helper itself installs
+no generic HTTP route. [Registration](artwork-registration-api.md) is its first feature
+handler, supplying validated domain inputs and
 trusted generated-client builder; raw client instructions, RPC URLs and program
 addresses are not accepted through a generic endpoint.
 
@@ -103,4 +104,4 @@ RPC failures and blockhash expiry. Disposable PostgreSQL cases exercise concurre
 retries, immutable refreshed messages, conflicting intents, identity bindings,
 rollback and receipt-state guards. Tests use temporary/synthetic identities, no
 real signing material or artwork evidence. No dependency or program change is
-needed; registration HTTP preparation is the next feature step.
+needed; registration HTTP preparation now uses this boundary.

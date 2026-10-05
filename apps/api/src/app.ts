@@ -1,3 +1,5 @@
+import type { ArtworkRegistrationBoundary } from "./artwork-registration.js";
+import { artworkRegistrationRequestSchema } from "@katha/shared";
 import type { PublicDocumentsBoundary } from "./public-documents.js";
 import type { DocumentPreparationBoundary } from "./document-preparation.js";
 import {
@@ -55,6 +57,7 @@ export function createApi(
   details?: ArtworkDetailsBoundary,
   documents?: DocumentPreparationBoundary,
   publicDocuments?: PublicDocumentsBoundary,
+  registration?: ArtworkRegistrationBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -227,6 +230,20 @@ export function createApi(
       c.header("X-Content-Type-Options", "nosniff");
       c.header("Cache-Control", "no-store");
       return c.body(new Uint8Array(result.bytes));
+    });
+  }
+  if (registration) {
+    app.post("/admin/artworks/:kathaId/operations/registration", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await registration.prepare(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, artworkRegistrationRequestSchema),
+        ),
+        201,
+      );
     });
   }
   app.onError(errorResponse);

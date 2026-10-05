@@ -16,30 +16,33 @@ handlers. Role configuration and finalized Registry authority checks are explain
 in [authorization](api-authorization.md); document preparation itself checks the
 configured verifier role, not a finalized Registry role.
 
-| Method and path                                        | Access                     | Input contract                                    | Success contract / status                                  |
-| ------------------------------------------------------ | -------------------------- | ------------------------------------------------- | ---------------------------------------------------------- |
-| `GET /health/live`                                     | Public                     | None                                              | `{ "status": "alive" }` / 200                              |
-| `GET /health/ready`                                    | Public                     | None                                              | `{ "status": "ready" }` / 200; unavailable / 503           |
-| `POST /auth/challenge`                                 | Public                     | `walletChallengeRequestSchema`                    | `walletChallengeResponseSchema` / 201                      |
-| `POST /auth/verify`                                    | Public, signed challenge   | `walletVerifyRequestSchema`                       | `walletSessionResponseSchema` / 200                        |
-| `GET /auth/session`                                    | Session                    | None                                              | `walletSessionSchema` / 200                                |
-| `POST /auth/logout`                                    | Session                    | None                                              | Empty body / 204                                           |
-| `POST /admin/artists`                                  | Admin                      | `artistCreateRequestSchema`                       | `artistResponseSchema` / 201                               |
-| `POST /verifier/artists/:artistId/verification`        | Verifier                   | UUID path; `artistVerificationRequestSchema`      | `artistResponseSchema` / 200                               |
-| `GET /artists`                                         | Public                     | `paginationQuerySchema`                           | `paginatedResponseSchema(publicArtistSummarySchema)` / 200 |
-| `GET /artists/:slug`                                   | Public                     | `artistSlugParamsSchema`                          | `publicArtistDetailSchema` / 200                           |
-| `POST /admin/artworks`                                 | Admin                      | `artworkDraftCreateRequestSchema`                 | `artworkDraftResponseSchema` / 201                         |
-| `PATCH /admin/artworks/:kathaId`                       | Admin                      | Permanent ID; `artworkDraftUpdateRequestSchema`   | `artworkDraftResponseSchema` / 200                         |
-| `GET /artworks`                                        | Public                     | `artworkDiscoveryQuerySchema`                     | `artworkDiscoveryResponseSchema` / 200                     |
-| `GET /artworks/:kathaId`                               | Public                     | Permanent ID; empty query                         | `publicArtworkDetailSchema` / 200                          |
-| `POST /verifier/artworks/:kathaId/documents/metadata`  | Verifier                   | Permanent ID; `metadataPreparationRequestSchema`  | `preparedDocumentResponseSchema` / 201                     |
-| `POST /verifier/artworks/:kathaId/documents/condition` | Verifier                   | Permanent ID; `conditionPreparationRequestSchema` | `preparedDocumentResponseSchema` / 201                     |
-| `GET /storage/public/:filename`                        | Public, approved reference | Hash filename; empty query                        | Verified bytes and validated MIME type / 200               |
+| Method and path                                         | Access                                  | Input contract                                                | Success contract / status                                  |
+| ------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| `GET /health/live`                                      | Public                                  | None                                                          | `{ "status": "alive" }` / 200                              |
+| `GET /health/ready`                                     | Public                                  | None                                                          | `{ "status": "ready" }` / 200; unavailable / 503           |
+| `POST /auth/challenge`                                  | Public                                  | `walletChallengeRequestSchema`                                | `walletChallengeResponseSchema` / 201                      |
+| `POST /auth/verify`                                     | Public, signed challenge                | `walletVerifyRequestSchema`                                   | `walletSessionResponseSchema` / 200                        |
+| `GET /auth/session`                                     | Session                                 | None                                                          | `walletSessionSchema` / 200                                |
+| `POST /auth/logout`                                     | Session                                 | None                                                          | Empty body / 204                                           |
+| `POST /admin/artists`                                   | Admin                                   | `artistCreateRequestSchema`                                   | `artistResponseSchema` / 201                               |
+| `POST /verifier/artists/:artistId/verification`         | Verifier                                | UUID path; `artistVerificationRequestSchema`                  | `artistResponseSchema` / 200                               |
+| `GET /artists`                                          | Public                                  | `paginationQuerySchema`                                       | `paginatedResponseSchema(publicArtistSummarySchema)` / 200 |
+| `GET /artists/:slug`                                    | Public                                  | `artistSlugParamsSchema`                                      | `publicArtistDetailSchema` / 200                           |
+| `POST /admin/artworks`                                  | Admin                                   | `artworkDraftCreateRequestSchema`                             | `artworkDraftResponseSchema` / 201                         |
+| `POST /admin/artworks/:kathaId/operations/registration` | Admin + Registry registration authority | Permanent ID; empty query; `artworkRegistrationRequestSchema` | `unsignedOperationResponseSchema` / 201                    |
+| `PATCH /admin/artworks/:kathaId`                        | Admin                                   | Permanent ID; `artworkDraftUpdateRequestSchema`               | `artworkDraftResponseSchema` / 200                         |
+| `GET /artworks`                                         | Public                                  | `artworkDiscoveryQuerySchema`                                 | `artworkDiscoveryResponseSchema` / 200                     |
+| `GET /artworks/:kathaId`                                | Public                                  | Permanent ID; empty query                                     | `publicArtworkDetailSchema` / 200                          |
+| `POST /verifier/artworks/:kathaId/documents/metadata`   | Verifier                                | Permanent ID; `metadataPreparationRequestSchema`              | `preparedDocumentResponseSchema` / 201                     |
+| `POST /verifier/artworks/:kathaId/documents/condition`  | Verifier                                | Permanent ID; `conditionPreparationRequestSchema`             | `preparedDocumentResponseSchema` / 201                     |
+| `GET /storage/public/:filename`                         | Public, approved reference              | Hash filename; empty query                                    | Verified bytes and validated MIME type / 200               |
 
 Wallet challenge expiry, exact signed-message requirements, single-use verification
 and logout behavior are in [wallet authentication](wallet-authentication.md).
-Uninstalled paths return the shared 404 envelope after applicable middleware;
-protected prefixes still require their role before a not-found response. Upload, draft-list, transaction
+[Artwork registration preparation](artwork-registration-api.md) now returns simulated
+unsigned transactions; the connected wallet signs them. Other operation routes
+remain pending. Uninstalled paths return the shared 404 envelope after applicable middleware;
+protected prefixes still require their role before a not-found response. Upload, draft-list, verification/condition/custody/mint/metadata transaction
 preparation, receipt, provenance timeline, custody-write and marketplace routes are
 not yet installed. A configured HTTP method or multipart ceiling does not create
 an endpoint.
@@ -55,8 +58,8 @@ Parsed queries reject duplicate and unknown keys. `/artists` accepts `limit` and
 `PAUBHA` or `THANGKA`. Limits default to 20, range 1–100; offsets default to 0,
 range 0–100000. Use canonical unsigned decimals without leading zeroes. List
 responses contain numeric pagination values and `hasMore`, not a total count.
-Artwork detail and public storage accept no query fields. Do not infer that write
-routes validate query parameters: their contracts validate path and JSON inputs.
+Artwork detail, public storage and registration preparation accept no query fields.
+Other write routes do not uniformly validate queries; follow each path/JSON contract.
 
 Permanent IDs have the form `KATHA-PAUBHA-000001`, with a supported uppercase
 category and six digits; zero is reserved. The server allocates them. Draft

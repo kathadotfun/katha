@@ -81,3 +81,8 @@ export {
   type OperationChain,
   type UnsignedRegistryTransaction,
 } from "./operation-preparation.js";
+export {
+  createArtworkRegistrationReader,
+  createArtworkRegistrationReaderFromRpc,
+  type ArtworkRegistrationReader,
+} from "./artwork-registration-reader.js";

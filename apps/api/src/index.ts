@@ -1,3 +1,6 @@
+import { createArtworkRegistration } from "./artwork-registration.js";
+import { createArtworkRegistrationStore } from "@katha/db";
+import { createOperationChain, createArtworkRegistrationReader } from "@katha/solana";
 import { createPublicDocuments } from "./public-documents.js";
 import { createPublicDocumentStore } from "@katha/db";
 import { createDocumentPreparation } from "./document-preparation.js";
@@ -46,26 +49,28 @@ function startApi() {
     root: config.KATHA_STORAGE_ROOT,
     maxBytes: config.KATHA_STORAGE_MAX_BYTES,
   });
+  const rpcConfig = {
+    cluster: config.KATHA_CLUSTER,
+    ...(config.KATHA_RPC_URL === undefined ? {} : { rpcUrl: config.KATHA_RPC_URL }),
+    ...(config.KATHA_RPC_SUBSCRIPTIONS_URL === undefined
+      ? {}
+      : { rpcSubscriptionsUrl: config.KATHA_RPC_SUBSCRIPTIONS_URL }),
+  };
+  const authorization = createAuthorization(
+    sessions,
+    {
+      cluster: config.KATHA_CLUSTER,
+      adminWallets: config.KATHA_ADMIN_WALLETS,
+      verifierWallets: config.KATHA_VERIFIER_WALLETS,
+    },
+    createRegistryAuthorityReader(rpcConfig),
+  );
   const app = createApi(
     logger,
     readiness,
     [config.KATHA_PUBLIC_APP_ORIGIN, config.KATHA_PUBLIC_API_ORIGIN],
     sessions,
-    createAuthorization(
-      sessions,
-      {
-        cluster: config.KATHA_CLUSTER,
-        adminWallets: config.KATHA_ADMIN_WALLETS,
-        verifierWallets: config.KATHA_VERIFIER_WALLETS,
-      },
-      createRegistryAuthorityReader({
-        cluster: config.KATHA_CLUSTER,
-        ...(config.KATHA_RPC_URL === undefined ? {} : { rpcUrl: config.KATHA_RPC_URL }),
-        ...(config.KATHA_RPC_SUBSCRIPTIONS_URL === undefined
-          ? {}
-          : { rpcSubscriptionsUrl: config.KATHA_RPC_SUBSCRIPTIONS_URL }),
-      }),
-    ),
+    authorization,
     createArtists(createArtistStore(database.db)),
     createPublicArtists(createPublicArtistStore(database.db)),
     createArtworkDrafts(createArtworkDraftStore(database.db)),
@@ -87,6 +92,17 @@ function startApi() {
       config.KATHA_PUBLIC_API_ORIGIN,
     ),
     createPublicDocuments(createPublicDocumentStore(database.db), storage),
+    createArtworkRegistration(
+      createArtworkRegistrationStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
+      authorization,
+      createArtworkRegistrationReader(rpcConfig),
+      createOperationChain(rpcConfig),
+      storage,
+      config.KATHA_CLUSTER,
+    ),
   );
   const port = config.API_PORT;
 

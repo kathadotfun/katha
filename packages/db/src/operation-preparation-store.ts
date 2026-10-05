@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { wallets } from "./schema/wallet-sessions.js";
-import { artworks } from "./schema/artworks.js";
+import { artworks, type ArtworkRecord } from "./schema/artworks.js";
 import {
   blockchainOperations,
   type NewBlockchainOperationRecord,
@@ -11,7 +11,16 @@ import {
   type NewOperationPreparation,
 } from "./schema/operation-preparations.js";
 
-export function createOperationPreparationStore(db: Database) {
+type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type PreparationGuard = (
+  tx: Transaction,
+  artwork: ArtworkRecord,
+  preparation: NewOperationPreparation,
+) => Promise<boolean>;
+export function createOperationPreparationStore(
+  db: Database,
+  guard?: PreparationGuard,
+) {
   return {
     async save(
       operation: NewBlockchainOperationRecord,
@@ -35,6 +44,8 @@ export function createOperationPreparationStore(db: Database) {
           .for("share");
         if (!artwork || artwork.kathaId !== kathaId)
           return { status: "not_found" as const };
+        if (guard && !(await guard(tx, artwork, preparation)))
+          return { status: "conflict" as const };
         let [record] = await tx
           .select()
           .from(blockchainOperations)
