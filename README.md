@@ -95,7 +95,8 @@ design foundation with warm ivory, charcoal, the approved Katha emblem and reusa
 visual tokens. A responsive public header, visible navigation, keyboard skip link
 and project footer now form the application shell. A read-only public API client
 validates shared schemas and provides safe route loading, error and not-found
-states; full public pages follow later.
+states. The permanent-ID artwork page now presents public photography, artist
+attribution and cultural documentation; other public pages follow later.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -147,6 +148,7 @@ outside the current scope.
 - [Web design system](docs/development/design-system.md)
 - [Public application shell](docs/development/application-shell.md)
 - [Public web API client](docs/development/public-api-client.md)
+- [Canonical artwork page](docs/development/artwork-page.md)
 - [Public provenance and condition timelines](docs/development/artwork-provenance-api.md)
 - [Local content-addressed storage](docs/development/local-storage.md)
 - [Canonical document preparation](docs/development/document-preparation.md)

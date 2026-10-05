@@ -4,7 +4,8 @@ The public web application lives in `apps/web`. It uses the Next.js App Router,
 TypeScript, React, and Tailwind CSS. The current page is only a working scaffold;
 the [design system](design-system.md) now defines colours, typography and the
 approved emblem. The [public application shell](application-shell.md) adds responsive navigation
-and a footer. Public browsing and artwork records follow in later steps.
+and a footer. The [canonical artwork page](artwork-page.md) now presents approved public
+photography and cultural documentation; discovery and artist pages follow later.
 
 ## Run the application
 
@@ -33,4 +34,6 @@ builds use Turbopack by default. Generated route declarations and build output
 remain local and are excluded from Git.
 
 The [public API client](public-api-client.md) validates shared response contracts
-and supplies route loading, error and not-found states for the upcoming pages.
+and supplies route loading, error and not-found states. The artwork page uses
+these boundaries; its integration check is `pnpm --filter @katha/web test:artwork-page`
+after a production build.
