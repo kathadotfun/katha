@@ -22,7 +22,7 @@ Database URLs allow `postgres:` or `postgresql:` and reject fragments and surrou
 whitespace. Validation does not connect to PostgreSQL or establish readiness;
 the running service owns readiness checks. Role wallets and optional paired RPC
 endpoints are validated by the
-[authorization configuration](api-authorization.md); storage/payment settings remain
+[authorization configuration](api-authorization.md); payment settings remain
 planned.
 
 Public origins must be absolute HTTP(S) origins, with no credentials, path,
@@ -106,3 +106,11 @@ frozen allowlists. Optional `KATHA_RPC_URL` and `KATHA_RPC_SUBSCRIPTIONS_URL` mu
 be supplied together and fit the selected localnet/Devnet protocols. None are
 included in public configuration. Public aliases containing ADMIN, VERIFIER or
 RPC are also rejected. See [administrative authorization](api-authorization.md).
+
+## Local storage settings
+
+`KATHA_STORAGE_ROOT` and `KATHA_STORAGE_MAX_BYTES` configure the server-only
+[local storage provider](local-storage.md). Root defaults to ignored `.storage`
+under the process working directory; overrides must be normalized absolute paths
+ending in `/.storage`. Byte limit defaults to 10485760, maximum 52428800.
+Neither setting enters public configuration. Public STORAGE aliases are rejected.

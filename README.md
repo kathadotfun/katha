@@ -65,7 +65,9 @@ manual profile verification, public verified-artist queries with safe field proj
 and admin artwork draft creation and editing with retry-safe permanent IDs,
 protected attribution, optimistic concurrency checks, and public artwork discovery
 with category filtering and a publication gate, plus public artwork details with
-finalized attestation summaries and explicit indexed ownership/freshness.
+finalized attestation summaries and explicit indexed ownership/freshness. A local
+storage provider validates content-addressed bytes with separate public/private
+namespaces; document and upload workflows remain planned.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -104,6 +106,7 @@ outside the current scope.
 - [Artwork draft editing](docs/development/artwork-draft-editing-api.md)
 - [Public artwork discovery](docs/development/artwork-discovery-api.md)
 - [Public artwork details](docs/development/artwork-details-api.md)
+- [Local content-addressed storage](docs/development/local-storage.md)
 - [Shared TypeScript package](docs/development/shared-package.md)
 - [Database package boundary](docs/development/database-package.md)
 - [Artist profiles and database constraints](docs/development/artist-profiles.md)

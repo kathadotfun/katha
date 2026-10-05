@@ -47,3 +47,6 @@ stale, published or lifecycle-bound edits.
 [Public artwork discovery](artwork-discovery-api.md) supports category filtering and
 bounded pagination. [Public artwork details](artwork-details-api.md) expose approved
 content, finalized summaries and explicit indexed ownership/freshness.
+
+The [local storage provider](local-storage.md) supplies immutable validated bytes
+for later document and media workflows. No storage HTTP route is exposed yet.

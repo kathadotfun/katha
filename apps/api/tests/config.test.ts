@@ -187,3 +187,38 @@ it.each([
     "Server-only",
   );
 });
+
+it.each([
+  "relative/.storage",
+  "/tmp/storage",
+  "/tmp/../tmp/.storage",
+  "",
+  "/tmp/.storage/",
+])("rejects invalid storage root %s", (KATHA_STORAGE_ROOT) => {
+  expect(() => readServerConfiguration({ ...environment, KATHA_STORAGE_ROOT })).toThrow(
+    "KATHA_STORAGE_ROOT",
+  );
+});
+it.each(["0", "52428801", "1.5", "010", "secret"])(
+  "rejects invalid storage byte limit %s",
+  (KATHA_STORAGE_MAX_BYTES) => {
+    expect(() =>
+      readServerConfiguration({ ...environment, KATHA_STORAGE_MAX_BYTES }),
+    ).toThrow("KATHA_STORAGE_MAX_BYTES");
+  },
+);
+it("keeps configured storage paths and limits outside public configuration", () => {
+  const config = readServerConfiguration({
+    ...environment,
+    KATHA_STORAGE_ROOT: "/tmp/katha/.storage",
+    KATHA_STORAGE_MAX_BYTES: "1000",
+  });
+  expect(config.KATHA_STORAGE_MAX_BYTES).toBe(1000);
+  expect(JSON.stringify(toPublicConfiguration(config))).not.toContain("storage");
+  expect(() =>
+    readServerConfiguration({
+      ...environment,
+      NEXT_PUBLIC_STORAGE_ROOT: "/tmp/private/.storage",
+    }),
+  ).toThrow("Server-only");
+});

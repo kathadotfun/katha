@@ -1,3 +1,5 @@
+import { resolve } from "node:path";
+import { validStorageRoot } from "./local-storage.js";
 import { z } from "zod";
 import { resolveKathaRpcConfig, validateWalletAddress } from "@katha/solana";
 
@@ -68,6 +70,22 @@ const serverConfigurationSchema = z
       .pipe(z.number().int().max(65535))
       .default(3001),
     DATABASE_URL: z.string().refine(validDatabaseUrl),
+    KATHA_STORAGE_ROOT: z
+      .string()
+      .refine(validStorageRoot)
+      .default(() => resolve(".storage")),
+    KATHA_STORAGE_MAX_BYTES: z
+      .string()
+      .regex(/^[1-9][0-9]*$/)
+      .transform(Number)
+      .pipe(
+        z
+          .number()
+          .int()
+          .min(1)
+          .max(50 * 1024 * 1024),
+      )
+      .default(10 * 1024 * 1024),
     KATHA_CLUSTER: z.enum(["localnet", "devnet"]).default("localnet"),
     KATHA_ADMIN_WALLETS: roleWallets,
     KATHA_VERIFIER_WALLETS: roleWallets,
@@ -122,7 +140,9 @@ export function readServerConfiguration(
     Object.keys(environment).some(
       (key) =>
         key.startsWith("NEXT_PUBLIC_") &&
-        /DATABASE|PASSWORD|SECRET|TOKEN|PRIVATE_KEY|ADMIN|VERIFIER|RPC/.test(key),
+        /DATABASE|PASSWORD|SECRET|TOKEN|PRIVATE_KEY|ADMIN|VERIFIER|RPC|STORAGE/.test(
+          key,
+        ),
     )
   ) {
     throw new ConfigurationError(
