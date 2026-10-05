@@ -6,6 +6,7 @@ import { paginationQuerySchema, paginatedResponseSchema } from "./http.js";
 
 export const artworkDiscoveryQuerySchema = paginationQuerySchema.extend({
   category: artworkCategorySchema.optional(),
+  artistId: publicArtistSummarySchema.shape.id.optional(),
 });
 export const publicArtworkSummarySchema = z
   .strictObject({

@@ -100,3 +100,26 @@ it("redacts storage failures from responses and logs", async () => {
   expect(await response.text()).not.toContain("PRIVATE");
   expect(logs.join("")).not.toContain("PRIVATE");
 });
+
+it("passes the validated artist ID through public discovery without changing publication semantics", async () => {
+  const { app, store } = fixture();
+  const response = await app.request(`/artworks?artistId=${row.artist.id}&limit=1`);
+  expect(response.status).toBe(200);
+  expect(store.list).toHaveBeenCalledWith({
+    artistId: row.artist.id,
+    limit: 1,
+    offset: 0,
+  });
+  const body = artworkDiscoveryResponseSchema.parse(await response.json());
+  expect(body.items[0]?.artist.id).toBe(row.artist.id);
+});
+it.each(["not-an-id", "", "111", "../admin"])(
+  "rejects invalid artist ID %s before storage",
+  async (artistId) => {
+    const { app, store } = fixture();
+    expect(
+      (await app.request(`/artworks?artistId=${encodeURIComponent(artistId)}`)).status,
+    ).toBe(400);
+    expect(store.list).not.toHaveBeenCalled();
+  },
+);

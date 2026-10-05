@@ -34,10 +34,11 @@ type DiscoveryQuery = {
   limit: number;
   offset: number;
   category?: ArtworkRecord["category"] | undefined;
+  artistId?: string | undefined;
 };
 export function createPublicArtworkStore(db: Database, cluster: "LOCALNET" | "DEVNET") {
   return {
-    async list({ limit, offset, category }: DiscoveryQuery) {
+    async list({ limit, offset, category, artistId }: DiscoveryQuery) {
       return db
         .select({
           kathaId: artworks.kathaId,
@@ -72,6 +73,7 @@ export function createPublicArtworkStore(db: Database, cluster: "LOCALNET" | "DE
           and(
             publicationPredicate(cluster),
             category === undefined ? undefined : eq(artworks.category, category),
+            artistId === undefined ? undefined : eq(artworks.artistId, artistId),
           ),
         )
         .orderBy(asc(artworks.kathaId))

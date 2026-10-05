@@ -33,7 +33,7 @@ alert and retry link. No wallet connection is needed for these public reads.
 ## Photography and attribution
 
 Cards show the approved HERO image, art form, recorded year, title, artist name and
-permanent Katha ID. Artist profile links arrive in the following step. Images use
+permanent Katha ID. Artist names link to the corresponding public profile. Images use
 the existing uncropped photograph component, escaped approved alt text and its
 image-failure state. Grid columns adapt from one to two to three; long titles and
 identifiers wrap. Artist attribution stays independent of ownership.

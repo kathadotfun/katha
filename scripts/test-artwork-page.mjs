@@ -9,6 +9,7 @@ import { clearTimeout, setTimeout } from "node:timers";
 import { fileURLToPath, URL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { artworkFixture } from "../apps/web/tests/fixtures/artwork.ts";
+import { artistFixture } from "../apps/web/tests/fixtures/artist.ts";
 
 const webDirectory = fileURLToPath(new URL("../apps/web/", import.meta.url));
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
@@ -21,8 +22,40 @@ const api = createServer((request, response) => {
   requests++;
   response.setHeader("Content-Type", "application/json");
   const path = new URL(request.url, "http://localhost").pathname;
+  if (path.startsWith("/artists/")) {
+    const slug = path.split("/").at(-1);
+    if (slug === artistFixture.slug) return response.end(JSON.stringify(artistFixture));
+    if (slug === "empty-artist")
+      return response.end(
+        JSON.stringify({
+          ...artistFixture,
+          slug,
+          id: "dddddddd-1111-4111-8111-111111111111",
+        }),
+      );
+    if (slug === "unavailable-works")
+      return response.end(
+        JSON.stringify({
+          ...artistFixture,
+          slug,
+          id: "ffffffff-1111-4111-8111-111111111111",
+        }),
+      );
+    if (slug === "wrong-profile") return response.end(JSON.stringify(artistFixture));
+    if (slug === "unavailable-profile") {
+      response.statusCode = 503;
+      return response.end(JSON.stringify({ message: "PRIVATE_UPSTREAM_SENTINEL" }));
+    }
+    response.statusCode = 404;
+    return response.end("{}");
+  }
   if (path === "/artworks") {
     const query = new URL(request.url, "http://localhost").searchParams;
+    const artistId = query.get("artistId");
+    if (artistId === "ffffffff-1111-4111-8111-111111111111") {
+      response.statusCode = 503;
+      return response.end("{}");
+    }
     const category = query.get("category");
     const offset = Number(query.get("offset"));
     if (category === "MANDALA") {
@@ -44,7 +77,12 @@ const api = createServer((request, response) => {
     };
     return response.end(
       JSON.stringify({
-        items: category === "THANGKA" || offset === 12 ? [] : [summary],
+        items:
+          category === "THANGKA" ||
+          offset === 12 ||
+          artistId === "dddddddd-1111-4111-8111-111111111111"
+            ? []
+            : [summary],
         pagination: {
           limit: 12,
           offset,
@@ -282,8 +320,64 @@ try {
   );
   const home = await globalThis.fetch(origin).then((response) => response.text());
   assert.ok(home.includes('href="/explore"'));
+  async function artistPage(slug) {
+    const response = await globalThis.fetch(`${origin}/artists/${slug}`, {
+      headers: { "User-Agent": "Twitterbot" },
+      signal: globalThis.AbortSignal.timeout(15000),
+    });
+    return {
+      status: response.status,
+      html: (await response.text()).replace(/<!--[\s\S]*?-->/g, ""),
+    };
+  }
+  const beforeProfile = requests;
+  const profile = await artistPage(artistFixture.slug);
+  assert.equal(profile.status, 200);
+  for (const text of [
+    artistFixture.displayName,
+    artistFixture.biography.split("\n")[0],
+    artistFixture.region,
+    "Art traditions",
+    "Artworks by",
+    'href="/art/KATHA-PAUBHA-000001"',
+    `https://katha.fun/artists/${artistFixture.slug}`,
+  ])
+    assert.ok(profile.html.includes(text), text);
+  assert.equal(
+    requests - beforeProfile,
+    2,
+    "One shared artist read and one independent published-works read",
+  );
+  assert.ok(!profile.html.includes(artworkFixture.ownership.ownerWallet));
+  const artistPaged = await artistPage(`${artistFixture.slug}?offset=12`);
+  assert.ok(artistPaged.html.includes("No published artworks on this page"));
+  const artistEmpty = await artistPage("empty-artist");
+  assert.ok(
+    artistEmpty.html.includes("This does not mean the artist has created no works"),
+  );
+  const worksUnavailable = await artistPage("unavailable-works");
+  assert.ok(worksUnavailable.html.includes("Published artworks are unavailable"));
+  assert.ok(worksUnavailable.html.includes(artistFixture.biography.split("\n")[0]));
+  const beforeInvalidArtist = requests;
+  const invalidArtist = await artistPage("invalid_slug");
+  assert.ok(invalidArtist.html.includes("Page not found"));
+  assert.ok(invalidArtist.html.includes("noindex"));
+  assert.equal(requests, beforeInvalidArtist);
+  for (const slug of ["missing-artist", "private-artist"]) {
+    const missingArtist = await artistPage(slug);
+    assert.ok(missingArtist.html.includes("Page not found"));
+    assert.ok(missingArtist.html.includes("noindex"));
+  }
+  for (const slug of ["wrong-profile", "unavailable-profile"]) {
+    const failedArtist = await artistPage(slug);
+    assert.ok(failedArtist.html.includes("digest"));
+    assert.ok(!failedArtist.html.includes("PRIVATE_UPSTREAM_SENTINEL"));
+    assert.ok(!failedArtist.html.includes('<h1 id="artist-name"'));
+  }
+  assert.ok(success.html.includes(`href="/artists/${artistFixture.slug}"`));
+  assert.ok(catalogue.html.includes(`href="/artists/${artistFixture.slug}"`));
   globalThis.console.log(
-    "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch; exploration filters, paging, images, empty/unavailable states, invalid query rejection and navigation passed.",
+    "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch; exploration filters, paging, images, empty/unavailable states, invalid query rejection and navigation; artist profile, scoped works, paging, empty/unavailable works, slug validation, missing/unverified profiles, outage, identity mismatch and artist links passed.",
   );
 } finally {
   if (web?.pid && web.exitCode === null) {

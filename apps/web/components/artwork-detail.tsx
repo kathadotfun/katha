@@ -66,8 +66,11 @@ export function ArtworkDetail({
           {artwork.title}
         </h1>
         <p className="mt-6 text-lead">
-          Created by <span className="font-medium">{artwork.artist.displayName}</span> ·{" "}
-          {artwork.creationYear}
+          Created by{" "}
+          <a className="text-link font-medium" href={`/artists/${artwork.artist.slug}`}>
+            {artwork.artist.displayName}
+          </a>{" "}
+          · {artwork.creationYear}
         </p>
         <p className="mt-3 break-all font-mono text-sm text-muted">{artwork.kathaId}</p>
       </header>

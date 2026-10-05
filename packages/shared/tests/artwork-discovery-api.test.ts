@@ -56,3 +56,11 @@ it("requires the approved hero MIME type for correct public delivery", () => {
     publicArtworkSummarySchema.safeParse({ ...summary, heroImage: missing }).success,
   ).toBe(false);
 });
+
+it("accepts an immutable artist ID filter and rejects malformed or repeated IDs", () => {
+  expect(
+    artworkDiscoveryQuerySchema.parse({ artistId: summary.artist.id }).artistId,
+  ).toBe(summary.artist.id);
+  for (const artistId of ["private", "", [summary.artist.id, summary.artist.id]])
+    expect(artworkDiscoveryQuerySchema.safeParse({ artistId }).success).toBe(false);
+});

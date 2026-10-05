@@ -89,7 +89,7 @@ export const publicArtistDetailSchema = publicArtistSummarySchema.extend({
   publicLinks: artistResponseSchema.shape.publicLinks,
   creatorWallet: artistResponseSchema.shape.creatorWallet,
   verifiedAt: z.iso.datetime(),
-  // Draft artworks have no publication gate yet and must never appear here.
+  // Related works use artist-filtered public discovery; this legacy placeholder stays empty.
   artworks: z.tuple([]),
 });
 export type PublicArtistSummary = z.infer<typeof publicArtistSummarySchema>;

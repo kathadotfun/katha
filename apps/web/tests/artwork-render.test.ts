@@ -79,7 +79,7 @@ test("the actual view renders documentation, attribution and approved photograph
     html.includes('referrerPolicy="no-referrer"') ||
       html.includes('referrerpolicy="no-referrer"'),
   );
-  assert.ok(!html.includes("/artists/")); // Artist route arrives in step 084.
+  assert.ok(html.includes(`href="/artists/${artworkFixture.artist.slug}"`));
   assert.ok(html.includes(artworkFixture.ownership.ownerWallet));
   assert.ok(html.includes("Recorded digital owner"));
   assert.ok(html.includes("Katha verification recorded"));
@@ -556,5 +556,66 @@ test("empty, missing-image, invalid-query and unavailable exploration remain exp
     );
     assert.ok(html.includes(text as string));
     assert.ok(!html.includes("<script>"));
+  }
+});
+
+const artistModule = await viewModule("../components/artist-profile.tsx", {
+  "../lib/artwork-page": new URL("../lib/artwork-page.ts", import.meta.url).href,
+  "../lib/artwork-exploration": new URL(
+    "../lib/artwork-exploration.ts",
+    import.meta.url,
+  ).href,
+  "../lib/artist-page": new URL("../lib/artist-page.ts", import.meta.url).href,
+  "./artwork-photo": photoModule,
+});
+const { ArtistProfile } = await import(artistModule);
+const { artistFixture } = await import("./fixtures/artist.ts");
+test("artist profiles show approved biography, traditions, region and permanent authorship without collector data", () => {
+  const html = renderToStaticMarkup(
+    createElement(ArtistProfile, {
+      artist: artistFixture,
+      apiOrigin: "http://localhost:3001",
+      works: {
+        kind: "READY",
+        offset: 0,
+        page: { items: [summary], pagination: { limit: 12, offset: 0, hasMore: true } },
+      },
+    }),
+  );
+  for (const text of [
+    artistFixture.displayName,
+    artistFixture.region,
+    "Paubha",
+    "Synthetic artist biography.",
+    "Authorship remains with the artist",
+    "Artist portrait is not available",
+    'href="/art/KATHA-PAUBHA-000001"',
+    "?offset=12#artist-works",
+    'rel="noopener noreferrer"',
+  ])
+    assert.ok(html.includes(text), text);
+  assert.ok(!html.includes(artworkFixture.ownership.ownerWallet));
+  assert.ok(!html.includes("payoutWallet"));
+});
+test("artist artwork failures, emptiness and invalid page queries preserve biography and safe content", () => {
+  for (const works of [
+    { kind: "INVALID_QUERY" },
+    { kind: "UNAVAILABLE", offset: 12 },
+    {
+      kind: "READY",
+      offset: 0,
+      page: { items: [], pagination: { limit: 12, offset: 0, hasMore: false } },
+    },
+  ]) {
+    const html = renderToStaticMarkup(
+      createElement(ArtistProfile, {
+        artist: { ...artistFixture, biography: "<script>unsafe</script>" },
+        apiOrigin: "http://localhost:3001",
+        works,
+      }),
+    );
+    assert.ok(html.includes("&lt;script&gt;unsafe&lt;/script&gt;"));
+    assert.ok(!html.includes("<script>"));
+    assert.ok(html.includes(artistFixture.displayName));
   }
 });

@@ -114,6 +114,7 @@ export function createPublicApi(
           limit: String(parsed.limit),
           offset: String(parsed.offset),
           ...(parsed.category ? { category: parsed.category } : {}),
+          ...(parsed.artistId ? { artistId: parsed.artistId } : {}),
         },
         request,
       );

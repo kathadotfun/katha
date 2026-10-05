@@ -8,8 +8,7 @@ never changes this address. Local/LAN services do not require domain deployment.
 The page shows the recorded art form, title, artist, creation year, permanent ID,
 public photography, origin, dimensions, materials, technique, story, meaning,
 cultural context and creation process. Authorship is labelled independently of
-ownership, and collecting does not automatically convey copyright. Artist names
-are plain text until profile pages exist. Verification, the latest available
+ownership, and collecting does not automatically convey copyright. Artist names link to the corresponding public profile. Verification, the latest available
 condition inspection and recorded physical custody are shown in separate sections.
 Indexed provenance, recorded Core ownership and metadata integrity follow the story.
 

@@ -33,9 +33,10 @@ Malformed slugs return `400 INVALID_REQUEST`; absent and unverified profiles
 both return `404 NOT_FOUND`.
 
 `artworks` is currently an empty array. Stored artworks can be unpublished drafts,
-and artist approval does not publish them. The discovery endpoint now applies a
-[publication predicate](artwork-discovery-api.md); related-artwork integration in
-this artist response remains a later step.
+and artist approval does not publish them. The profile web page separately reads
+artist-filtered [public discovery](artwork-discovery-api.md) using the immutable
+artist ID and the same publication predicate. The legacy artist response placeholder
+is retained; it is not used as an indication that the artist has no works.
 
 Public schemas and SQL selections explicitly omit payout wallets, verifier wallet
 identities, administrative timestamps, private evidence and fulfillment information.

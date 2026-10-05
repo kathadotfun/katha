@@ -435,6 +435,26 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       gapThroughSlot: "3",
     });
 
+    const artistPage = artworkDiscoveryResponseSchema.parse(
+      await (await app.request(`/artworks?artistId=${paubha.artistId}`)).json(),
+    );
+    expect(artistPage.items.map((work) => work.kathaId)).toEqual([paubha.kathaId]);
+    expect(artistPage.items.every((work) => work.artist.id === paubha.artistId)).toBe(
+      true,
+    );
+    expect(artistPage.pagination.hasMore).toBe(false);
+    for (const record of [...hidden, devnet]) {
+      const scoped = artworkDiscoveryResponseSchema.parse(
+        await (await app.request(`/artworks?artistId=${record.artistId}`)).json(),
+      );
+      expect(scoped.items).toEqual([]);
+    }
+    const wrongCategory = artworkDiscoveryResponseSchema.parse(
+      await (
+        await app.request(`/artworks?artistId=${paubha.artistId}&category=THANGKA`)
+      ).json(),
+    );
+    expect(wrongCategory.items).toEqual([]);
     const page = artworkDiscoveryResponseSchema.parse(
       await (await app.request("/artworks")).json(),
     );

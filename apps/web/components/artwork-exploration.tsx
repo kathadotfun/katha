@@ -115,7 +115,10 @@ export function ArtworkExploration({
                       </a>
                     </h2>
                     <p className="mt-3 break-words text-muted">
-                      Created by {artwork.artist.displayName}
+                      Created by{" "}
+                      <a className="text-link" href={`/artists/${artwork.artist.slug}`}>
+                        {artwork.artist.displayName}
+                      </a>
                     </p>
                     {!photo && (
                       <p className="mt-2 text-sm text-muted">

@@ -8,6 +8,8 @@ predicate at `GET /artworks/:kathaId`.
 GET /artworks?category=PAUBHA&limit=20&offset=0
 ```
 
+An optional `artistId` UUID selects the immutable artist attribution; it can be combined with category and pagination, and never bypasses the publication predicate. Malformed/repeated IDs are rejected before storage.
+
 The optional category is exactly `MANDALA`, `PAUBHA` or `THANGKA`. Limit defaults
 to 20 and accepts 1–100; offset defaults to 0 and accepts 0–100000. Numbers must be
 canonical decimal strings. Duplicate parameters, unknown keys and invalid values
