@@ -155,3 +155,7 @@ export {
   type ArtworkMintStore,
   type ArtworkMintSnapshot,
 } from "./artwork-mint-store.js";
+export {
+  createMetadataRevisionStore,
+  type MetadataRevisionStore,
+} from "./metadata-revision-store.js";

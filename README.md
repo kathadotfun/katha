@@ -79,7 +79,9 @@ HTTP operation routes are planned. Custody preparation and private owner fulfill
 requests now support separately authorized manual coordination without claiming
 finalized physical delivery. Mint preparation now verifies committed metadata,
 initial inspection and held custody, and reserves one idempotent unsigned Core mint
-intent per artwork and cluster.
+intent per artwork and cluster. Metadata commitment preparation now supports
+initial, pre-mint and atomic post-mint Registry/Core revisions from immutable stored
+documents.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -113,6 +115,7 @@ outside the current scope.
 - [Condition attestation preparation](docs/development/condition-attestation-api.md)
 - [Custody and manual fulfillment API](docs/development/custody-operations-api.md)
 - [Artwork mint preparation](docs/development/artwork-minting-api.md)
+- [Metadata commitment preparation](docs/development/metadata-revisions-api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

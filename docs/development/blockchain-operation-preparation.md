@@ -122,3 +122,7 @@ request status never creates finalized custody or transfers Core ownership.
 [Artwork mint preparation](artwork-minting-api.md) exposes the protected atomic mint
 builder with exact document/chain eligibility checks and one reserved idempotent
 intent per artwork/cluster. Preparing an unsigned transaction does not publish or mint.
+
+[Metadata commitment preparation](metadata-revisions-api.md) exposes authorized
+unsigned initial, pre-mint and atomic post-mint metadata transactions with exact
+stored-byte validation, reviewed version/hash checks and save-time eligibility guards.

@@ -46,3 +46,7 @@ post-mint revisions before composing generated Registry instructions.
 
 See the [Anchor PDA constraints](https://www.anchor-lang.com/docs/references/account-constraints)
 and [account space guide](https://www.anchor-lang.com/docs/references/space).
+
+[Metadata commitment preparation](metadata-revisions-api.md) exposes authorized
+unsigned initial, pre-mint and atomic post-mint metadata transactions with exact
+stored-byte validation, reviewed version/hash checks and save-time eligibility guards.

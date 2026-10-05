@@ -1,3 +1,6 @@
+import { createMetadataRevisions } from "./metadata-revisions.js";
+import { createMetadataRevisionStore } from "@katha/db";
+import { createMetadataRevisionReader } from "@katha/solana";
 import { createArtworkMinting } from "./artwork-minting.js";
 import { createArtworkMintStore } from "@katha/db";
 import { createArtworkMintReader } from "@katha/solana";
@@ -149,6 +152,17 @@ function startApi() {
       ),
       authorization,
       createArtworkMintReader(rpcConfig),
+      createOperationChain(rpcConfig),
+      storage,
+      config.KATHA_CLUSTER,
+    ),
+    createMetadataRevisions(
+      createMetadataRevisionStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+      ),
+      authorization,
+      createMetadataRevisionReader(rpcConfig),
       createOperationChain(rpcConfig),
       storage,
       config.KATHA_CLUSTER,

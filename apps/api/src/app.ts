@@ -1,3 +1,5 @@
+import type { MetadataRevisionsBoundary } from "./metadata-revisions.js";
+import { metadataRevisionRequestSchema } from "@katha/shared";
 import type { ArtworkMintingBoundary } from "./artwork-minting.js";
 import { artworkMintRequestSchema } from "@katha/shared";
 import type { CustodyOperationsBoundary } from "./custody-operations.js";
@@ -75,6 +77,7 @@ export function createApi(
   conditionAttestation?: ConditionAttestationBoundary,
   custodyOperations?: CustodyOperationsBoundary,
   minting?: ArtworkMintingBoundary,
+  metadataRevisions?: MetadataRevisionsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -350,6 +353,20 @@ export function createApi(
           c.req.header("Authorization"),
           kathaId,
           await parseJson(c, artworkMintRequestSchema),
+        ),
+        201,
+      );
+    });
+  }
+  if (metadataRevisions) {
+    app.post("/admin/artworks/:kathaId/operations/metadata", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await metadataRevisions.prepare(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, metadataRevisionRequestSchema),
         ),
         201,
       );

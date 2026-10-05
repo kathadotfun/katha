@@ -103,3 +103,9 @@ export {
   createArtworkMintReaderFromRpc,
   type ArtworkMintReader,
 } from "./artwork-mint-reader.js";
+export {
+  createMetadataRevisionReader,
+  createMetadataRevisionReaderFromRpc,
+  type MetadataRevisionReader,
+  type MetadataRevisionSnapshot,
+} from "./metadata-revision-reader.js";

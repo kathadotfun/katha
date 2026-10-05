@@ -40,6 +40,7 @@ configured verifier role, not a finalized Registry role.
 | `GET /storage/public/:filename`                            | Public, approved reference                      | Hash filename; empty query                                    | Verified bytes and validated MIME type / 200               |
 | `POST /admin/artworks/:kathaId/operations/custody`         | Admin + current Registry custody authority      | `custodyPreparationRequestSchema`                             | `unsignedOperationResponseSchema` / 201                    |
 | `POST /admin/artworks/:kathaId/operations/mint`            | Admin + current Registry registration authority | `artworkMintRequestSchema`                                    | `unsignedOperationResponseSchema` / 201                    |
+| `POST /admin/artworks/:kathaId/operations/metadata`        | Admin + current Registry registration authority | `metadataRevisionRequestSchema`                               | `unsignedOperationResponseSchema` / 201                    |
 | `POST /fulfillment/artworks/:kathaId`                      | Session + current Core owner                    | `fulfillmentCreateRequestSchema`                              | `fulfillmentResponseSchema` / 201                          |
 | `GET /fulfillment/:requestId`                              | Original requester or admin                     | `fulfillmentIdParamsSchema`, empty query                      | `fulfillmentResponseSchema` / 200                          |
 | `PATCH /admin/fulfillment/:requestId`                      | Admin                                           | `fulfillmentUpdateRequestSchema`                              | `fulfillmentResponseSchema` / 200                          |
@@ -51,7 +52,7 @@ and logout behavior are in [wallet authentication](wallet-authentication.md).
 preparation return unsigned transactions for the authorized wallet. Private
 fulfillment status is manual coordination, separate from finalized custody.
 Uninstalled paths return the shared 404 envelope after applicable middleware.
-Upload, draft-list, metadata transaction preparation, receipts, provenance
+Upload, draft-list, receipts, provenance
 and marketplace routes remain planned.
 
 ## Input and concurrency rules
@@ -243,3 +244,7 @@ status from authority-signed physical movement and finalized history.
 [Artwork mint preparation](artwork-minting-api.md) binds the latest approved metadata
 and version-1 initial report to valid finalized chain prerequisites. No publication
 or finalized ownership is created by the unsigned response.
+
+[Metadata commitment preparation](metadata-revisions-api.md) validates exact stored
+versions and immutable attribution before initializing or revising commitments.
+Minted revisions synchronize Core URI atomically; preparation creates no finalized history.

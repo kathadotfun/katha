@@ -3573,3 +3573,139 @@ it("serializes competing mint intents, refreshes same-key preparation and reject
     await connection.close();
   }
 });
+
+it("rechecks metadata revision snapshots under save locks and rolls back raced eligibility changes", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const db = connection.db;
+  const {
+    createMetadataRevisionStore,
+    artworkMetadataVersions,
+    wallets,
+    blockchainOperations,
+  } = await import("../src/index.js");
+  const address = "H".repeat(32);
+  const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "metadata-guard-artist",
+        displayName: "Synthetic Artist",
+        biography: "Private test biography",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+        verificationStatus: "VERIFIED",
+        verifiedByWallet: address,
+        verifiedAt: new Date("2026-10-05T00:00:00.000Z"),
+        createdAt: new Date("2026-10-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-10-05T00:00:00.000Z"),
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic guarded revision",
+        creationYear: 2026,
+        authorshipEvidenceHash: "e".repeat(64),
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw new Error("Fixtures missing");
+    const document = JSON.stringify({
+      kathaId: artwork.kathaId,
+      synthetic: "revision metadata",
+    });
+    const metadataValues = {
+      artworkId: artwork.id,
+      version: 1,
+      status: "PREPARED" as const,
+      authorityWallet: address,
+      canonicalDocument: document,
+      documentHash: hash(document),
+      uri: "http://localhost:3001/synthetic.json",
+    };
+    await db.insert(artworkMetadataVersions).values(metadataValues);
+    const store = createMetadataRevisionStore(db, "LOCALNET");
+    const before = await store.load(artwork.kathaId);
+    if (!before) throw new Error("Snapshot missing");
+    const canonicalRequest = '{"synthetic":"metadata revision intent"}';
+    const operation = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET" as const,
+      kind: "REVISE_METADATA" as const,
+      idempotencyKey: "metadata-guard",
+      requestHash: hash(canonicalRequest),
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: [metadataValues.documentHash],
+    };
+    const preparation = {
+      canonicalRequest,
+      messageHash: "a".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 10n,
+      simulationUnits: 20n,
+    };
+    // A newer approved snapshot arrives after load, before simulation/save completes.
+    await db.insert(artworkMetadataVersions).values({ ...metadataValues, version: 2 });
+    const raced = await store
+      .operations(before)
+      .save(operation, address, artwork.kathaId, preparation);
+    expect(raced.status).toBe("conflict");
+    expect(
+      await db
+        .select()
+        .from(blockchainOperations)
+        .where(eq(blockchainOperations.idempotencyKey, operation.idempotencyKey)),
+    ).toHaveLength(0);
+    const current = await store.load(artwork.kathaId);
+    if (!current) throw new Error("Snapshot missing");
+    const saved = await store
+      .operations(current)
+      .save(operation, address, artwork.kathaId, preparation);
+    expect(saved.status).toBe("saved");
+    const retry = await store
+      .operations(current)
+      .save(operation, address, artwork.kathaId, preparation);
+    expect(retry.status).toBe("saved");
+    if (saved.status === "saved" && retry.status === "saved")
+      expect(retry.operationId).toBe(saved.operationId);
+    const staleArtist = await store.load(artwork.kathaId);
+    if (!staleArtist) throw new Error("Snapshot missing");
+    await db
+      .update(artists)
+      .set({
+        verificationStatus: "UNVERIFIED",
+        verifiedByWallet: null,
+        verifiedAt: null,
+      })
+      .where(eq(artists.id, artist.id));
+    const denied = await store
+      .operations(staleArtist)
+      .save(
+        { ...operation, idempotencyKey: "metadata-revoked" },
+        address,
+        artwork.kathaId,
+        preparation,
+      );
+    expect(denied.status).toBe("conflict");
+    expect(
+      await db
+        .select()
+        .from(blockchainOperations)
+        .where(eq(blockchainOperations.idempotencyKey, "metadata-revoked")),
+    ).toHaveLength(0);
+  } finally {
+    await connection.close();
+  }
+});
