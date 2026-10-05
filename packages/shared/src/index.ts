@@ -169,3 +169,4 @@ export * from "./artwork-verification-api.js";
 
 export * from "./condition-attestation-api.js";
 export * from "./custody-api.js";
+export * from "./artwork-mint-api.js";

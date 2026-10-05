@@ -1,3 +1,6 @@
+import { createArtworkMinting } from "./artwork-minting.js";
+import { createArtworkMintStore } from "@katha/db";
+import { createArtworkMintReader } from "@katha/solana";
 import { createCustodyOperations } from "./custody-operations.js";
 import { createCustodyOperationStore } from "@katha/db";
 import { createCustodyReader } from "@katha/solana";
@@ -137,6 +140,17 @@ function startApi() {
       sessions,
       createCustodyReader(rpcConfig),
       createOperationChain(rpcConfig),
+      config.KATHA_CLUSTER,
+    ),
+    createArtworkMinting(
+      createArtworkMintStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+      ),
+      authorization,
+      createArtworkMintReader(rpcConfig),
+      createOperationChain(rpcConfig),
+      storage,
       config.KATHA_CLUSTER,
     ),
   );

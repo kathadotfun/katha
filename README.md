@@ -77,7 +77,9 @@ validated registered attribution. Condition preparation binds exact private repo
 bytes and current chain version, including minted owner/custody scope; remaining
 HTTP operation routes are planned. Custody preparation and private owner fulfillment
 requests now support separately authorized manual coordination without claiming
-finalized physical delivery.
+finalized physical delivery. Mint preparation now verifies committed metadata,
+initial inspection and held custody, and reserves one idempotent unsigned Core mint
+intent per artwork and cluster.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -110,6 +112,7 @@ outside the current scope.
 - [Artwork verification preparation](docs/development/artwork-verification-api.md)
 - [Condition attestation preparation](docs/development/condition-attestation-api.md)
 - [Custody and manual fulfillment API](docs/development/custody-operations-api.md)
+- [Artwork mint preparation](docs/development/artwork-minting-api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

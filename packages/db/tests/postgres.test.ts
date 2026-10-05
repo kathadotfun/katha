@@ -3337,3 +3337,239 @@ it("serializes private fulfillment retries and status changes, and rejects stale
     await connection.close();
   }
 });
+
+it("serializes competing mint intents, refreshes same-key preparation and rejects stale documents", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const db = connection.db;
+  const { createArtworkMintStore } = await import("../src/index.js");
+  const address = "F".repeat(32),
+    otherAddress = "G".repeat(32);
+  const hash = (v: string) => createHash("sha256").update(v).digest("hex");
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "mint-guard-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+        verificationStatus: "VERIFIED",
+        verifiedByWallet: address,
+        verifiedAt: new Date("2026-10-05T00:00:00.000Z"),
+        createdAt: new Date("2026-10-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-10-05T00:00:00.000Z"),
+      })
+      .returning();
+    if (!artist) throw new Error("Fixture missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic mint",
+        creationYear: 2026,
+        authorshipEvidenceHash: "a".repeat(64),
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    const [other] = await db
+      .insert(wallets)
+      .values({ address: otherAddress })
+      .returning();
+    if (!artwork || !wallet || !other) throw new Error("Fixture missing");
+    const document = JSON.stringify({
+      kathaId: artwork.kathaId,
+      synthetic: "mint metadata",
+    });
+    const [metadata] = await db
+      .insert(artworkMetadataVersions)
+      .values({
+        artworkId: artwork.id,
+        version: 1,
+        status: "PREPARED",
+        authorityWallet: address,
+        canonicalDocument: document,
+        documentHash: hash(document),
+        uri: "http://localhost/synthetic.json",
+      })
+      .returning();
+    const reportId = randomUUID();
+    const at = "2026-10-05T00:00:00.000Z";
+    const reportDocument = JSON.stringify({
+      reportId,
+      kathaId: artwork.kathaId,
+      inspectorId: artist.id,
+      verifierWallet: address,
+      grade: "GOOD",
+      reason: "INITIAL_VERIFICATION",
+      inspectedAt: at,
+      reportedAt: at,
+      notes: "Synthetic notes",
+      mediaHashes: ["a".repeat(64)],
+    });
+    await db.insert(conditionReports).values({
+      id: reportId,
+      artworkId: artwork.id,
+      version: 1,
+      status: "PREPARED",
+      authorityWallet: address,
+      canonicalDocument: reportDocument,
+      documentHash: hash(reportDocument),
+      inspectorId: artist.id,
+      grade: "GOOD",
+      reason: "INITIAL_VERIFICATION",
+      inspectedAt: new Date(at),
+      reportedAt: new Date(at),
+      notes: "Synthetic notes",
+      mediaHashes: ["a".repeat(64)],
+    });
+    const store = createArtworkMintStore(db, "LOCALNET");
+    const snapshot = await store.load(artwork.kathaId, reportId);
+    if (!snapshot || !metadata) throw new Error("Snapshot missing");
+    const canonicalRequest = '{"synthetic":"mint intent"}';
+    const operation = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET" as const,
+      kind: "MINT_ARTWORK" as const,
+      idempotencyKey: "mint-one",
+      requestHash: hash(canonicalRequest),
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: [metadata.documentHash!],
+    };
+    const preparation = {
+      canonicalRequest,
+      messageHash: "a".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 10n,
+      simulationUnits: 20n,
+    };
+    const results = await Promise.all([
+      store
+        .operations(snapshot, wallet.id, "mint-one")
+        .save(operation, address, artwork.kathaId, preparation),
+      store
+        .operations(snapshot, other.id, "mint-two")
+        .save(
+          { ...operation, walletId: other.id, idempotencyKey: "mint-two" },
+          otherAddress,
+          artwork.kathaId,
+          preparation,
+        ),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual(["conflict", "saved"]);
+    const winner =
+      results[0]!.status === "saved"
+        ? { walletId: wallet.id, address, key: "mint-one" }
+        : { walletId: other.id, address: otherAddress, key: "mint-two" };
+    const winningOperation = {
+      ...operation,
+      walletId: winner.walletId,
+      idempotencyKey: winner.key,
+    };
+    const guard = store.operations(snapshot, winner.walletId, winner.key);
+    const retry = await guard.save(
+      winningOperation,
+      winner.address,
+      artwork.kathaId,
+      preparation,
+    );
+    expect(retry.status).toBe("saved");
+    if (retry.status === "saved")
+      expect(retry.operationId).toBe(
+        results[0]!.status === "saved"
+          ? results[0]!.operationId
+          : results[1]!.status === "saved"
+            ? results[1]!.operationId
+            : "missing",
+      );
+    const refresh = await guard.save(
+      winningOperation,
+      winner.address,
+      artwork.kathaId,
+      {
+        ...preparation,
+        messageHash: "b".repeat(64),
+        transactionBase64: "AAAB",
+        lastValidBlockHeight: 200n,
+      },
+    );
+    expect(refresh.status).toBe("saved");
+    expect(
+      await db
+        .select()
+        .from(blockchainOperations)
+        .where(
+          and(
+            eq(blockchainOperations.artworkId, artwork.id),
+            eq(blockchainOperations.kind, "MINT_ARTWORK"),
+          ),
+        ),
+    ).toHaveLength(1);
+    expect(
+      (
+        await guard.save(
+          { ...winningOperation, requestHash: "c".repeat(64) },
+          winner.address,
+          artwork.kathaId,
+          preparation,
+        )
+      ).status,
+    ).toBe("conflict");
+    const devnet = createArtworkMintStore(db, "DEVNET");
+    const devSnapshot = await devnet.load(artwork.kathaId, reportId);
+    if (!devSnapshot) throw new Error("Snapshot missing");
+    expect(
+      (
+        await devnet
+          .operations(devSnapshot, wallet.id, "mint-devnet")
+          .save(
+            { ...operation, cluster: "DEVNET", idempotencyKey: "mint-devnet" },
+            address,
+            artwork.kathaId,
+            preparation,
+          )
+      ).status,
+    ).toBe("saved");
+    await db.insert(artworkMetadataVersions).values({
+      artworkId: artwork.id,
+      version: 2,
+      status: "PREPARED",
+      authorityWallet: address,
+      canonicalDocument: document,
+      documentHash: hash(document),
+      uri: "http://localhost/synthetic-v2.json",
+    });
+    expect(
+      (await guard.save(winningOperation, winner.address, artwork.kathaId, preparation))
+        .status,
+    ).toBe("conflict");
+    const newer = await store.load(artwork.kathaId, reportId);
+    if (!newer) throw new Error("Snapshot missing");
+    await db
+      .update(artists)
+      .set({
+        verificationStatus: "UNVERIFIED",
+        verifiedByWallet: null,
+        verifiedAt: null,
+      })
+      .where(eq(artists.id, artist.id));
+    expect(
+      (
+        await store
+          .operations(newer, winner.walletId, winner.key)
+          .save(winningOperation, winner.address, artwork.kathaId, preparation)
+      ).status,
+    ).toBe("conflict");
+  } finally {
+    await connection.close();
+  }
+});

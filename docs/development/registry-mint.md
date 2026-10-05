@@ -40,3 +40,7 @@ preparing the atomic Registry instruction.
 
 See the [Metaplex Core CPI reference](https://www.metaplex.com/docs/smart-contracts/core/using-core-in-anchor)
 and [Solana transaction pipeline](https://solana.com/docs/core/transactions/transaction-pipeline).
+
+[Artwork mint preparation](artwork-minting-api.md) exposes the protected atomic mint
+builder with exact document/chain eligibility checks and one reserved idempotent
+intent per artwork/cluster. Preparing an unsigned transaction does not publish or mint.

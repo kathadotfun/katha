@@ -1,3 +1,5 @@
+import type { ArtworkMintingBoundary } from "./artwork-minting.js";
+import { artworkMintRequestSchema } from "@katha/shared";
 import type { CustodyOperationsBoundary } from "./custody-operations.js";
 import {
   custodyPreparationRequestSchema,
@@ -72,6 +74,7 @@ export function createApi(
   verification?: ArtworkVerificationBoundary,
   conditionAttestation?: ConditionAttestationBoundary,
   custodyOperations?: CustodyOperationsBoundary,
+  minting?: ArtworkMintingBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -335,6 +338,20 @@ export function createApi(
           await parseJson(c, fulfillmentUpdateRequestSchema),
         ),
         200,
+      );
+    });
+  }
+  if (minting) {
+    app.post("/admin/artworks/:kathaId/operations/mint", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await minting.prepare(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, artworkMintRequestSchema),
+        ),
+        201,
       );
     });
   }

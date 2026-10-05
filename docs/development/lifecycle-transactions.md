@@ -149,3 +149,7 @@ and [Kit wire encoding](https://www.solanakit.com/api/functions/getBase64Encoded
 [Custody and manual fulfillment API](custody-operations-api.md) prepares unsigned
 custody attestations and exposes private owner requests/admin coordination. Manual
 request status never creates finalized custody or transfers Core ownership.
+
+[Artwork mint preparation](artwork-minting-api.md) exposes the protected atomic mint
+builder with exact document/chain eligibility checks and one reserved idempotent
+intent per artwork/cluster. Preparing an unsigned transaction does not publish or mint.
