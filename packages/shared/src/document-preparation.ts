@@ -34,6 +34,7 @@ export const conditionPreparationRequestSchema =
     inspectedAt: conditionReportDocumentSchema.shape.inspectedAt,
     reportedAt: conditionReportDocumentSchema.shape.reportedAt,
     notes: conditionReportDocumentSchema.shape.notes,
+    scope: conditionReportDocumentSchema.shape.scope,
     mediaIds: z
       .array(z.uuid().transform((value) => value.toLowerCase()))
       .min(1)

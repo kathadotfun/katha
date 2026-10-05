@@ -88,3 +88,8 @@ export {
 } from "./artwork-registration-reader.js";
 
 export * from "./artwork-verification-reader.js";
+
+export { buildRecordMintedConditionTransaction } from "./attestation.js";
+export type { MintedConditionAccounts } from "./attestation.js";
+
+export * from "./condition-attestation-reader.js";

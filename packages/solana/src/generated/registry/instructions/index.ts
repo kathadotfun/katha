@@ -11,6 +11,7 @@ export * from "./initializeCustody.js";
 export * from "./initializeMetadata.js";
 export * from "./initializePlatform.js";
 export * from "./mintArtwork.js";
+export * from "./recordMintedCondition.js";
 export * from "./recordUnmintedCondition.js";
 export * from "./registerArtwork.js";
 export * from "./reviseMintedMetadata.js";

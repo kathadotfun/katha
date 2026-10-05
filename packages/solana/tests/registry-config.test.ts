@@ -3043,10 +3043,169 @@ describe("Complete Registry lifecycle in Surfpool", () => {
     ]) {
       expect((await account(historical.address)).data).toEqual(historical.data);
     }
+    // Scoped post-mint inspections: wrong authority, owner, custody and version roll back.
+    const scopeReportId = "123e4567-e89b-42d3-a456-426614174003";
+    const reportBytes = Uint8Array.from(
+      Buffer.from(scopeReportId.replaceAll("-", ""), "hex"),
+    );
+    const [scopedReport] = await registry.findReportPda({ reportId: reportBytes });
+    const scoped = {
+      ...document,
+      reportId: scopeReportId,
+      reason: "PRE_RESALE" as const,
+      scope: {
+        ownerWallet: registration.address,
+        custodyRevision: 1,
+        custodyState: "KATHA_HELD" as const,
+      },
+    };
+    const scopeHash = await sha256Hex(canonicalDocumentBytes(scoped));
+    const mintedArgs = {
+      config: pdas.config,
+      artwork,
+      verification,
+      head: conditionHead,
+      report: scopedReport,
+      custodyHead,
+      asset,
+      verifierAuthority: verifier,
+      expectedVersion: 1,
+      nextVersion: 2,
+      expectedOwner: registration.address,
+      expectedCustodyRevision: 1n,
+      reportId: reportBytes,
+      reportHash: Uint8Array.from(Buffer.from(scopeHash, "hex")),
+      grade: registry.ConditionGrade.Good,
+      reason: registry.ConditionReason.PreResale,
+      inspectorId: reportBytes,
+      inspectedAt: clock.unixTimestamp - 60n,
+    };
+    const headBeforeInspection = await account(conditionHead);
+    for (const change of [
+      { verifierAuthority: registration },
+      { expectedOwner: custody.address },
+      { expectedCustodyRevision: 2n },
+      { expectedVersion: 2, nextVersion: 3 },
+      { reportHash: new Uint8Array(32) },
+      { inspectedAt: clock.unixTimestamp + 1000n },
+      { reason: registry.ConditionReason.InitialVerification },
+      { asset: verification },
+      { custodyHead: metadataHead },
+    ]) {
+      await expect(
+        client.sendTransaction([
+          registry.getRecordMintedConditionInstruction({ ...mintedArgs, ...change }),
+        ]),
+      ).rejects.toThrow();
+      expect((await account(conditionHead)).data).toEqual(headBeforeInspection.data);
+      expect((await fetchEncodedAccount(client.rpc, scopedReport)).exists).toBe(false);
+    }
+    await client.sendTransaction([
+      registry.getRecordMintedConditionInstruction(mintedArgs),
+    ]);
+    const scopedSnapshot = await account(scopedReport);
+    const scopedRecord = registry
+      .getConditionAttestationDecoder()
+      .decode(scopedSnapshot.data);
+    expect(scopedRecord.ownerScope).toEqual({
+      __option: "Some",
+      value: registration.address,
+    });
+    expect(scopedRecord.custodyRevisionScope).toEqual({ __option: "Some", value: 1n });
+    expect(
+      registry.getConditionHeadDecoder().decode((await account(conditionHead)).data)
+        .version,
+    ).toBe(2);
+    await expect(
+      client.sendTransaction([
+        registry.getRecordMintedConditionInstruction(mintedArgs),
+      ]),
+    ).rejects.toThrow();
+    expect((await account(scopedReport)).data).toEqual(scopedSnapshot.data);
+    expect((await account(conditionReport)).data).toEqual(conditionSnapshot.data);
+    const nextReportId = Uint8Array.from(reportBytes);
+    nextReportId[15] = 4;
+    const [nextReport] = await registry.findReportPda({ reportId: nextReportId });
+    const followup = {
+      ...mintedArgs,
+      expectedVersion: 2,
+      nextVersion: 3,
+      report: nextReport,
+      reportId: nextReportId,
+      expectedCustodyRevision: 2n,
+    };
+    const move = async (
+      expectedRevision: bigint,
+      action: registry.CustodyAction,
+      collector: Address | null,
+    ) => {
+      const [transition] = await registry.findTransitionCustodyTransitionPda({
+        artwork,
+        nextRevision: expectedRevision + 1n,
+      });
+      await client.sendTransaction([
+        registry.getTransitionCustodyInstruction({
+          config: pdas.config,
+          artwork,
+          head: custodyHead,
+          transition,
+          custodyAuthority: custody,
+          expectedRevision,
+          nextRevision: expectedRevision + 1n,
+          action,
+          collector,
+        }),
+      ]);
+    };
+    await move(1n, registry.CustodyAction.DispatchFromKatha, null);
+    await expect(
+      client.sendTransaction([registry.getRecordMintedConditionInstruction(followup)]),
+    ).rejects.toThrow();
+    expect((await fetchEncodedAccount(client.rpc, nextReport)).exists).toBe(false);
+    await move(2n, registry.CustodyAction.ReceiveByCollector, verifier.address);
+    await expect(
+      client.sendTransaction([
+        registry.getRecordMintedConditionInstruction({
+          ...followup,
+          expectedCustodyRevision: 3n,
+        }),
+      ]),
+    ).rejects.toThrow();
+    expect((await fetchEncodedAccount(client.rpc, nextReport)).exists).toBe(false);
+    await move(3n, registry.CustodyAction.DispatchFromCollector, null);
+    await move(4n, registry.CustodyAction.ReceiveByCollector, registration.address);
+    const collectorHash = await sha256Hex(
+      canonicalDocumentBytes({
+        ...scoped,
+        reportId: "123e4567-e89b-42d3-a456-426614174004",
+        scope: {
+          ownerWallet: registration.address,
+          custodyRevision: 5,
+          custodyState: "COLLECTOR_HELD",
+        },
+      }),
+    );
+    await client.sendTransaction([
+      registry.getRecordMintedConditionInstruction({
+        ...followup,
+        expectedCustodyRevision: 5n,
+        reportHash: Uint8Array.from(Buffer.from(collectorHash, "hex")),
+      }),
+    ]);
+    expect(
+      registry
+        .getConditionAttestationDecoder()
+        .decode((await account(nextReport)).data),
+    ).toMatchObject({
+      version: 3,
+      ownerScope: { __option: "Some", value: registration.address },
+      custodyRevisionScope: { __option: "Some", value: 5n },
+    });
+    expect((await account(scopedReport)).data).toEqual(scopedSnapshot.data);
     const [coreCollection] = getCollectionV1AccountDataSerializer().deserialize(
       Uint8Array.from((await account(collection.address)).data),
     );
     expect(coreCollection.numMinted).toBe(1);
     expect(coreCollection.currentSize).toBe(1);
-  });
+  }, 15000);
 });

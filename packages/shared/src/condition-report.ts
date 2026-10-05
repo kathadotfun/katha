@@ -45,6 +45,13 @@ export const conditionReportDocumentSchema = z
       .min(1)
       .max(5000)
       .refine((value) => value.trim().length > 0),
+    scope: z
+      .strictObject({
+        ownerWallet: walletAddressSchema,
+        custodyRevision: z.number().int().min(1).max(4294967295),
+        custodyState: z.enum(["KATHA_HELD", "COLLECTOR_HELD"]),
+      })
+      .optional(),
     mediaHashes: z
       .array(sha256Schema)
       .min(1)

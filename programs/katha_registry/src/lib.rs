@@ -478,6 +478,116 @@ pub mod katha_registry {
         Ok(())
     }
 
+    pub fn record_minted_condition(
+        ctx: Context<RecordMintedCondition>,
+        expected_version: u32,
+        next_version: u32,
+        expected_owner: Pubkey,
+        expected_custody_revision: u64,
+        report_id: [u8; 16],
+        report_hash: [u8; 32],
+        grade: ConditionGrade,
+        reason: ConditionReason,
+        inspector_id: [u8; 16],
+        inspected_at: i64,
+    ) -> Result<()> {
+        let head = &mut ctx.accounts.head;
+        require!(
+            head.version == expected_version,
+            RegistryError::StaleConditionVersion
+        );
+        require!(
+            expected_version.checked_add(1) == Some(next_version),
+            RegistryError::InvalidConditionVersion
+        );
+        require!(
+            reason != ConditionReason::InitialVerification,
+            RegistryError::InvalidInitialConditionReason
+        );
+        let asset_data = ctx.accounts.asset.try_borrow_data()?;
+        let asset = mpl_core::Asset::from_bytes(&asset_data)
+            .map_err(|_| error!(RegistryError::InvalidCoreAsset))?;
+        require!(
+            asset.base.update_authority
+                == mpl_core::types::UpdateAuthority::Collection(ctx.accounts.config.collection)
+                && asset.base.name == ctx.accounts.artwork.katha_id,
+            RegistryError::InvalidCoreAsset
+        );
+        require_keys_eq!(
+            asset.base.owner,
+            expected_owner,
+            RegistryError::InvalidCoreAsset
+        );
+        require!(
+            ctx.accounts.custody_head.revision == expected_custody_revision
+                && expected_custody_revision > 0,
+            RegistryError::InvalidCustodyRelationship
+        );
+        // Collector-held inspections apply only while this owner physically holds the work.
+        let custody = &ctx.accounts.custody_head;
+        require!(
+            custody.state != CustodyState::InTransit,
+            RegistryError::InvalidCustodyRelationship
+        );
+        match custody.state {
+            CustodyState::KathaHeld => require!(
+                custody.subject == Some(ctx.accounts.config.custody_authority),
+                RegistryError::InvalidCustodyRelationship
+            ),
+            CustodyState::CollectorHeld => require!(
+                custody.subject == Some(expected_owner),
+                RegistryError::InvalidCustodyRelationship
+            ),
+            _ => return err!(RegistryError::InvalidCustodyRelationship),
+        }
+        let recorded_at = Clock::get()?.unix_timestamp;
+        validate_condition_report(
+            &report_id,
+            &report_hash,
+            &inspector_id,
+            inspected_at,
+            recorded_at,
+        )?;
+
+        let artwork = &ctx.accounts.artwork;
+        let report = &mut ctx.accounts.report;
+        report.artwork = artwork.key();
+        report.version = next_version;
+        report.report_id = report_id;
+        report.report_hash = report_hash;
+        report.grade = grade;
+        report.reason = reason;
+        report.inspector_id = inspector_id;
+        report.verifier = ctx.accounts.verifier_authority.key();
+        report.inspected_at = inspected_at;
+        report.recorded_at = recorded_at;
+        report.owner_scope = Some(expected_owner);
+        report.custody_revision_scope = Some(expected_custody_revision);
+        report.bump = ctx.bumps.report;
+
+        head.version = next_version;
+        head.current_report = report.key();
+        head.current_hash = report_hash;
+
+        emit!(ConditionRecorded {
+            artwork: artwork.key(),
+            katha_id: artwork.katha_id.clone(),
+            report: report.key(),
+            report_id,
+            version: report.version,
+            report_hash,
+            grade,
+            reason,
+            inspector_id,
+            verifier: report.verifier,
+            inspected_at,
+            recorded_at,
+            owner_scope: Some(expected_owner),
+            custody_revision_scope: Some(expected_custody_revision),
+        });
+        Ok(())
+    }
+
     pub fn initialize_custody(
         ctx: Context<InitializeCustody>,
         action: CustodyAction,
@@ -1214,6 +1324,50 @@ pub struct RecordUnmintedCondition<'info> {
         bump
     )]
     pub report: Account<'info, ConditionAttestation>,
+    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    pub verifier_authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(expected_version: u32, next_version: u32, expected_owner: Pubkey, expected_custody_revision: u64, report_id: [u8; 16])]
+pub struct RecordMintedCondition<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Account<'info, KathaConfig>,
+    #[account(
+        seeds = [ARTWORK_SEED, artwork.katha_id.as_bytes()],
+        bump = artwork.bump,
+        constraint = artwork.collection == config.collection @ RegistryError::InvalidArtworkCollection,
+        constraint = artwork.core_asset == Some(asset.key()) @ RegistryError::InvalidCoreAsset
+    )]
+    pub artwork: Account<'info, ArtworkRecord>,
+    #[account(
+        seeds = [VERIFICATION_SEED, artwork.key().as_ref()],
+        bump = verification.bump,
+        constraint = verification.artwork == artwork.key() @ RegistryError::InvalidVerificationRelationship
+    )]
+    pub verification: Account<'info, ArtworkVerification>,
+    #[account(
+        mut,
+        seeds = [CONDITION_HEAD_SEED, artwork.key().as_ref()],
+        bump = head.bump,
+        constraint = head.artwork == artwork.key() @ RegistryError::InvalidConditionRelationship
+    )]
+    pub head: Account<'info, ConditionHead>,
+    #[account(
+        init,
+        payer = verifier_authority,
+        space = ConditionAttestation::SPACE,
+        seeds = [CONDITION_REPORT_SEED, &report_id],
+        bump
+    )]
+    pub report: Account<'info, ConditionAttestation>,
+    #[account(seeds = [CUSTODY_HEAD_SEED, artwork.key().as_ref()], bump = custody_head.bump,
+        constraint = custody_head.artwork == artwork.key() @ RegistryError::InvalidCustodyRelationship)]
+    pub custody_head: Account<'info, CustodyHead>,
+    /// CHECK: Bound canonical Core asset; handler validates its collection and owner.
+    #[account(seeds = [CORE_ASSET_SEED, artwork.key().as_ref()], bump, owner = mpl_core::ID @ RegistryError::InvalidCoreAsset)]
+    pub asset: UncheckedAccount<'info>,
     #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
     pub verifier_authority: Signer<'info>,
     pub system_program: Program<'info, System>,

@@ -26,6 +26,8 @@ type Condition = Pick<
   | "reportedAt"
   | "notes"
   | "mediaHashes"
+  | "ownerWallet"
+  | "custodyRevision"
 >;
 export function createDocumentPreparationStore(db: Database) {
   return {

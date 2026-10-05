@@ -65,3 +65,8 @@ the signing wallet submits the returned unsigned transaction.
 Registry verifier, explicit manual authenticity confirmation, matching registered
 attribution and exact prepared documentation. It returns an unsigned transaction
 without creating finalized verification history or publishing the artwork.
+
+[Condition attestation preparation](condition-attestation-api.md) selects initial,
+unminted or minted condition instructions. Minted follow-up reports bind the current
+Core owner and held custody revision in their hashed private document; execution
+rechecks scope. Preparation does not finalize inspection state or approve resale.

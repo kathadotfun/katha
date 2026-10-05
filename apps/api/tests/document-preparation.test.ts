@@ -245,6 +245,11 @@ it("keeps canonical condition notes private and binds the session verifier", asy
       inspectorId: randomUUID(),
       grade: "GOOD",
       reason: "PRE_RESALE",
+      scope: {
+        ownerWallet: f.session.walletAddress,
+        custodyRevision: 3,
+        custodyState: "COLLECTOR_HELD",
+      },
       inspectedAt: f.at.toISOString(),
       reportedAt: f.at.toISOString(),
       notes: "PRIVATE INSPECTION",
@@ -252,6 +257,11 @@ it("keeps canonical condition notes private and binds the session verifier", asy
     },
     f.session,
   );
+  expect(JSON.parse(f.built.document!).scope).toEqual({
+    ownerWallet: f.session.walletAddress,
+    custodyRevision: 3,
+    custodyState: "COLLECTOR_HELD",
+  });
   expect(result.uri).toBeNull();
   expect(f.built.document).toContain("PRIVATE INSPECTION");
   expect(JSON.parse(f.built.document!).verifierWallet).toBe(f.session.walletAddress);

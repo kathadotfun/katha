@@ -188,6 +188,7 @@ export function createDocumentPreparation(
             reportedAt: data.reportedAt,
             notes: data.notes,
             mediaHashes: hashes,
+            ...(data.scope ? { scope: data.scope } : {}),
           });
           if (!parsed.success || new Date(data.reportedAt).getTime() > Date.now())
             throw new DomainError("INVALID_REQUEST");
@@ -204,6 +205,8 @@ export function createDocumentPreparation(
               reportedAt: new Date(document.reportedAt),
               notes: document.notes,
               mediaHashes: document.mediaHashes,
+              ownerWallet: document.scope?.ownerWallet ?? null,
+              custodyRevision: document.scope?.custodyRevision ?? null,
             },
           };
         },

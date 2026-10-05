@@ -6,6 +6,8 @@ Two verifier-authorized endpoints prepare exact immutable documents:
   the current artwork UTC millisecond timestamp.
 - `POST /verifier/artworks/:kathaId/documents/condition` additionally accepts reportId,
   inspectorId, grade, reason, inspectedAt, reportedAt, notes and 1–20 unique mediaIds.
+  Minted follow-up reports also require scope for transaction preparation: ownerWallet,
+  positive custodyRevision and custodyState (KATHA_HELD or COLLECTOR_HELD).
 
 Requests require a replay-protected wallet session on the configured cluster and
 membership in the configured verifier allowlist. The session wallet supplies the
@@ -75,7 +77,9 @@ hashes. These bytes are stored PRIVATE and preserved in the condition row.
 
 The prepared summary has uri:null. No private document/evidence HTTP route exists.
 PRE_RESALE is a report reason, not resale authorization: owner/custody approval
-binding belongs to the scheduled inspected-resale workflow.
+scope is now hashed into minted reports and validated by
+[condition transaction preparation](condition-attestation-api.md). This scope alone
+does not authorize resale; the approval workflow remains scheduled.
 
 ## Public delivery
 

@@ -3020,3 +3020,161 @@ it("rechecks verification snapshots under save locks and rolls back raced eligib
     await connection.close();
   }
 });
+
+it("rechecks condition-attestation snapshots under save locks and rolls back raced eligibility changes", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const db = connection.db;
+  const {
+    createConditionAttestationStore,
+    conditionReports,
+    wallets,
+    blockchainOperations,
+  } = await import("../src/index.js");
+  const address = "D".repeat(32);
+  const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "condition-attestation-guard-artist",
+        displayName: "Synthetic Artist",
+        biography: "Private test biography",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+        verificationStatus: "VERIFIED",
+        verifiedByWallet: address,
+        verifiedAt: new Date("2026-10-05T00:00:00.000Z"),
+        createdAt: new Date("2026-10-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-10-05T00:00:00.000Z"),
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic guarded condition-attestation",
+        creationYear: 2026,
+        authorshipEvidenceHash: "e".repeat(64),
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw new Error("Fixtures missing");
+    const reportId = randomUUID();
+    const conditionDocument = (id: string) =>
+      JSON.stringify({
+        reportId: id,
+        kathaId: artwork.kathaId,
+        inspectorId: artist.id,
+        verifierWallet: address,
+        grade: "GOOD",
+        reason: "INITIAL_VERIFICATION",
+        inspectedAt: "2026-10-05T00:00:00.000Z",
+        reportedAt: "2026-10-05T00:00:00.000Z",
+        notes: "Synthetic private notes",
+        mediaHashes: ["a".repeat(64)],
+      });
+    const document = conditionDocument(reportId);
+    const metadataValues = {
+      id: reportId,
+      inspectorId: artist.id,
+      grade: "GOOD" as const,
+      reason: "INITIAL_VERIFICATION" as const,
+      inspectedAt: new Date("2026-10-05T00:00:00.000Z"),
+      reportedAt: new Date("2026-10-05T00:00:00.000Z"),
+      notes: "Synthetic private notes",
+      mediaHashes: ["a".repeat(64)],
+      artworkId: artwork.id,
+      version: 1,
+      status: "PREPARED" as const,
+      authorityWallet: address,
+      canonicalDocument: document,
+      documentHash: hash(document),
+    };
+    await db.insert(conditionReports).values(metadataValues);
+    const store = createConditionAttestationStore(db);
+    const before = await store.load(artwork.kathaId);
+    if (!before) throw new Error("Snapshot missing");
+    const canonicalRequest = '{"synthetic":"condition-attestation intent"}';
+    const operation = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET" as const,
+      kind: "RECORD_CONDITION" as const,
+      idempotencyKey: "condition-attestation-guard",
+      requestHash: hash(canonicalRequest),
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: [metadataValues.documentHash],
+    };
+    const preparation = {
+      canonicalRequest,
+      messageHash: "a".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 10n,
+      simulationUnits: 20n,
+    };
+    // A newer approved snapshot arrives after load, before simulation/save completes.
+    const newerId = randomUUID();
+    const newerDocument = conditionDocument(newerId);
+    await db.insert(conditionReports).values({
+      ...metadataValues,
+      id: newerId,
+      version: 2,
+      canonicalDocument: newerDocument,
+      documentHash: hash(newerDocument),
+    });
+    const raced = await store
+      .operations(before)
+      .save(operation, address, artwork.kathaId, preparation);
+    expect(raced.status).toBe("conflict");
+    expect(
+      await db
+        .select()
+        .from(blockchainOperations)
+        .where(eq(blockchainOperations.idempotencyKey, operation.idempotencyKey)),
+    ).toHaveLength(0);
+    const current = await store.load(artwork.kathaId);
+    if (!current) throw new Error("Snapshot missing");
+    const saved = await store
+      .operations(current)
+      .save(operation, address, artwork.kathaId, preparation);
+    expect(saved.status).toBe("saved");
+    const staleArtist = await store.load(artwork.kathaId);
+    if (!staleArtist) throw new Error("Snapshot missing");
+    await db
+      .update(artists)
+      .set({
+        verificationStatus: "UNVERIFIED",
+        verifiedByWallet: null,
+        verifiedAt: null,
+      })
+      .where(eq(artists.id, artist.id));
+    const denied = await store
+      .operations(staleArtist)
+      .save(
+        { ...operation, idempotencyKey: "condition-attestation-revoked" },
+        address,
+        artwork.kathaId,
+        preparation,
+      );
+    expect(denied.status).toBe("conflict");
+    expect(
+      await db
+        .select()
+        .from(blockchainOperations)
+        .where(
+          eq(blockchainOperations.idempotencyKey, "condition-attestation-revoked"),
+        ),
+    ).toHaveLength(0);
+  } finally {
+    await connection.close();
+  }
+});

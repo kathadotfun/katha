@@ -112,3 +112,8 @@ Kit provides [unsigned instruction composition](https://www.solanakit.com/api/fu
 and [address-based no-op signers](https://www.solanakit.com/api/functions/createNoopSigner).
 The builders remove signer implementations from their results while preserving
 the required account roles for later wallet approval.
+
+[Condition attestation preparation](condition-attestation-api.md) selects initial,
+unminted or minted condition instructions. Minted follow-up reports bind the current
+Core owner and held custody revision in their hashed private document; execution
+rechecks scope. Preparation does not finalize inspection state or approve resale.

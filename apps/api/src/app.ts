@@ -1,3 +1,5 @@
+import type { ConditionAttestationBoundary } from "./condition-attestation.js";
+import { conditionAttestationRequestSchema } from "@katha/shared";
 import type { ArtworkVerificationBoundary } from "./artwork-verification.js";
 import { artworkVerificationRequestSchema } from "@katha/shared";
 import type { ArtworkRegistrationBoundary } from "./artwork-registration.js";
@@ -61,6 +63,7 @@ export function createApi(
   publicDocuments?: PublicDocumentsBoundary,
   registration?: ArtworkRegistrationBoundary,
   verification?: ArtworkVerificationBoundary,
+  conditionAttestation?: ConditionAttestationBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -258,6 +261,20 @@ export function createApi(
           c.req.header("Authorization"),
           kathaId,
           await parseJson(c, artworkVerificationRequestSchema),
+        ),
+        201,
+      );
+    });
+  }
+  if (conditionAttestation) {
+    app.post("/verifier/artworks/:kathaId/operations/condition", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await conditionAttestation.prepare(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, conditionAttestationRequestSchema),
         ),
         201,
       );

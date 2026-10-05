@@ -73,7 +73,9 @@ unsigned-operation helpers now authorize and simulate exact wallet transactions,
 preserving idempotent intents and immutable preparation history. The admin registration
 preparation endpoint now binds approved metadata and immutable identity. A verifier
 endpoint prepares artwork authentication after explicit manual confirmation and
-validated registered attribution; remaining HTTP operation routes are planned.
+validated registered attribution. Condition preparation binds exact private report
+bytes and current chain version, including minted owner/custody scope; remaining
+HTTP operation routes are planned.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -104,6 +106,7 @@ outside the current scope.
 - [Unsigned blockchain operation preparation](docs/development/blockchain-operation-preparation.md)
 - [Artwork registration preparation](docs/development/artwork-registration-api.md)
 - [Artwork verification preparation](docs/development/artwork-verification-api.md)
+- [Condition attestation preparation](docs/development/condition-attestation-api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

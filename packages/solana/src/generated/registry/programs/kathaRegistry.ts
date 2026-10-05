@@ -68,6 +68,7 @@ import {
   getInitializeMetadataInstructionAsync,
   getInitializePlatformInstructionAsync,
   getMintArtworkInstructionAsync,
+  getRecordMintedConditionInstructionAsync,
   getRecordUnmintedConditionInstructionAsync,
   getRegisterArtworkInstructionAsync,
   getReviseMintedMetadataInstructionAsync,
@@ -79,6 +80,7 @@ import {
   parseInitializeMetadataInstruction,
   parseInitializePlatformInstruction,
   parseMintArtworkInstruction,
+  parseRecordMintedConditionInstruction,
   parseRecordUnmintedConditionInstruction,
   parseRegisterArtworkInstruction,
   parseReviseMintedMetadataInstruction,
@@ -95,12 +97,14 @@ import {
   type ParsedInitializeMetadataInstruction,
   type ParsedInitializePlatformInstruction,
   type ParsedMintArtworkInstruction,
+  type ParsedRecordMintedConditionInstruction,
   type ParsedRecordUnmintedConditionInstruction,
   type ParsedRegisterArtworkInstruction,
   type ParsedReviseMintedMetadataInstruction,
   type ParsedReviseUnmintedMetadataInstruction,
   type ParsedTransitionCustodyInstruction,
   type ParsedVerifyArtworkInstruction,
+  type RecordMintedConditionAsyncInput,
   type RecordUnmintedConditionAsyncInput,
   type RegisterArtworkAsyncInput,
   type ReviseMintedMetadataAsyncInput,
@@ -350,6 +354,7 @@ export enum KathaRegistryInstruction {
   InitializeMetadata,
   InitializePlatform,
   MintArtwork,
+  RecordMintedCondition,
   RecordUnmintedCondition,
   RegisterArtwork,
   ReviseMintedMetadata,
@@ -416,6 +421,17 @@ export function identifyKathaRegistryInstruction(
     )
   ) {
     return KathaRegistryInstruction.MintArtwork;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([22, 92, 243, 6, 141, 210, 208, 14]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.RecordMintedCondition;
   }
   if (
     containsBytes(
@@ -508,6 +524,9 @@ export type ParsedKathaRegistryInstruction<
       instructionType: KathaRegistryInstruction.MintArtwork;
     } & ParsedMintArtworkInstruction<TProgram>)
   | ({
+      instructionType: KathaRegistryInstruction.RecordMintedCondition;
+    } & ParsedRecordMintedConditionInstruction<TProgram>)
+  | ({
       instructionType: KathaRegistryInstruction.RecordUnmintedCondition;
     } & ParsedRecordUnmintedConditionInstruction<TProgram>)
   | ({
@@ -564,6 +583,13 @@ export function parseKathaRegistryInstruction<TProgram extends string>(
       return {
         instructionType: KathaRegistryInstruction.MintArtwork,
         ...parseMintArtworkInstruction(instruction),
+      };
+    }
+    case KathaRegistryInstruction.RecordMintedCondition: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.RecordMintedCondition,
+        ...parseRecordMintedConditionInstruction(instruction),
       };
     }
     case KathaRegistryInstruction.RecordUnmintedCondition: {
@@ -666,6 +692,10 @@ export type KathaRegistryPluginInstructions = {
   mintArtwork: (
     input: MintArtworkAsyncInput,
   ) => ReturnType<typeof getMintArtworkInstructionAsync> & SelfPlanAndSendFunctions;
+  recordMintedCondition: (
+    input: RecordMintedConditionAsyncInput,
+  ) => ReturnType<typeof getRecordMintedConditionInstructionAsync> &
+    SelfPlanAndSendFunctions;
   recordUnmintedCondition: (
     input: RecordUnmintedConditionAsyncInput,
   ) => ReturnType<typeof getRecordUnmintedConditionInstructionAsync> &
@@ -758,6 +788,11 @@ export function kathaRegistryProgram() {
             ),
           mintArtwork: (input) =>
             addSelfPlanAndSendFunctions(client, getMintArtworkInstructionAsync(input)),
+          recordMintedCondition: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRecordMintedConditionInstructionAsync(input),
+            ),
           recordUnmintedCondition: (input) =>
             addSelfPlanAndSendFunctions(
               client,

@@ -1,3 +1,4 @@
+import { readCoreAsset } from "./core.js";
 import {
   artworkSchema,
   canonicalDocumentBytes,
@@ -32,6 +33,12 @@ import {
   getConditionHeadSize,
   getInitializeConditionInstruction,
   getRecordUnmintedConditionInstruction,
+  getRecordMintedConditionInstruction,
+  findAssetPda,
+  findInitializeCustodyHeadPda,
+  findTransitionCustodyTransitionPda,
+  getCustodyHeadDecoder,
+  CustodyState,
   getVerifyArtworkInstruction,
   identifyKathaRegistryAccount,
   KATHA_REGISTRY_PROGRAM_ADDRESS,
@@ -176,9 +183,10 @@ async function verifiedArtwork(
   context: RegistryTransactionContext,
   accounts: VerifiedArtworkAccounts,
   identity: string,
+  minted = false,
 ) {
   const prepared = await readAuthorizedArtwork(context, accounts, identity);
-  if (prepared.record.coreAsset.__option !== "None")
+  if (!minted && prepared.record.coreAsset.__option !== "None")
     throw new TypeError("Minted condition reports require owner and custody scope");
   const [verification, bump] = await findVerificationPda({ artwork: prepared.artwork });
   checkAccount(
@@ -286,6 +294,8 @@ export async function buildInitializeConditionTransaction(
   input: ConditionAttestationInput,
 ) {
   const condition = await conditionDocument(context, input);
+  if (condition.document.scope)
+    throw new TypeError("Unminted reports cannot have ownership scope");
   if (condition.document.reason !== "INITIAL_VERIFICATION")
     throw new TypeError("Initial condition reason must be INITIAL_VERIFICATION");
   const prepared = await verifiedArtwork(context, accounts, condition.document.kathaId);
@@ -319,6 +329,8 @@ export async function buildRecordUnmintedConditionTransaction(
   input: UnmintedConditionInput,
 ) {
   const condition = await conditionDocument(context, input);
+  if (condition.document.scope)
+    throw new TypeError("Unminted reports cannot have ownership scope");
   if (
     condition.document.reason !== "PRE_SALE" &&
     condition.document.reason !== "INSURANCE"
@@ -375,6 +387,136 @@ export async function buildRecordUnmintedConditionTransaction(
     verifierAuthority: prepared.verifierAuthority,
     head,
     report: condition.report,
+    expectedVersion: input.expectedVersion,
+    nextVersion: version,
+    ...condition.args,
+  });
+  return {
+    ...unsignedMessage(context, instruction),
+    version,
+    addresses: {
+      config: prepared.config,
+      artwork: prepared.artwork,
+      verification: prepared.verification,
+      head,
+      report: condition.report,
+    },
+  };
+}
+
+export interface MintedConditionAccounts extends UnmintedConditionAccounts {
+  custodyHeadAccount: EncodedAccount;
+  assetAccount: EncodedAccount;
+}
+
+export async function buildRecordMintedConditionTransaction(
+  context: RegistryTransactionContext,
+  accounts: MintedConditionAccounts,
+  input: UnmintedConditionInput,
+) {
+  const condition = await conditionDocument(context, input);
+
+  if (!condition.document.scope || condition.document.reason === "INITIAL_VERIFICATION")
+    throw new TypeError(
+      "Minted reports require explicit ownership/custody scope and follow-up reason",
+    );
+  const prepared = await verifiedArtwork(
+    context,
+    accounts,
+    condition.document.kathaId,
+    true,
+  );
+  const [asset] = await findAssetPda({ artwork: prepared.artwork });
+  if (
+    prepared.record.coreAsset.__option !== "Some" ||
+    prepared.record.coreAsset.value !== asset
+  )
+    throw new TypeError("Canonical minted Core asset is required");
+  const core = readCoreAsset(
+    accounts.assetAccount,
+    asset,
+    prepared.configuration.collection,
+  );
+  const [custodyHead, custodyBump] = await findInitializeCustodyHeadPda({
+    artwork: prepared.artwork,
+  });
+  checkAccount(
+    accounts.custodyHeadAccount,
+    custodyHead,
+    KathaRegistryAccount.CustodyHead,
+    115,
+  );
+  const custody = getCustodyHeadDecoder().decode(accounts.custodyHeadAccount.data);
+  const scope = condition.document.scope;
+  const [transition] = await findTransitionCustodyTransitionPda({
+    artwork: prepared.artwork,
+    nextRevision: custody.revision,
+  });
+  if (
+    core.name !== condition.document.kathaId ||
+    core.owner !== scope.ownerWallet ||
+    custody.artwork !== prepared.artwork ||
+    custody.bump !== custodyBump ||
+    custody.revision !== BigInt(scope.custodyRevision) ||
+    custody.latestTransition !== transition ||
+    custody.subject.__option !== "Some" ||
+    (scope.custodyState === "KATHA_HELD"
+      ? custody.state !== CustodyState.KathaHeld ||
+        custody.subject.value !== prepared.configuration.custodyAuthority
+      : custody.state !== CustodyState.CollectorHeld ||
+        custody.subject.value !== core.owner)
+  )
+    throw new TypeError("Inspection ownership/custody scope is stale or invalid");
+  const [head, headBump] = await findHeadPda({ artwork: prepared.artwork });
+  checkAccount(
+    accounts.conditionHeadAccount,
+    head,
+    KathaRegistryAccount.ConditionHead,
+    getConditionHeadSize(),
+  );
+  const state = getConditionHeadDecoder().decode(accounts.conditionHeadAccount.data);
+  if (
+    state.artwork !== prepared.artwork ||
+    state.bump !== headBump ||
+    !Number.isInteger(input.expectedVersion) ||
+    input.expectedVersion < 1 ||
+    input.expectedVersion >= 0xffff_ffff ||
+    state.version !== input.expectedVersion
+  )
+    throw new TypeError("Condition head relationship or expected version is invalid");
+  checkAccount(
+    accounts.currentReportAccount,
+    state.currentReport,
+    KathaRegistryAccount.ConditionAttestation,
+    201,
+  );
+  const current = getConditionAttestationDecoder().decode(
+    accounts.currentReportAccount.data,
+  );
+  const [currentReport, reportBump] = await findReportPda({
+    reportId: current.reportId,
+  });
+  if (
+    currentReport !== state.currentReport ||
+    current.bump !== reportBump ||
+    current.artwork !== prepared.artwork ||
+    current.version !== state.version ||
+    !equalBytes(current.reportHash, state.currentHash) ||
+    condition.report === currentReport
+  )
+    throw new TypeError("Current condition report relationship is invalid");
+  const version = input.expectedVersion + 1;
+  const instruction = getRecordMintedConditionInstruction({
+    config: prepared.config,
+    artwork: prepared.artwork,
+    verification: prepared.verification,
+    verifierAuthority: prepared.verifierAuthority,
+    head,
+    report: condition.report,
+    custodyHead,
+    asset,
+    expectedOwner: core.owner,
+    expectedCustodyRevision: custody.revision,
     expectedVersion: input.expectedVersion,
     nextVersion: version,
     ...condition.args,

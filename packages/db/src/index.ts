@@ -144,3 +144,5 @@ export {
 } from "./artwork-registration-store.js";
 
 export * from "./artwork-verification-store.js";
+
+export * from "./condition-attestation-store.js";

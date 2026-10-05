@@ -166,3 +166,5 @@ export {
 } from "./artwork-registration-api.js";
 
 export * from "./artwork-verification-api.js";
+
+export * from "./condition-attestation-api.js";

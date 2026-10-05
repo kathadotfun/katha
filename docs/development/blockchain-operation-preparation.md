@@ -109,3 +109,8 @@ needed; registration HTTP preparation now uses this boundary.
 [Artwork verification preparation](artwork-verification-api.md) exposes the verifier
 operation route, binds manual confirmation and documented attribution, and rechecks
 eligibility during locked persistence. It does not finalize authentication.
+
+[Condition attestation preparation](condition-attestation-api.md) selects initial,
+unminted or minted condition instructions. Minted follow-up reports bind the current
+Core owner and held custody revision in their hashed private document; execution
+rechecks scope. Preparation does not finalize inspection state or approve resale.

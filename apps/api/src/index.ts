@@ -1,3 +1,6 @@
+import { createConditionAttestation } from "./condition-attestation.js";
+import { createConditionAttestationStore } from "@katha/db";
+import { createConditionAttestationReader } from "@katha/solana";
 import { createArtworkVerification } from "./artwork-verification.js";
 import { createArtworkVerificationStore } from "@katha/db";
 import { createArtworkVerificationReader } from "@katha/solana";
@@ -113,6 +116,14 @@ function startApi() {
       ),
       authorization,
       createArtworkVerificationReader(rpcConfig),
+      createOperationChain(rpcConfig),
+      storage,
+      config.KATHA_CLUSTER,
+    ),
+    createConditionAttestation(
+      createConditionAttestationStore(database.db),
+      authorization,
+      createConditionAttestationReader(rpcConfig),
       createOperationChain(rpcConfig),
       storage,
       config.KATHA_CLUSTER,

@@ -31,6 +31,7 @@ configured verifier role, not a finalized Registry role.
 | `POST /admin/artworks`                                     | Admin                                   | `artworkDraftCreateRequestSchema`                             | `artworkDraftResponseSchema` / 201                         |
 | `POST /admin/artworks/:kathaId/operations/registration`    | Admin + Registry registration authority | Permanent ID; empty query; `artworkRegistrationRequestSchema` | `unsignedOperationResponseSchema` / 201                    |
 | `POST /verifier/artworks/:kathaId/operations/verification` | Verifier + Registry verifier authority  | Permanent ID; empty query; `artworkVerificationRequestSchema` | `unsignedOperationResponseSchema` / 201                    |
+| `POST /verifier/artworks/:kathaId/operations/condition`    | Verifier + current Registry verifier    | `conditionAttestationRequestSchema`                           | `unsignedOperationResponseSchema` / 201                    |
 | `PATCH /admin/artworks/:kathaId`                           | Admin                                   | Permanent ID; `artworkDraftUpdateRequestSchema`               | `artworkDraftResponseSchema` / 200                         |
 | `GET /artworks`                                            | Public                                  | `artworkDiscoveryQuerySchema`                                 | `artworkDiscoveryResponseSchema` / 200                     |
 | `GET /artworks/:kathaId`                                   | Public                                  | Permanent ID; empty query                                     | `publicArtworkDetailSchema` / 200                          |
@@ -227,3 +228,6 @@ no real sessions, credentials or private uploads are needed to check their shape
 [Artwork verification preparation](artwork-verification-api.md) additionally requires
 explicit manual authenticity confirmation and matching finalized registration.
 Prepared operations are private pending intent, separate from finalized attestations.
+
+[Condition attestation preparation](condition-attestation-api.md) validates exact private
+report bytes and reviewed chain version, with owner/custody scope after minting.

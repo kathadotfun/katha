@@ -30,8 +30,10 @@ Core collection, and existing authentication attestation. They reject zero
 hashes, invalid UUIDs, nonpositive or future inspection times, wrong authority,
 invalid reasons, stale/skipped versions, and a bound Core asset. The Registry
 does not assert physical possession or a current Core owner from these reports.
-A later owner- and custody-scoped path must validate those live facts before
-post-mint inspections can affect resale eligibility.
+`record_minted_condition` now validates the canonical bound Core asset, its collection
+and current owner, and the current held custody revision/subject. It appends scoped
+follow-up reports; stale owners/revisions and transit fail atomically. Reports do
+not independently approve resale.
 
 `pnpm program:test` exercises version 1 and 2, account relationships,
 authorization, invalid inputs, duplicate IDs/versions, rollback, historical
@@ -43,3 +45,8 @@ account relationships before composing these two pre-mint instructions.
 
 See the [Anchor account constraints](https://www.anchor-lang.com/docs/references/account-constraints)
 and [account space reference](https://www.anchor-lang.com/docs/references/space).
+
+[Condition attestation preparation](condition-attestation-api.md) selects initial,
+unminted or minted condition instructions. Minted follow-up reports bind the current
+Core owner and held custody revision in their hashed private document; execution
+rechecks scope. Preparation does not finalize inspection state or approve resale.
