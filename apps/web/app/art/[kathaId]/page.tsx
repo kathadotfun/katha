@@ -7,11 +7,19 @@ import {
   artworkCategoryLabels,
   loadPublicArtwork,
 } from "../../../lib/artwork-page";
+import {
+  checkMetadataIntegrity,
+  historyOffset,
+  validateArtworkHistory,
+} from "../../../lib/artwork-provenance";
 import { serverApi, serverApiOrigin } from "../../../lib/server-api";
 
 export const dynamic = "force-dynamic";
 
-type ArtworkPageProps = { params: Promise<{ kathaId: string }> };
+type ArtworkPageProps = {
+  params: Promise<{ kathaId: string }>;
+  searchParams: Promise<{ historyOffset?: string | string[] }>;
+};
 
 const getArtwork = cache(async (id: string) => {
   const artwork = await loadPublicArtwork(id, (validId) =>
@@ -32,7 +40,24 @@ export async function generateMetadata({
   };
 }
 
-export default async function ArtworkPage({ params }: ArtworkPageProps) {
+export default async function ArtworkPage({ params, searchParams }: ArtworkPageProps) {
   const artwork = await getArtwork((await params).kathaId);
-  return <ArtworkDetail artwork={artwork} apiOrigin={serverApiOrigin()} />;
+  const offset = historyOffset((await searchParams).historyOffset);
+  const apiOrigin = serverApiOrigin();
+  const [history, integrity] = await Promise.all([
+    offset === null
+      ? Promise.resolve(null)
+      : serverApi()
+          .provenance(artwork.kathaId, { limit: "20", offset: String(offset) })
+          .then((value) => validateArtworkHistory(artwork, value, offset))
+          .catch(() => null),
+    checkMetadataIntegrity(artwork, apiOrigin),
+  ]);
+  return (
+    <ArtworkDetail
+      artwork={artwork}
+      apiOrigin={apiOrigin}
+      evidence={{ history, integrity }}
+    />
+  );
 }

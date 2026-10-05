@@ -7,6 +7,8 @@ import {
   artworkPhotos,
   artworkPhotoUrl,
 } from "../lib/artwork-page";
+import type { ArtworkEvidence } from "../lib/artwork-provenance";
+import { ArtworkProvenance } from "./artwork-provenance";
 import { ArtworkCare } from "./artwork-care";
 import { ArtworkPhoto } from "./artwork-photo";
 
@@ -34,9 +36,11 @@ function Documentation({
 export function ArtworkDetail({
   artwork,
   apiOrigin,
+  evidence,
 }: {
   artwork: PublicArtworkDetail;
   apiOrigin: string;
+  evidence?: ArtworkEvidence;
 }) {
   const photos = artworkPhotos(artwork);
   const hero = photos[0];
@@ -134,6 +138,7 @@ export function ArtworkDetail({
         />
       </div>
       <ArtworkCare artwork={artwork} />
+      <ArtworkProvenance artwork={artwork} evidence={evidence} />
       {photos.length > 1 && (
         <section
           aria-labelledby="artwork-photographs"

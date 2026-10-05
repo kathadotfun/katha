@@ -30,9 +30,14 @@ async function viewModule(path: string, aliases: Readonly<Record<string, string>
 
 const photoModule = await viewModule("../components/artwork-photo.tsx", {});
 const careModule = await viewModule("../components/artwork-care.tsx", {});
+const provenanceModule = await viewModule("../components/artwork-provenance.tsx", {
+  "../lib/artwork-provenance": new URL("../lib/artwork-provenance.ts", import.meta.url)
+    .href,
+});
 const detailModule = await viewModule("../components/artwork-detail.tsx", {
   "./artwork-photo": photoModule,
   "./artwork-care": careModule,
+  "./artwork-provenance": provenanceModule,
   "../lib/artwork-page": new URL("../lib/artwork-page.ts", import.meta.url).href,
 });
 const { ArtworkDetail } = await import(detailModule);
@@ -75,7 +80,8 @@ test("the actual view renders documentation, attribution and approved photograph
       html.includes('referrerpolicy="no-referrer"'),
   );
   assert.ok(!html.includes("/artists/")); // Artist route arrives in step 084.
-  assert.ok(!html.includes(artworkFixture.ownership.ownerWallet));
+  assert.ok(html.includes(artworkFixture.ownership.ownerWallet));
+  assert.ok(html.includes("Recorded digital owner"));
   assert.ok(html.includes("Katha verification recorded"));
 });
 
@@ -220,7 +226,11 @@ test("dated manual custody is described without asserting digital ownership or d
     assert.ok(html.includes(label));
     assert.ok(html.includes("30 Sept 2026, 04:00 UTC"));
     assert.ok(html.includes("Digital ownership can change without moving"));
-    assert.ok(!html.includes(artwork.ownership.ownerWallet));
+    const custodySection = html
+      .split('aria-labelledby="artwork-custody"')[1]
+      ?.split("</section>")[0];
+    assert.ok(custodySection);
+    assert.ok(!custodySection.includes(artwork.ownership.ownerWallet));
     if (state === "IN_TRANSIT") assert.ok(html.includes("does not confirm receipt"));
   }
 });
@@ -294,4 +304,162 @@ test("unverified or missing/invalid inspection records fail the public boundary 
         error instanceof PublicApiError && error.kind === "INVALID_RESPONSE",
     );
   }
+});
+
+const { ArtworkProvenance } = await import(provenanceModule);
+const { provenanceFixture } = await import("./fixtures/provenance.ts");
+function renderHistory(
+  history = provenanceFixture,
+  cluster: "DEVNET" | "LOCALNET" = "LOCALNET",
+) {
+  return renderToStaticMarkup(
+    createElement(ArtworkProvenance, {
+      artwork: { ...artworkFixture, chain: { ...artworkFixture.chain, cluster } },
+      evidence: {
+        history,
+        integrity: { status: "MISMATCH", actualHash: "f".repeat(64) },
+      },
+    }),
+  );
+}
+test("provenance renders indexed transfers, exact slots, tampering and network-specific links", () => {
+  const html = renderHistory();
+  for (const text of [
+    "Digital ownership transferred",
+    "9007199254740993",
+    "Metadata integrity failure",
+    "Recorded digital owner",
+    "not a live ownership check",
+    "History freshness is unconfirmed",
+  ])
+    assert.ok(html.includes(text), text);
+  assert.ok(!html.includes("https://explorer.solana.com"));
+  assert.ok(!html.includes("Previous owner"));
+  const devnet = renderHistory(provenanceFixture, "DEVNET");
+  assert.ok(devnet.includes("?cluster=devnet"));
+  assert.ok(devnet.includes('rel="noopener noreferrer"'));
+});
+test("every indexing state, owner mismatch, empty history and pagination remain explicit", () => {
+  for (const status of [
+    "UNKNOWN",
+    "GAP_DETECTED",
+    "LAGGING",
+    "STALE",
+    "AT_OBSERVED_HEAD",
+  ] as const) {
+    const html = renderHistory({
+      ...provenanceFixture,
+      items: [],
+      pagination: { limit: 20, offset: 20, hasMore: true },
+      indexing: {
+        ...provenanceFixture.indexing,
+        status,
+        ownerCheck: {
+          status: "MISMATCH",
+          observedSlot: "9007199254740993",
+          checkedAt: artworkFixture.ownership.observedAt,
+        },
+      },
+    });
+    assert.ok(html.includes("No indexed events"));
+    assert.ok(html.includes("Do not rely on this owner record"));
+    assert.ok(html.includes("?historyOffset=0#provenance"));
+    assert.ok(html.includes("?historyOffset=40#provenance"));
+    assert.ok(!html.includes("history is complete"));
+  }
+});
+
+test("Registry lifecycle events preserve old commitments and physical inspection times", () => {
+  const at = artworkFixture.ownership.observedAt;
+  const wallet = artworkFixture.chain.coreAssetAddress;
+  const base = provenanceFixture.items[0]!;
+  const hash = "e".repeat(64);
+  const history = {
+    ...provenanceFixture,
+    items: [
+      {
+        ...base,
+        id: "00000001-1111-4111-8111-111111111111",
+        type: "REGISTRATION" as const,
+        data: {
+          registryRecordAddress: wallet,
+          artistId: artworkFixture.artist.id,
+          creatorWallet: null,
+          authorshipEvidenceHash: hash,
+          registeredBy: wallet,
+          registeredAt: at,
+        },
+      },
+      {
+        ...base,
+        id: "00000002-1111-4111-8111-111111111111",
+        type: "VERIFICATION" as const,
+        data: { authorshipEvidenceHash: hash, verifierWallet: wallet, verifiedAt: at },
+      },
+      {
+        ...base,
+        id: "00000003-1111-4111-8111-111111111111",
+        type: "METADATA" as const,
+        data: {
+          version: 1,
+          documentHash: hash,
+          revisionAddress: wallet,
+          committedBy: wallet,
+          committedAt: at,
+        },
+      },
+      {
+        ...base,
+        id: "00000004-1111-4111-8111-111111111111",
+        type: "CONDITION" as const,
+        data: {
+          version: 1,
+          reportAddress: wallet,
+          documentHash: hash,
+          grade: "FAIR" as const,
+          reason: "PRE_RESALE" as const,
+          verifierWallet: wallet,
+          inspectedAt: "2026-09-01T00:00:00.000Z",
+          recordedAt: at,
+        },
+      },
+      {
+        ...base,
+        id: "00000005-1111-4111-8111-111111111111",
+        type: "CUSTODY" as const,
+        data: {
+          revision: "1",
+          fromState: "UNKNOWN" as const,
+          toState: "KATHA_HELD" as const,
+          attestedBy: wallet,
+          recordedAt: at,
+        },
+      },
+      {
+        ...base,
+        id: "00000006-1111-4111-8111-111111111111",
+        type: "MINT" as const,
+        data: {
+          assetAddress: wallet,
+          initialOwner: wallet,
+          metadataVersion: 1,
+          metadataHash: hash,
+          mintedBy: wallet,
+          mintedAt: at,
+        },
+      },
+    ],
+  };
+  const html = renderHistory(history);
+  for (const label of [
+    "Permanent artwork identity registered",
+    "Katha verification recorded",
+    "Metadata version 1 committed",
+    "Condition report 1: fair",
+    "Physical custody recorded",
+    "Core artwork asset minted",
+    hash,
+    "1 Sept 2026, 00:00 UTC",
+  ])
+    assert.ok(html.includes(label), label);
 });

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
@@ -11,12 +12,45 @@ import { artworkFixture } from "../apps/web/tests/fixtures/artwork.ts";
 
 const webDirectory = fileURLToPath(new URL("../apps/web/", import.meta.url));
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
+const { metadataBytes, provenanceFixture } =
+  await import("../apps/web/tests/fixtures/provenance.ts");
+const metadataHash = createHash("sha256").update(metadataBytes).digest("hex");
+let apiOrigin;
 let requests = 0;
 const api = createServer((request, response) => {
   requests++;
   response.setHeader("Content-Type", "application/json");
-  const id = request.url?.split("/").at(-1);
-  if (id === "KATHA-PAUBHA-000001") return response.end(JSON.stringify(artworkFixture));
+  const path = new URL(request.url, "http://localhost").pathname;
+  if (path.endsWith("/provenance")) {
+    if (path.includes("KATHA-PAUBHA-000001")) {
+      const offset = Number(
+        new URL(request.url, "http://localhost").searchParams.get("offset"),
+      );
+      return response.end(
+        JSON.stringify({
+          ...provenanceFixture,
+          items: offset ? [] : provenanceFixture.items,
+          pagination: { limit: 20, offset, hasMore: offset === 0 },
+        }),
+      );
+    }
+    response.statusCode = 503;
+    return response.end("{}");
+  }
+  if (path === `/storage/public/${metadataHash}.json`)
+    return response.end(metadataBytes);
+  const id = path.split("/").at(-1);
+  if (id === "KATHA-PAUBHA-000001")
+    return response.end(
+      JSON.stringify({
+        ...artworkFixture,
+        metadata: {
+          ...artworkFixture.metadata,
+          documentHash: metadataHash,
+          uri: `${apiOrigin}/storage/public/${metadataHash}.json`,
+        },
+      }),
+    );
   if (id === "KATHA-PAUBHA-000002")
     return response.end(
       JSON.stringify({
@@ -50,7 +84,7 @@ let web;
 try {
   api.listen(0, "127.0.0.1");
   await once(api, "listening");
-  const apiOrigin = `http://127.0.0.1:${port(api)}`;
+  apiOrigin = `http://127.0.0.1:${port(api)}`;
   const reservation = createServer();
   reservation.listen(0, "127.0.0.1");
   await once(reservation, "listening");
@@ -131,13 +165,26 @@ try {
     "Record freshness is unconfirmed",
   ])
     assert.ok(visibleMarkup.includes(text), text);
-  assert.ok(!success.html.includes(artworkFixture.ownership.ownerWallet));
-  assert.equal(requests, 1, "Metadata and content must share one API read per render");
+  assert.ok(success.html.includes(artworkFixture.ownership.ownerWallet));
+  assert.ok(visibleMarkup.includes("Digital ownership transferred"));
+  assert.ok(visibleMarkup.includes("Metadata bytes match the published commitment"));
+  assert.ok(visibleMarkup.includes("?historyOffset=20#provenance"));
+  assert.equal(
+    requests,
+    3,
+    "One artwork read, one history read and one metadata document read per render",
+  );
 
+  const nextHistory = await page(`${artworkFixture.kathaId}?historyOffset=20`);
+  assert.equal(nextHistory.status, 200);
+  assert.ok(nextHistory.html.includes("No indexed events"));
+  assert.ok(nextHistory.html.includes("?historyOffset=0#provenance"));
   const sparse = await page("KATHA-PAUBHA-000002");
   assert.equal(sparse.status, 200);
   assert.ok(sparse.html.includes("Artwork photography is not available yet."));
   assert.ok(sparse.html.includes("Not yet documented."));
+  assert.ok(sparse.html.includes("History is unavailable"));
+  assert.ok(sparse.html.includes("Metadata integrity is unchecked"));
   const beforeInvalid = requests;
   const invalid = await page("not-a-permanent-id");
   assert.ok([200, 404].includes(invalid.status));
@@ -156,7 +203,7 @@ try {
     assert.ok(!failure.html.includes('<h1 id="artwork-title"'));
   }
   globalThis.console.log(
-    "Artwork route: success, canonical metadata, one API read, sparse content, invalid/missing IDs, outage and identity mismatch passed.",
+    "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch passed.",
   );
 } finally {
   if (web?.pid && web.exitCode === null) {

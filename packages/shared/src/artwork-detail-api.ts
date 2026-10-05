@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { metadataDocumentSchema } from "./document-preparation.js";
 import { publicArtworkSummarySchema } from "./artwork-discovery-api.js";
 import { artworkDraftResponseSchema } from "./artwork-draft-api.js";
 import { walletAddressSchema } from "./artwork-domain.js";
@@ -63,7 +64,7 @@ export const publicArtworkDetailSchema = z
     }),
     metadata: z.strictObject({
       version: z.number().int().min(1).max(4294967295),
-      uri: z.httpUrl(),
+      uri: metadataDocumentSchema.shape.image,
       ...commitment,
     }),
     condition: z.strictObject({
