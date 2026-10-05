@@ -182,3 +182,7 @@ export {
   type IndexerRecoveryStore,
   type IndexerGapReason,
 } from "./indexer-recovery-store.js";
+export {
+  createPublicProvenanceStore,
+  type PublicProvenanceStore,
+} from "./public-provenance-store.js";

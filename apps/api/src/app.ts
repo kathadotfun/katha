@@ -1,3 +1,8 @@
+import type { ArtworkProvenanceBoundary } from "./artwork-provenance.js";
+import {
+  artworkProvenanceParamsSchema,
+  artworkProvenanceQuerySchema,
+} from "@katha/shared";
 import type { OperationReceiptsBoundary } from "./operation-receipts.js";
 import {
   operationReceiptParamsSchema,
@@ -84,6 +89,7 @@ export function createApi(
   minting?: ArtworkMintingBoundary,
   metadataRevisions?: MetadataRevisionsBoundary,
   receipts?: OperationReceiptsBoundary,
+  provenance?: ArtworkProvenanceBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -216,6 +222,14 @@ export function createApi(
     app.get("/artworks", async (c) =>
       c.json(await discovery.list(parseQuery(c, artworkDiscoveryQuerySchema))),
     );
+  }
+  if (provenance) {
+    app.get("/artworks/:kathaId/provenance", async (c) => {
+      const { kathaId } = parseParams(c, artworkProvenanceParamsSchema);
+      return c.json(
+        await provenance.history(kathaId, parseQuery(c, artworkProvenanceQuerySchema)),
+      );
+    });
   }
   if (details) {
     app.get("/artworks/:kathaId", async (c) => {

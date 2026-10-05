@@ -1,3 +1,19 @@
+import { createArtworkProvenance } from "../src/artwork-provenance.js";
+import {
+  createPublicProvenanceStore,
+  indexerNetworks,
+  ownershipReconciliations,
+} from "@katha/db";
+import { artworkProvenanceResponseSchema } from "@katha/shared";
+import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
+import {
+  KATHA_REGISTRY_PROGRAM_ADDRESS,
+  findArtworkPda,
+  findAssetPda,
+  findReportPda,
+  findReviseMintedMetadataRevisionPda,
+  findTransitionCustodyTransitionPda,
+} from "@katha/solana/registry";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -630,6 +646,270 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     expect(reports.find((row) => row.id === condition.id)?.notes).toBe(
       "PRIVATE REPORT",
     );
+    // Synthetic indexed history exercises the real query boundary; no transaction is sent.
+    const historical = await fixture({ ownership: false });
+    const [registryArtwork] = await findArtworkPda({ kathaId: historical.kathaId });
+    const [coreAsset] = await findAssetPda({ artwork: registryArtwork });
+    const [metadataRevision] = await findReviseMintedMetadataRevisionPda({
+      artwork: registryArtwork,
+      nextVersion: 1,
+    });
+    const [conditionReport] = await findReportPda({ reportId: Buffer.alloc(16, 1) });
+    const [custodyTransition] = await findTransitionCustodyTransitionPda({
+      artwork: registryArtwork,
+      nextRevision: 1n,
+    });
+    const indexedAt = new Date();
+    const sec = String(Math.floor(indexedAt.getTime() / 1000));
+    const publicStore = createPublicProvenanceStore(database.db, "LOCALNET", {
+      registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
+      core: CORE_PROGRAM_ADDRESS,
+    });
+    const provenance = createArtworkProvenance(publicStore);
+    const historyApp = createApi(
+      createLogger((s) => logs.push(s)),
+      undefined,
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      provenance,
+    );
+    const claims = [
+      {
+        name: "ArtworkRegistered",
+        artwork: registryArtwork,
+        kathaId: historical.kathaId,
+        artistId: historical.artistId,
+        creatorWallet: historical.creatorWallet,
+        category: historical.category,
+        creationYear: historical.creationYear,
+        authorshipEvidenceHash: "e".repeat(64),
+        collection: wallet.address,
+        registeredBy: wallet.address,
+        registeredAt: sec,
+      },
+      {
+        name: "MetadataCommitted",
+        artwork: registryArtwork,
+        kathaId: historical.kathaId,
+        revision: metadataRevision,
+        version: 1,
+        documentHash: "b".repeat(64),
+        committedBy: wallet.address,
+        committedAt: sec,
+      },
+      {
+        name: "ConditionRecorded",
+        artwork: registryArtwork,
+        kathaId: historical.kathaId,
+        report: conditionReport,
+        reportId: "01".repeat(16),
+        version: 1,
+        reportHash: "c".repeat(64),
+        grade: 0,
+        reason: 0,
+        verifier: wallet.address,
+        inspectedAt: sec,
+        recordedAt: sec,
+      },
+      {
+        name: "CustodyUpdated",
+        artwork: registryArtwork,
+        kathaId: historical.kathaId,
+        transition: custodyTransition,
+        revision: "1",
+        action: 0,
+        fromState: 0,
+        toState: 1,
+        attestedBy: wallet.address,
+        recordedAt: sec,
+      },
+      {
+        name: "ArtworkMinted",
+        artwork: registryArtwork,
+        kathaId: historical.kathaId,
+        asset: coreAsset,
+        collection: wallet.address,
+        initialOwner: wallet.address,
+        ownerWallet: wallet.address,
+        metadataVersion: 1,
+        metadataHash: "b".repeat(64),
+        mintedBy: wallet.address,
+        mintedAt: sec,
+      },
+      {
+        name: "CoreTransfer",
+        asset: coreAsset,
+        collection: wallet.address,
+        newOwner: wallet.address,
+        ownerWallet: wallet.address,
+        authority: wallet.address,
+      },
+      {
+        name: "ConditionRecorded",
+        artwork: registryArtwork,
+        kathaId: historical.kathaId,
+        report: conditionReport,
+        reportId: "01".repeat(16),
+        version: 2,
+        reportHash: "d".repeat(64),
+        grade: 1,
+        reason: 3,
+        verifier: wallet.address,
+        inspectedAt: sec,
+        recordedAt: sec,
+      },
+    ];
+    const historyRows = [];
+    const positions = [
+      [0, 0, -1, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 1],
+      [0, 1, -1, 0],
+      [1, 0, -1, 0],
+      [1, 1, -1, 0],
+      [2, 0, -1, 0],
+    ] as const;
+    // Insert in reverse order: response order must come from chain position, never insertion time.
+    for (let n = claims.length - 1; n >= 0; n--) {
+      const claim = claims[n]!;
+      const [event] = await database.db
+        .insert(indexedEvents)
+        .values({
+          cluster: "LOCALNET",
+          programAddress:
+            n === 5 ? CORE_PROGRAM_ADDRESS : KATHA_REGISTRY_PROGRAM_ADDRESS,
+          signature: String(4 + positions[n]![0]).repeat(88),
+          slot: 2n,
+          transactionIndex: positions[n]![0],
+          outerInstructionIndex: positions[n]![1],
+          innerInstructionIndex: positions[n]![2],
+          eventIndex: positions[n]![3],
+          kind: n === 4 || n === 5 ? "OWNERSHIP" : "REGISTRY",
+          artworkId: historical.id,
+          assetAddress: n === 4 || n === 5 ? coreAsset : null,
+          payload: {
+            ...claim,
+            privateEvidence: "PRIVATE INDEX PAYLOAD",
+            notes: "PRIVATE REPORT NOTES",
+            shipping: "PRIVATE FULFILLMENT",
+          },
+          chainRecordedAt: indexedAt,
+          indexedAt,
+        })
+        .returning();
+      if (!event) throw new Error("Expected synthetic history event");
+      historyRows.unshift(event);
+    }
+    await database.db.insert(artworkOwnership).values({
+      cluster: "LOCALNET",
+      artworkId: historical.id,
+      assetAddress: coreAsset,
+      ownerWallet: wallet.address,
+      sourceEventId: historyRows[5]!.id,
+    });
+    const unknownHistory = await provenance.history(historical.kathaId, {
+      limit: 100,
+      offset: 0,
+    });
+    expect(unknownHistory.indexing.status).toBe("UNKNOWN");
+    expect(unknownHistory.items.map((e) => e.type)).toEqual([
+      "REGISTRATION",
+      "METADATA",
+      "CONDITION",
+      "CUSTODY",
+      "MINT",
+      "TRANSFER",
+      "CONDITION",
+    ]);
+    await database.db.insert(indexerNetworks).values({
+      cluster: "LOCALNET",
+      registryProgram: KATHA_REGISTRY_PROGRAM_ADDRESS,
+      collection: wallet.address,
+      genesisHash: wallet.address,
+      finalizedSlot: 2n,
+    });
+    await database.db.insert(indexerCheckpoints).values(
+      [KATHA_REGISTRY_PROGRAM_ADDRESS, CORE_PROGRAM_ADDRESS].map((programAddress) => ({
+        cluster: "LOCALNET" as const,
+        programAddress,
+        fromSlot: 0n,
+        scannedThroughSlot: 2n,
+        lastSignature: "4".repeat(88),
+        lastSignatureSlot: 2n,
+      })),
+    );
+    await database.db.insert(ownershipReconciliations).values({
+      cluster: "LOCALNET",
+      artworkId: historical.id,
+      sourceEventId: historyRows[5]!.id,
+      indexedOwner: wallet.address,
+      observedOwner: wallet.address,
+      observedSlot: 2n,
+      status: "MATCH",
+    });
+    const history = artworkProvenanceResponseSchema.parse(
+      await (
+        await historyApp.request(`/artworks/${historical.kathaId}/provenance`)
+      ).json(),
+    );
+    expect(history.indexing.status).toBe("AT_OBSERVED_HEAD");
+    expect(history.attribution.artist.id).toBe(historical.artistId);
+    expect(history.chain.coreAssetAddress).toBe(coreAsset);
+    expect(history.items.map((e) => e.id)).toEqual(historyRows.map((e) => e.id));
+    expect(JSON.stringify(history)).not.toContain("PRIVATE");
+    const pagedIds: string[] = [];
+    for (let offset = 0; offset < 8; offset += 2) {
+      const page = await provenance.history(historical.kathaId, { limit: 2, offset });
+      pagedIds.push(...page.items.map((e) => e.id));
+      expect(page.pagination.hasMore).toBe(offset < 6);
+    }
+    expect(pagedIds).toEqual(historyRows.map((e) => e.id));
+    const conditions = await provenance.history(historical.kathaId, {
+      limit: 20,
+      offset: 0,
+      type: "CONDITION",
+    });
+    expect(
+      conditions.items.map((e) => (e.type === "CONDITION" ? e.data.version : null)),
+    ).toEqual([1, 2]);
+    expect(JSON.stringify(conditions)).not.toContain("PRIVATE");
+    for (const hiddenRecord of [...hidden, devnet])
+      expect(
+        (await historyApp.request(`/artworks/${hiddenRecord.kathaId}/provenance`))
+          .status,
+      ).toBe(404);
+    expect(
+      (await historyApp.request("/artworks/KATHA-PAUBHA-999999/provenance")).status,
+    ).toBe(404);
+    expect(
+      await createPublicProvenanceStore(database.db, "DEVNET", {
+        registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
+        core: CORE_PROGRAM_ADDRESS,
+      }).find(historical.kathaId, { limit: 20, offset: 0 }),
+    ).toBeNull();
+    await database.db
+      .$client`UPDATE indexer_checkpoints SET gap_from_slot=1, gap_through_slot=2, gap_reason='HISTORY_UNAVAILABLE' WHERE cluster='LOCALNET' AND program_address=${CORE_PROGRAM_ADDRESS}`;
+    const gapHistory = await provenance.history(historical.kathaId, {
+      limit: 20,
+      offset: 0,
+    });
+    expect(gapHistory.indexing.status).toBe("GAP_DETECTED");
+    expect(gapHistory.items).toHaveLength(7);
     expect(logs.join("")).not.toContain("PRIVATE");
   } finally {
     await rm(storageDirectory, { recursive: true, force: true });

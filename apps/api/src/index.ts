@@ -1,3 +1,7 @@
+import { createArtworkProvenance } from "./artwork-provenance.js";
+import { createPublicProvenanceStore } from "@katha/db";
+import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
+import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "@katha/solana/registry";
 import { createOperationReceipts } from "./operation-receipts.js";
 import { createOperationReceiptStore } from "@katha/db";
 import { createOperationReceiptReader } from "@katha/solana";
@@ -175,6 +179,13 @@ function startApi() {
       sessions,
       createOperationReceiptReader(rpcConfig),
       config.KATHA_CLUSTER,
+    ),
+    createArtworkProvenance(
+      createPublicProvenanceStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+        { registry: KATHA_REGISTRY_PROGRAM_ADDRESS, core: CORE_PROGRAM_ADDRESS },
+      ),
     ),
   );
   const port = config.API_PORT;

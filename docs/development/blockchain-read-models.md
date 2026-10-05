@@ -171,3 +171,7 @@ Core gap; it never creates a transfer or replaces the indexed owner. A later suc
 backfill and match can resolve it. A diagnostic referencing an older source event
 must be treated as stale by consumers. Prepared documents and physical custody
 remain separate. Public status/timeline responses are provided by the provenance API.
+
+[Public provenance and condition history](artwork-provenance-api.md) now project
+finalized Registry/Core events, immutable attribution, both stream checkpoints,
+network observations and source-aware owner diagnostics in a read-only snapshot.

@@ -17,7 +17,7 @@ import {
 } from "./schema/blockchain-read-models.js";
 
 // Discovery and detail must use the same publication boundary.
-function publicationPredicate(cluster: "LOCALNET" | "DEVNET") {
+export function publicationPredicate(cluster: "LOCALNET" | "DEVNET") {
   return and(
     isNotNull(artworks.publishedAt),
     sql`${artworks.publishedAt} <= statement_timestamp()`,

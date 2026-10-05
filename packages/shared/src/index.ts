@@ -176,3 +176,4 @@ export {
   type MetadataRevisionRequest,
 } from "./metadata-revision-api.js";
 export * from "./operation-receipt-api.js";
+export * from "./artwork-provenance-api.js";

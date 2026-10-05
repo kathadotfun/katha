@@ -95,3 +95,6 @@ and `pnpm indexer:inspect`, a read-only two-stream diagnostic. See
 page/consumer contracts and the explicit durable `pnpm indexer:run` worker. The
 inspector command does not connect to PostgreSQL. Neither worker starts
 automatically with the HTTP service.
+
+Public provenance and condition history are available at
+`GET /artworks/:kathaId/provenance`; see the [contract and indexing status guide](artwork-provenance-api.md).

@@ -4,7 +4,7 @@ The Solana package provides `createActivityReader`, `decodeFinalizedActivity` an
 `decodeRegistryEvent`. The API codebase provides an awaited polling loop and a
 read-only inspection command and an explicit bounded durable worker. Decoded
 observations can now be stored atomically with ownership and checkpoints; public
-provenance responses remain a separate feature.
+provenance responses are served by the [public provenance API](artwork-provenance-api.md).
 
 ## Inspect configured activity
 
@@ -201,8 +201,8 @@ history cannot be distinguished from that history; missing cursors/changed evide
 remain guarded.
 
 No worker starts automatically with HTTP. No signing, submission, publication,
-shipping or manual custody change occurs. Public provenance/status endpoints and
-marketplace settlement indexing remain separate features.
+shipping or manual custody change occurs. Public provenance/status is served by the [provenance API](artwork-provenance-api.md);
+marketplace settlement indexing remains a later feature.
 
 ## Verification
 
@@ -226,3 +226,7 @@ ownership order, restart, overlapping streams, stale cursor rejection and whole-
 rollback against disposable PostgreSQL. These use synthetic data; live Devnet
 ingestion is not claimed. Recovery tests cover multiple pages, frozen ranges,
 missing/pruned history, budgets, resets, retries, races and non-invented ownership.
+
+The [public provenance API](artwork-provenance-api.md) returns retained finalized
+events with both stream checkpoints, persisted network observations and owner-check
+freshness. It does not query RPC or turn reconciliation diagnostics into events.

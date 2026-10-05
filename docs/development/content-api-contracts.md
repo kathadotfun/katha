@@ -35,6 +35,7 @@ configured verifier role, not a finalized Registry role.
 | `PATCH /admin/artworks/:kathaId`                           | Admin                                           | Permanent ID; `artworkDraftUpdateRequestSchema`                              | `artworkDraftResponseSchema` / 200                         |
 | `GET /artworks`                                            | Public                                          | `artworkDiscoveryQuerySchema`                                                | `artworkDiscoveryResponseSchema` / 200                     |
 | `GET /artworks/:kathaId`                                   | Public                                          | Permanent ID; empty query                                                    | `publicArtworkDetailSchema` / 200                          |
+| `GET /artworks/:kathaId/provenance`                        | Public                                          | Permanent ID; `artworkProvenanceQuerySchema`                                 | `artworkProvenanceResponseSchema` / 200                    |
 | `POST /verifier/artworks/:kathaId/documents/metadata`      | Verifier                                        | Permanent ID; `metadataPreparationRequestSchema`                             | `preparedDocumentResponseSchema` / 201                     |
 | `POST /verifier/artworks/:kathaId/documents/condition`     | Verifier                                        | Permanent ID; `conditionPreparationRequestSchema`                            | `preparedDocumentResponseSchema` / 201                     |
 | `GET /storage/public/:filename`                            | Public, approved reference                      | Hash filename; empty query                                                   | Verified bytes and validated MIME type / 200               |
@@ -53,8 +54,9 @@ and logout behavior are in [wallet authentication](wallet-authentication.md).
 preparation return unsigned transactions for the authorized wallet. Private
 fulfillment status is manual coordination, separate from finalized custody.
 Uninstalled paths return the shared 404 envelope after applicable middleware.
-Upload, draft-list, provenance
-and marketplace routes remain planned.
+Upload, draft-list and marketplace routes remain planned.
+[Public provenance and condition timelines](artwork-provenance-api.md) expose
+finalized history and persisted indexing observations.
 
 ## Input and concurrency rules
 
@@ -99,6 +101,7 @@ requests do not verify, mint, approve resale or submit blockchain transactions.
 | Public artist lists/details  | Verified profiles, approved biography/links; detail may include creator wallet                                        | Payout wallet, verifier wallet, private settings; related artwork array is currently empty                                                                 |
 | Public artwork lists         | Permanent ID, category, title/year, artist identity and PUBLIC hero image ID/hash                                     | Evidence, storage keys, captions, wallet addresses and fulfillment                                                                                         |
 | Public artwork detail        | Approved content/materials/public media, finalized attestation summaries, indexed ownership and manual custody labels | Private evidence/documents/notes, provider paths and fulfillment; indexed ownership is an observation, manual custody is not a finalized chain attestation |
+| Public artwork provenance    | Finalized chain commitments, typed history and persisted indexing status                                              | Private notes, evidence bytes, media hashes, fulfillment and raw payloads                                                                                  |
 | Admin artist/draft responses | Fields needed to manage profiles/drafts, including artist payout settings or draft evidence hash                      | These are protected responses, not public profile contracts                                                                                                |
 | Prepared public metadata     | Canonical approved artwork content, attribution and PUBLIC media references                                           | Evidence hash, payout settings, captions, condition notes and PRIVATE media                                                                                |
 | Prepared condition response  | ID, version, document hash and `uri: null`                                                                            | Private canonical bytes, notes and inspection media delivery                                                                                               |
