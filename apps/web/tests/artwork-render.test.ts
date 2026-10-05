@@ -463,3 +463,98 @@ test("Registry lifecycle events preserve old commitments and physical inspection
   ])
     assert.ok(html.includes(label), label);
 });
+
+const explorationModule = await viewModule("../components/artwork-exploration.tsx", {
+  "../lib/artwork-page": new URL("../lib/artwork-page.ts", import.meta.url).href,
+  "../lib/artwork-exploration": new URL(
+    "../lib/artwork-exploration.ts",
+    import.meta.url,
+  ).href,
+  "./artwork-photo": photoModule,
+});
+const { ArtworkExploration } = await import(explorationModule);
+const summary = {
+  kathaId: artworkFixture.kathaId,
+  category: artworkFixture.category,
+  title: artworkFixture.title,
+  creationYear: artworkFixture.creationYear,
+  artist: artworkFixture.artist,
+  heroImage: {
+    id: artworkFixture.media[0]!.id,
+    contentHash: artworkFixture.media[0]!.contentHash,
+    mimeType: "image/png",
+    altText: "Synthetic catalogue photo",
+  },
+};
+test("exploration presents artwork, attribution and real category/pagination links without sale claims", () => {
+  const html = renderToStaticMarkup(
+    createElement(ArtworkExploration, {
+      apiOrigin: "http://localhost:3001",
+      state: {
+        kind: "READY",
+        query: { category: "PAUBHA", offset: 12 },
+        page: {
+          items: [summary],
+          pagination: { limit: 12, offset: 12, hasMore: true },
+        },
+      },
+    }),
+  );
+  for (const text of [
+    "Real World Assets",
+    "Created by",
+    artworkFixture.artist.displayName,
+    artworkFixture.title,
+    'href="/art/KATHA-PAUBHA-000001"',
+    ".png",
+    "?category=PAUBHA&amp;offset=24",
+    "availability for sale",
+    'aria-current="page"',
+  ])
+    assert.ok(html.includes(text), text);
+  assert.ok(!html.includes("Buy now"));
+  assert.ok(!html.includes("https://picsum"));
+  assert.equal((html.match(/<h1(?:\s|>)/g) ?? []).length, 1);
+});
+test("empty, missing-image, invalid-query and unavailable exploration remain explicit and safe", () => {
+  for (const [state, text] of [
+    [{ kind: "INVALID_QUERY" }, "These filters"],
+    [
+      { kind: "UNAVAILABLE", query: { category: "THANGKA", offset: 12 } },
+      "Your filters are preserved",
+    ],
+    [
+      {
+        kind: "READY",
+        query: { offset: 0 },
+        page: { items: [], pagination: { limit: 12, offset: 0, hasMore: false } },
+      },
+      "No published artworks yet",
+    ],
+    [
+      {
+        kind: "READY",
+        query: { offset: 12 },
+        page: { items: [], pagination: { limit: 12, offset: 12, hasMore: false } },
+      },
+      "Return to the first page",
+    ],
+    [
+      {
+        kind: "READY",
+        query: { offset: 0 },
+        page: {
+          items: [{ ...summary, title: "<script>unsafe</script>", heroImage: null }],
+          pagination: { limit: 12, offset: 0, hasMore: false },
+        },
+      },
+      "Artwork photography is not available yet",
+    ],
+  ]) {
+    const html = renderToStaticMarkup(
+      createElement(ArtworkExploration, { apiOrigin: "http://localhost:3001", state }),
+    );
+    assert.ok(html.includes(text as string));
+    assert.ok(!html.includes("<script>"));
+  }
+});

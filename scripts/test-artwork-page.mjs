@@ -21,6 +21,38 @@ const api = createServer((request, response) => {
   requests++;
   response.setHeader("Content-Type", "application/json");
   const path = new URL(request.url, "http://localhost").pathname;
+  if (path === "/artworks") {
+    const query = new URL(request.url, "http://localhost").searchParams;
+    const category = query.get("category");
+    const offset = Number(query.get("offset"));
+    if (category === "MANDALA") {
+      response.statusCode = 503;
+      return response.end(JSON.stringify({ message: "PRIVATE_UPSTREAM_SENTINEL" }));
+    }
+    const summary = {
+      kathaId: artworkFixture.kathaId,
+      category: artworkFixture.category,
+      title: artworkFixture.title,
+      creationYear: artworkFixture.creationYear,
+      artist: artworkFixture.artist,
+      heroImage: {
+        id: artworkFixture.media[0].id,
+        contentHash: artworkFixture.media[0].contentHash,
+        mimeType: "image/png",
+        altText: "Synthetic catalogue photograph",
+      },
+    };
+    return response.end(
+      JSON.stringify({
+        items: category === "THANGKA" || offset === 12 ? [] : [summary],
+        pagination: {
+          limit: 12,
+          offset,
+          hasMore: offset === 0 && category !== "THANGKA",
+        },
+      }),
+    );
+  }
   if (path.endsWith("/provenance")) {
     if (path.includes("KATHA-PAUBHA-000001")) {
       const offset = Number(
@@ -202,8 +234,56 @@ try {
     assert.ok(!failure.html.includes("PRIVATE_UPSTREAM_SENTINEL"));
     assert.ok(!failure.html.includes('<h1 id="artwork-title"'));
   }
+  async function explore(query = "") {
+    const response = await globalThis.fetch(`${origin}/explore${query}`, {
+      headers: { "User-Agent": "Twitterbot" },
+      signal: globalThis.AbortSignal.timeout(15000),
+    });
+    return {
+      status: response.status,
+      html: (await response.text()).replace(/<!--[\s\S]*?-->/g, ""),
+    };
+  }
+  const catalogue = await explore("?category=PAUBHA");
+  assert.equal(catalogue.status, 200);
+  for (const text of [
+    "Explore the artworks",
+    artworkFixture.title,
+    artworkFixture.artist.displayName,
+    `/storage/public/${artworkFixture.media[0].contentHash}.png`,
+    'href="/art/KATHA-PAUBHA-000001"',
+    "category=PAUBHA&amp;offset=12",
+  ])
+    assert.ok(catalogue.html.includes(text), text);
+  const paged = await explore("?category=PAUBHA&offset=12");
+  assert.ok(paged.html.includes("No artworks on this page"));
+  assert.ok(paged.html.includes("Return to the first page"));
+  const emptyCategory = await explore("?category=THANGKA");
+  assert.ok(emptyCategory.html.includes("No published artworks yet"));
+  const unavailableCategory = await explore("?category=MANDALA");
+  assert.ok(unavailableCategory.html.includes("Artworks are unavailable right now"));
+  assert.ok(unavailableCategory.html.includes("/explore?category=MANDALA"));
+  assert.ok(!unavailableCategory.html.includes("PRIVATE_UPSTREAM_SENTINEL"));
+  const beforeBadFilters = requests;
+  for (const query of [
+    "?category=paubha",
+    "?category=PAUBHA&category=THANGKA",
+    "?offset=1",
+    "?limit=100",
+  ]) {
+    const invalidFilters = await explore(query);
+    assert.ok(invalidFilters.html.includes("These filters"));
+    assert.ok(invalidFilters.html.includes("noindex"));
+  }
+  assert.equal(
+    requests,
+    beforeBadFilters,
+    "Invalid exploration queries must not fetch",
+  );
+  const home = await globalThis.fetch(origin).then((response) => response.text());
+  assert.ok(home.includes('href="/explore"'));
   globalThis.console.log(
-    "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch passed.",
+    "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch; exploration filters, paging, images, empty/unavailable states, invalid query rejection and navigation passed.",
   );
 } finally {
   if (web?.pid && web.exitCode === null) {

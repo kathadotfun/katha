@@ -16,8 +16,8 @@ parameters. Storage failures return the standard redacted 500 response.
 
 Responses contain `items` and `pagination: { limit, offset, hasMore }`. Items have
 `kathaId`, `category`, `title`, `creationYear`, `artist: { id, slug, displayName }`
-and nullable `heroImage: { id, contentHash, altText }`. The hash identifies approved
-image bytes; it is not a URL. Approved bytes are delivered through the
+and nullable `heroImage: { id, contentHash, mimeType, altText }`. The hash identifies approved
+image bytes; it is not a URL. The MIME type identifies the filename extension for public delivery. Approved bytes are delivered through the
 [public storage route](document-preparation.md#public-delivery). Only a public IMAGE/HERO relation is included; absent or private heroes
 produce null. Captions, provider storage keys, evidence, inspection documents,
 wallet addresses and fulfillment information are omitted through explicit database

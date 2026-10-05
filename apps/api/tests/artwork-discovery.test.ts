@@ -18,6 +18,7 @@ const row = {
   heroImage: {
     id: "bbbbbbbb-1111-4111-8111-111111111111",
     contentHash: "a".repeat(64),
+    mimeType: "image/png",
     altText: "Synthetic approved image",
     storageKey: "PRIVATE-STORAGE-KEY",
     caption: "PRIVATE-FUTURE-FIELD",
@@ -51,6 +52,7 @@ it("lists public summaries anonymously with category filtering and bounded pagin
   expect(body.items).toHaveLength(1);
   expect(body.pagination).toEqual({ limit: 1, offset: 2, hasMore: true });
   expect(store.list).toHaveBeenCalledWith({ category: "PAUBHA", limit: 1, offset: 2 });
+  expect(body.items[0]?.heroImage?.mimeType).toBe("image/png");
   expect(body.items[0]?.heroImage?.altText).toBe(row.heroImage.altText);
   expect(JSON.stringify(body)).not.toContain("PRIVATE");
 });

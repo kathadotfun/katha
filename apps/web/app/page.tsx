@@ -16,6 +16,9 @@ export default function HomePage() {
         Preserving Nepal&apos;s Mandala, Paubha and Thangka traditions through
         documented artworks, permanent artist attribution and verifiable provenance.
       </p>
+      <a href="/explore" className="button-primary mt-8 inline-flex">
+        Explore the artworks
+      </a>
     </section>
   );
 }

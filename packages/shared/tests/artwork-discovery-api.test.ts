@@ -39,3 +39,20 @@ it.each([
     false,
   ),
 );
+
+it("requires the approved hero MIME type for correct public delivery", () => {
+  const hero = {
+    id: summary.artist.id,
+    contentHash: "a".repeat(64),
+    altText: "Approved image",
+    mimeType: "image/png",
+  };
+  expect(
+    publicArtworkSummarySchema.parse({ ...summary, heroImage: hero }).heroImage
+      ?.mimeType,
+  ).toBe("image/png");
+  const missing = { id: hero.id, contentHash: hero.contentHash, altText: hero.altText };
+  expect(
+    publicArtworkSummarySchema.safeParse({ ...summary, heroImage: missing }).success,
+  ).toBe(false);
+});

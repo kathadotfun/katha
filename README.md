@@ -149,6 +149,7 @@ outside the current scope.
 - [Web design system](docs/development/design-system.md)
 - [Public application shell](docs/development/application-shell.md)
 - [Public web API client](docs/development/public-api-client.md)
+- [Artwork exploration and category filtering](docs/development/artwork-exploration.md)
 - [Canonical artwork page, provenance and metadata integrity](docs/development/artwork-page.md)
 - [Public provenance and condition timelines](docs/development/artwork-provenance-api.md)
 - [Local content-addressed storage](docs/development/local-storage.md)

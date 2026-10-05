@@ -72,7 +72,10 @@ export function artworkPhotoLabel(role: string): string {
 
 export function artworkPhotoUrl(
   origin: string,
-  media: PublicArtworkDetail["media"][number],
+  media: Pick<
+    PublicArtworkDetail["media"][number],
+    "kind" | "mimeType" | "contentHash"
+  >,
 ): string {
   const extension = Object.hasOwn(imageExtensions, media.mimeType)
     ? imageExtensions[media.mimeType]

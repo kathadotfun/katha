@@ -26,6 +26,7 @@ export function createArtworkDiscovery(store: PublicArtworkStore) {
               : {
                   id: record.heroImage.id,
                   contentHash: record.heroImage.contentHash,
+                  mimeType: record.heroImage.mimeType,
                   altText: record.heroImage.altText,
                 },
         })),

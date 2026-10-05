@@ -22,6 +22,7 @@ export const publicArtworkSummarySchema = z
       .strictObject({
         id: z.uuid(),
         contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+        mimeType: z.string().min(1).max(100),
         altText: z
           .string()
           .min(1)

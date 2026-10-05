@@ -53,6 +53,7 @@ export function createPublicArtworkStore(db: Database, cluster: "LOCALNET" | "DE
           heroImage: {
             id: artworkMedia.id,
             contentHash: artworkMedia.contentHash,
+            mimeType: artworkMedia.mimeType,
             altText: artworkMedia.altText,
           },
         })

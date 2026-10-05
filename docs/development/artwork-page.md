@@ -99,8 +99,7 @@ pnpm --filter @katha/shared build
 KATHA_PUBLIC_API_ORIGIN=http://localhost:3001 pnpm --filter @katha/web dev
 ```
 
-Visit `/art/<permanent-Katha-ID>`. The homepage does not yet link to the catalogue;
-artwork discovery is implemented later.
+Visit `/art/<permanent-Katha-ID>`. Home and primary navigation now link to [artwork exploration](artwork-exploration.md).
 
 ```bash
 pnpm --filter @katha/web test
