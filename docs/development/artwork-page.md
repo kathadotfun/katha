@@ -9,8 +9,9 @@ The page shows the recorded art form, title, artist, creation year, permanent ID
 public photography, origin, dimensions, materials, technique, story, meaning,
 cultural context and creation process. Authorship is labelled independently of
 ownership, and collecting does not automatically convey copyright. Artist names
-are plain text until profile pages exist. Authenticity, condition, custody and
-provenance presentation are separate additions.
+are plain text until profile pages exist. Verification, the latest available
+condition inspection and recorded physical custody are shown in separate sections.
+Provenance presentation follows later.
 
 ## Data and failure behavior
 
@@ -35,6 +36,34 @@ Long text wraps, preserves paragraph breaks and renders as escaped React text.
 Dimensions retain exact recorded millimetres with explicit height/width/depth order.
 Origin preserves the recorded places; absent locality does not imply a particular
 city. Nepal's cultural identity comes from the documented object and artist.
+
+## Verification and physical care
+
+`ArtworkCare` renders only the validated public verification, condition and custody
+summaries. Missing/unverified verification or missing/invalid inspection data fails
+the shared response boundary and reaches the safe page error state. Katha verification is described as a recorded manual inspection, never
+as independent blockchain proof of the physical object's authenticity. Physical
+inspection time and verification recording time are separately labelled. Verifier
+wallets are public record identifiers and wrap fully; explorer links follow later.
+
+Condition shows the latest available report's grade, version, inspection purpose,
+inspection time and inspector wallet. All five grades and six purposes use explicit
+English labels. Dates use deterministic UTC formatting with full timestamps in
+semantic `time` elements. A report describes an observation at its inspection time,
+not a live assessment or permanent guarantee. Earlier reports remain historical;
+a pre-resale inspection alone does not establish resale approval. Private notes,
+inspection images, evidence and fulfillment details are never rendered.
+
+The physical custody section labels dated manual observations as Katha-held,
+collector-held or in transit. It does not infer the collector's identity from the
+Core owner. Unknown state, missing observation time or unknown source is presented
+as unknown custody. Transit does not confirm delivery or receipt. This is a public
+presentation rule; it does not modify any stored state or lifecycle transition.
+
+The detail API currently exposes `UNKNOWN` or `GAP_DETECTED` indexing freshness.
+The section states that freshness is unconfirmed or some history is missing, so
+later inspections/custody changes may not appear yet. It never marks the record as
+complete or current. Full provenance and integrity interfaces remain a later step.
 
 ## Photography
 
@@ -89,7 +118,9 @@ Next.js server, checks successful/sparse artwork, permanent canonical metadata,
 a single API read, missing/invalid IDs, outages and response-identity mismatches,
 then stops both servers. It neither reads the real database nor deploys to Devnet.
 Unit tests also cover media selection/URLs, exact dimensions, escaped markup and
-null documentation. They compile JSX in memory with the existing workspace
+null documentation. Care tests cover all grades/purposes, distinct UTC timestamps,
+known/unknown/inconsistent custody, missing history and private-field exclusion.
+The production route check also verifies the care sections. They compile JSX in memory with the existing workspace
 TypeScript compiler; no generated tests or runtime demo routes are published.
 
 Review at narrow and wide browser sizes, with keyboard navigation and image loading

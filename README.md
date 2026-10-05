@@ -96,7 +96,8 @@ visual tokens. A responsive public header, visible navigation, keyboard skip lin
 and project footer now form the application shell. A read-only public API client
 validates shared schemas and provides safe route loading, error and not-found
 states. The permanent-ID artwork page now presents public photography, artist
-attribution and cultural documentation; other public pages follow later.
+attribution and cultural documentation, with separate recorded verification,
+condition-inspection and physical custody summaries. Other public pages follow later.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 

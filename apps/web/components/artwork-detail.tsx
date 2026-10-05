@@ -7,6 +7,7 @@ import {
   artworkPhotos,
   artworkPhotoUrl,
 } from "../lib/artwork-page";
+import { ArtworkCare } from "./artwork-care";
 import { ArtworkPhoto } from "./artwork-photo";
 
 function Documentation({
@@ -132,6 +133,7 @@ export function ArtworkDetail({
           text={artwork.creationProcess}
         />
       </div>
+      <ArtworkCare artwork={artwork} />
       {photos.length > 1 && (
         <section
           aria-labelledby="artwork-photographs"

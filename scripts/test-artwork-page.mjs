@@ -122,6 +122,16 @@ try {
     ),
   );
   assert.equal((success.html.match(/<main(?:\s|>)/g) ?? []).length, 1);
+  const visibleMarkup = success.html.replace(/<!--[\s\S]*?-->/g, "");
+  for (const text of [
+    "Katha verification recorded",
+    "Good · Report #1",
+    "Physical custody unknown",
+    "latest available inspection",
+    "Record freshness is unconfirmed",
+  ])
+    assert.ok(visibleMarkup.includes(text), text);
+  assert.ok(!success.html.includes(artworkFixture.ownership.ownerWallet));
   assert.equal(requests, 1, "Metadata and content must share one API read per render");
 
   const sparse = await page("KATHA-PAUBHA-000002");

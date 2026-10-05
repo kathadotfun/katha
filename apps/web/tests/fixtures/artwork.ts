@@ -42,7 +42,7 @@ export const artworkFixture = publicArtworkDetailSchema.parse({
   ],
   verification: {
     status: "VERIFIED",
-    verifierWallet: wallet,
+    verifierWallet: "Vote111111111111111111111111111111111111111",
     inspectedAt: at,
     ...commitment,
   },
@@ -52,12 +52,12 @@ export const artworkFixture = publicArtworkDetailSchema.parse({
     grade: "GOOD",
     reason: "INITIAL_VERIFICATION",
     inspectedAt: at,
-    verifierWallet: wallet,
+    verifierWallet: "Vote111111111111111111111111111111111111111",
     ...commitment,
   },
   custody: { state: "UNKNOWN", source: "UNKNOWN", observedAt: null },
   ownership: {
-    ownerWallet: wallet,
+    ownerWallet: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
     source: "INDEXED_CORE",
     observedAt: at,
     transaction,
