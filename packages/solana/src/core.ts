@@ -3,6 +3,7 @@ import {
   deserializeCollectionV1,
   getCreateCollectionV2InstructionDataSerializer,
   MPL_CORE_PROGRAM_ID,
+  getTransferV1InstructionDataSerializer,
 } from "@metaplex-foundation/mpl-core";
 import { lamports, publicKey } from "@metaplex-foundation/umi";
 import { AccountRole, address } from "@solana/kit";
@@ -146,3 +147,39 @@ export function readCoreAsset(
     uri: asset.uri,
   };
 }
+
+/** Successful instruction evidence only; authority may be a delegate, not the old owner. */
+export function decodeCoreTransferInstruction(
+  data: Uint8Array,
+  accounts: readonly Address[],
+) {
+  if (data.length === 0) throw new Error("Missing Core instruction data");
+  if (data[0] !== 14) return null;
+  const serializer = getTransferV1InstructionDataSerializer();
+  const [value, end] = serializer.deserialize(data);
+  if (
+    end !== data.length ||
+    !Buffer.from(serializer.serialize(value)).equals(data) ||
+    value.compressionProof.__option !== "None"
+  )
+    throw new Error("Unsupported or invalid Core transfer");
+  if (accounts.length < 5 || accounts.length > 7)
+    throw new Error("Invalid Core transfer accounts");
+  const asset = accounts[0]!,
+    collection = accounts[1]!,
+    payer = accounts[2]!,
+    authority = accounts[3]!,
+    newOwner = accounts[4]!;
+  for (const account of accounts) address(account);
+  if ([asset, payer, newOwner].includes(CORE_PROGRAM_ADDRESS))
+    throw new Error("Missing Core transfer account");
+  return {
+    asset,
+    collection: collection === CORE_PROGRAM_ADDRESS ? null : collection,
+    authority: authority === CORE_PROGRAM_ADDRESS ? payer : authority,
+    newOwner,
+  };
+}
+export type CoreTransferActivity = NonNullable<
+  ReturnType<typeof decodeCoreTransferInstruction>
+>;

@@ -86,6 +86,29 @@ export function createLogger(
         fields: [...new Set(fields.filter((field) => settingNames.has(field)))].sort(),
       });
     },
+    activityPageObserved(input: {
+      cluster: "localnet" | "devnet";
+      transactions: number;
+      activities: number;
+    }) {
+      if (
+        !["localnet", "devnet"].includes(input.cluster) ||
+        !Number.isInteger(input.transactions) ||
+        input.transactions < 0 ||
+        input.transactions > 100 ||
+        !Number.isSafeInteger(input.activities) ||
+        input.activities < 0
+      )
+        return;
+      write("activity_page_observed", "info", {
+        cluster: input.cluster,
+        transactions: input.transactions,
+        activities: input.activities,
+      });
+    },
+    activityPollingFailed() {
+      write("activity_polling_failed", "error", {});
+    },
     serverStarted(port: number) {
       write("server_started", "info", {
         port: Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined,

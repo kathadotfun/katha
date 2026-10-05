@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "indexer:inspect": "node --env-file-if-exists=../../.env --import tsx src/indexer-inspect.ts",
     "dev": "node --env-file-if-exists=../../.env --import tsx --watch --watch-preserve-output src/index.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file-if-exists=../../.env dist/index.js",

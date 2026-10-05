@@ -1,3 +1,4 @@
+import { assertKathaRpcCluster } from "./rpc-cluster.js";
 import {
   sha256Hex,
   canonicalDocumentBytes,
@@ -7,7 +8,6 @@ import {
 import {
   address,
   assertIsTransactionWithinSizeLimit,
-  blockhash,
   getTransactionDecoder,
   getTransactionEncoder,
   getCompiledTransactionMessageDecoder,
@@ -196,12 +196,6 @@ export type ReceiptObservation =
   | { status: "UNKNOWN" }
   | { status: "FAILED"; failureCode: "TRANSACTION_FAILED" }
   | { status: "FINALIZED"; slot: bigint; chainRecordedAt: Date };
-const DEVNET = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
-const PUBLIC_GENESIS = [
-  DEVNET,
-  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
-  "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY",
-];
 export function createOperationReceiptReaderFromRpc(
   rpc: Rpc<GetTransactionApi & GetGenesisHashApi>,
   cluster: KathaRpcConfig["cluster"],
@@ -213,12 +207,10 @@ export function createOperationReceiptReaderFromRpc(
     const signal = AbortSignal.timeout(10000);
     const genesis = await rpc.getGenesisHash().send({ abortSignal: signal });
     try {
-      blockhash(genesis);
+      assertKathaRpcCluster(genesis, cluster);
     } catch {
       throw new ReceiptValidationError();
     }
-    if (cluster === "devnet" ? genesis !== DEVNET : PUBLIC_GENESIS.includes(genesis))
-      throw new ReceiptValidationError();
     const result = await rpc
       .getTransaction(signature(transactionSignature), {
         commitment: "finalized",

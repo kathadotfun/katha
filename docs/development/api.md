@@ -86,3 +86,11 @@ stored-byte validation, reviewed version/hash checks and save-time eligibility g
 [Finalized operation receipts](operation-receipts-api.md) now records verified signed
 attempts and reconciles exact finalized transactions. No submission or event indexing
 is performed by the receipt endpoint.
+
+## Activity polling
+
+The API codebase now includes an awaited finalized Registry/Core polling boundary
+and `pnpm indexer:inspect`, a read-only two-stream diagnostic. See
+[activity ingestion](chain-activity-ingestion.md) for setup, decoding guarantees,
+page/consumer contracts and the remaining persistence/recovery work. This command
+does not connect to PostgreSQL or start automatically with the HTTP service.

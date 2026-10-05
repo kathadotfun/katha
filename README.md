@@ -52,7 +52,8 @@ manual custody history and separate private fulfillment requests, plus unique
 wallet records, single-use challenges and hashed session persistence, and
 idempotent blockchain operations with retained transaction attempts. Database
 read models now preserve indexed events, gap-aware checkpoints, ownership,
-listings and sale distributions; chain ingestion remains planned. Fictional draft
+listings and sale distributions. Finalized Registry/Core polling and decoding now
+provide validated activity pages; durable ingestion remains planned. Fictional draft
 fixtures and fresh-database constraint tests complete the database foundation.
 The API now validates server settings before listening and provides an explicit
 public configuration allowlist, fixed domain error responses, server-generated
@@ -118,6 +119,7 @@ outside the current scope.
 - [Artwork mint preparation](docs/development/artwork-minting-api.md)
 - [Metadata commitment preparation](docs/development/metadata-revisions-api.md)
 - [Finalized operation receipts](docs/development/operation-receipts-api.md)
+- [Finalized Registry/Core activity ingestion](docs/development/chain-activity-ingestion.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

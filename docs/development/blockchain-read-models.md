@@ -4,8 +4,10 @@ Migration `0007_blockchain_read_models.sql` adds `indexedEvents`,
 `indexerCheckpoints`, `artworkOwnership`, `artworkListings` and `artworkSales` to
 `@katha/db`, with inferred record types. These are local query models derived from
 successful finalized chain activity. They do not establish authoritative ownership
-or authenticate RPC data. Solana/Core remain the ownership source; the polling
-worker, account reconciliation and marketplace ingestion are later steps.
+or authenticate RPC data. Solana/Core remain the ownership source; the
+[polling/decoding boundary](chain-activity-ingestion.md) now supplies validated
+activity pages; atomic persistence, account reconciliation and marketplace ingestion
+remain later work.
 
 ## Event identity and replay
 

@@ -118,3 +118,19 @@ export {
   type ReceiptObservation,
   type OperationReceiptReader,
 } from "./operation-receipt.js";
+
+export { decodeRegistryEvent, type RegistryActivityEvent } from "./registry-events.js";
+export { decodeCoreTransferInstruction, type CoreTransferActivity } from "./core.js";
+export {
+  decodeFinalizedActivity,
+  ActivityEvidenceError,
+  type DecodedActivity,
+  type ActivityTransaction,
+} from "./chain-activity.js";
+export {
+  createActivityReader,
+  createActivityReaderFromRpc,
+  type ActivityReader,
+  type ActivityPage,
+  type ActivityPageRequest,
+} from "./activity-reader.js";
