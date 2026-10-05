@@ -117,3 +117,30 @@ identity races, CPI/event separation, immutable evidence, scope binding, stale
 owner updates, checkpoint monotonicity/gaps, whole-batch rollback, active listing
 uniqueness, fractional/u64 amounts, sale terms and recipients, terminal listings,
 and separation of ownership from artist attribution and custody.
+
+## Atomic ingestion
+
+`createActivityStore` is an internal worker boundary. It takes normalized validated
+Registry/Core observations, a configured stream start, the expected saved cursor,
+and the discovered head. A transaction-scoped advisory lock serializes both streams
+within a cluster, including absent rows. Checkpoint comparison rejects stale workers;
+repeating the acknowledged head verifies existing event contents instead of inserting
+new observations. Position identity deduplicates the same Registry observation
+when both program streams discover its transaction. Conflicting retained evidence
+stops ingestion. See [PostgreSQL locking](https://www.postgresql.org/docs/current/explicit-locking.html)
+and [Drizzle transactions](https://orm.drizzle.team/docs/transactions).
+
+The store resolves permanent Katha IDs against local immutable attribution. Later
+Registry observations require the retained registration. Mint ownership and Core
+transfers require the configured collection and a retained asset/artwork binding.
+Registry mint is one OWNERSHIP row with `name: ArtworkMinted`, preserving its full
+Registry payload and `ownerWallet`; Core creation produces no duplicate row. Other
+Registry claims remain REGISTRY events. Chain integers use decimal strings and byte
+commitments use lowercase hex; instruction/event positions remain numeric indexes.
+
+Events, monotonic ownership updates and the stream head commit together. Delayed
+observations retain evidence but cannot rewind ownership. A failed projection or
+checkpoint write rolls back the entire batch. Registration, verification, metadata,
+condition and custody claims are retained here as chain events; private prepared
+documents and manual custody observations are not rewritten. Public timeline
+assembly, history recovery and marketplace projections have separate workflows.

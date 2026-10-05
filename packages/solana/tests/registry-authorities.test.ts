@@ -9,6 +9,7 @@ import {
 } from "../src/generated/registry/index.js";
 import {
   createRegistryAuthorityReader,
+  createRegistryCollectionReader,
   readRegistryAuthorities,
 } from "../src/registry-authorities.js";
 
@@ -121,4 +122,25 @@ it("fetches finalized configuration on every read with a bounded abort signal", 
   await expect(read()).rejects.toThrow("not initialized");
   fetch.mockRejectedValueOnce(new Error("RPC failure"));
   await expect(read()).rejects.toThrow("RPC failure");
+});
+
+it("binds collection filters to fresh finalized validated configuration", async () => {
+  const { account, state } = await fixture();
+  const fetch = vi.mocked(fetchEncodedAccount);
+  fetch.mockResolvedValue(account);
+  const read = createRegistryCollectionReader({ cluster: "localnet" });
+  expect(await read()).toBe(VERIFIER);
+  expect(fetch).toHaveBeenLastCalledWith(expect.anything(), account.address, {
+    commitment: "finalized",
+    abortSignal: expect.any(AbortSignal),
+  });
+  fetch.mockResolvedValueOnce({ exists: false, address: account.address });
+  await expect(read()).rejects.toThrow("not initialized");
+  state.collection = SYSTEM;
+  account.data = Uint8Array.from(getKathaConfigEncoder().encode(state));
+  fetch.mockResolvedValueOnce(account);
+  await expect(read()).rejects.toThrow();
+  account.programAddress = SYSTEM;
+  fetch.mockResolvedValueOnce(account);
+  await expect(read()).rejects.toThrow();
 });

@@ -164,3 +164,12 @@ export {
   type OperationReceiptStore,
   type ReceiptStoreObservation,
 } from "./operation-receipt-store.js";
+export {
+  createActivityStore,
+  ActivityStoreConflict,
+  type ActivityStore,
+  type ActivityStream,
+  type ActivityCursor,
+  type ActivityBatch,
+  type StoredActivity,
+} from "./activity-store.js";

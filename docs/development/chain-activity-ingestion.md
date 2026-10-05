@@ -2,8 +2,9 @@
 
 The Solana package provides `createActivityReader`, `decodeFinalizedActivity` and
 `decodeRegistryEvent`. The API codebase provides an awaited polling loop and a
-read-only inspection command. This is the ingestion boundary; decoded pages are
-not yet persisted or exposed as public provenance.
+read-only inspection command and an explicit bounded durable worker. Decoded
+observations can now be stored atomically with ownership and checkpoints; public
+provenance responses remain a separate feature.
 
 ## Inspect configured activity
 
@@ -25,8 +26,8 @@ change chain state. No live network access occurs during ordinary API startup.
 
 This command is a bounded preview, not a complete history import. On shared Devnet,
 Core's program stream includes unrelated assets and may be busy. Successful Core
-transfer candidates must later be bound to registered Katha assets/collections
-before producing ownership projections. A count is not proof of Katha provenance.
+transfer candidates are bound by the store to registered Katha assets and the
+configured collection before producing ownership projections. A count is not proof of Katha provenance.
 
 ## Discovery and exact evidence
 
@@ -59,7 +60,7 @@ Empty pages contain no invented scanned slot. A short page does not prove that a
 `until` boundary exists in retained RPC history. Descending discovery pages are only
 sorted within each page; consumers must establish complete windows and apply global
 ordering before advancing durable projections. Cross-program overlap is expected;
-future persistence must deduplicate by transaction/instruction/event identity.
+persistence deduplicates by transaction/instruction/event identity.
 
 ## Registry events and Core transfers
 
@@ -106,16 +107,55 @@ fresh consumer-selected requests each cycle, applies a bounded interval and
 supports abortable RPC/sleep shutdown. A read or consumer error stops the loop;
 it does not silently advance a cursor or hide unresolved evidence.
 
-Cursor selection, atomic event/checkpoint storage and projection writes belong to
-the consuming database layer. Durable replay, restart, complete window ordering,
-backfill, retries, gap detection and ownership reconciliation are subsequent work.
-The inspector deliberately has no discard-and-advance background mode. It is safe
-to run alongside the API as a read-only diagnostic.
+`ingestActivityStream` reads the durable cursor, requests an inclusive page (no
+`until`), verifies that the exact saved signature and slot were reached, then
+selects newer transactions by actual block order. At first start it requires an
+observed transaction below the configured start slot. Empty/short pages alone
+never establish a boundary. A window that exceeds 100 signatures stops safely;
+there is no partial acknowledgement or discard-and-advance mode. Failed transactions
+can advance discovery but never generate successful events.
+
+The adapter validates Registry configuration/artwork/asset/report/revision PDAs,
+filters other Core collections, and preserves chain-only claims as JSON. The
+[database store](blockchain-read-models.md#atomic-ingestion) commits retained events,
+ownership and the head together. Read/decode/write failures stop the worker; restart
+uses the last committed cursor. In-flight aborts before commit prevent writes; if
+shutdown arrives during commit, the database transaction completes or rolls back.
+
+## Run the bounded worker
+
+After applying migrations and building workspace packages, run alongside the API:
+
+```bash
+pnpm build
+pnpm db:migrate
+pnpm indexer:run <registered-collection-address> <start-slot>
+```
+
+Both arguments are public configuration. Use the collection recorded in the
+initialized Registry and a start slot before the first artwork registration. The
+worker checks the finalized Registry collection every cycle, ingests Registry
+before Core, and waits five seconds between cycles. Each stream must reach its
+saved signature within one page. On first start, retained activity below the start
+slot must be observable in both streams (for example the Registry deployment).
+Slot zero cannot meet this initial boundary rule. The configured start cannot
+change after acknowledgement. Existing gap-marked checkpoints are refused.
+
+This is a deliberately bounded ingestion foundation. A busy global Core Devnet
+stream, an old cursor, an unknown locally registered artwork, a transfer without
+its retained mint, or missing RPC history stops with a redacted failure. The worker
+never skips those cases. Pagination/backfill, transient retries, gap reporting and
+Core reconciliation are the next recovery work. The stored scanned slot is the
+observed head slot, not proof that every historical slot was available. Localnet
+reset detection also belongs to recovery; do not reuse old checkpoints on a reset
+chain. No automatic worker starts with the HTTP service; no signing/submission,
+publication, shipping or manual custody change occurs.
 
 ## Verification
 
 ```bash
 pnpm test
+pnpm db:test
 pnpm lint
 pnpm typecheck
 pnpm build
@@ -128,5 +168,7 @@ forgery rejection, all Registry event codecs, loaded keys, malformed/truncated
 logs, cluster binding, pagination, block ordering, awaited consumption and abort.
 A loopback mock RPC exercises actual Kit transport and numeric transformations;
 subprocess tests exercise inspector configuration and both program reads without
-connecting to an unavailable database. These are synthetic RPC tests, not a claim
-of live Devnet receipt verification or an operational durable indexer.
+connecting to an unavailable database. Persistence tests verify concurrent replay, exact-content conflicts, same-slot
+ownership order, restart, overlapping streams, stale cursor rejection and whole-batch
+rollback against disposable PostgreSQL. These use synthetic data; live Devnet
+ingestion and complete recovery are not claimed.

@@ -134,3 +134,4 @@ export {
   type ActivityPage,
   type ActivityPageRequest,
 } from "./activity-reader.js";
+export { createRegistryCollectionReader } from "./registry-authorities.js";

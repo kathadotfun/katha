@@ -92,5 +92,6 @@ is performed by the receipt endpoint.
 The API codebase now includes an awaited finalized Registry/Core polling boundary
 and `pnpm indexer:inspect`, a read-only two-stream diagnostic. See
 [activity ingestion](chain-activity-ingestion.md) for setup, decoding guarantees,
-page/consumer contracts and the remaining persistence/recovery work. This command
-does not connect to PostgreSQL or start automatically with the HTTP service.
+page/consumer contracts and the explicit durable `pnpm indexer:run` worker. The
+inspector command does not connect to PostgreSQL. Neither worker starts
+automatically with the HTTP service.

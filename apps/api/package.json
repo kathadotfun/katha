@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude 'tests/*-postgres.test.ts'",
-    "test:integration": "vitest run tests/service-postgres.test.ts tests/artwork-discovery-postgres.test.ts"
+    "test:integration": "vitest run tests/service-postgres.test.ts tests/artwork-discovery-postgres.test.ts",
+    "indexer:run": "node --env-file-if-exists=../../.env --import tsx src/indexer.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.3",

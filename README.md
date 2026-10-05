@@ -53,8 +53,10 @@ wallet records, single-use challenges and hashed session persistence, and
 idempotent blockchain operations with retained transaction attempts. Database
 read models now preserve indexed events, gap-aware checkpoints, ownership,
 listings and sale distributions. Finalized Registry/Core polling and decoding now
-provide validated activity pages; durable ingestion remains planned. Fictional draft
-fixtures and fresh-database constraint tests complete the database foundation.
+provide validated activity pages; an explicit bounded worker atomically persists
+events, ownership and replay-safe checkpoints. History recovery remains planned.
+Fictional draft fixtures and fresh-database constraint tests complete the database
+foundation.
 The API now validates server settings before listening and provides an explicit
 public configuration allowlist, fixed domain error responses, server-generated
 request IDs, structured logs that omit private request data, separate liveness and

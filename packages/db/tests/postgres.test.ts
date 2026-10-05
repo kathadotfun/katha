@@ -3940,3 +3940,255 @@ it("atomically reconciles owned prepared receipts, terminal retries and competin
     await connection.close();
   }
 });
+
+it("commits activity, ownership and cursors atomically across replay, races and restart", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const { createActivityStore } = await import("../src/activity-store.js");
+  const programs = {
+    registry: "R".repeat(32),
+    core: "C".repeat(32),
+    collection: "D".repeat(32),
+  };
+  const stream = {
+    cluster: "LOCALNET" as const,
+    programAddress: programs.registry,
+    fromSlot: 10n,
+  };
+  const sig = (n: number) => `q${String(n).repeat(63)}`;
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "atomic-indexer-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Missing fixture");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic indexing",
+        creationYear: 2026,
+        authorshipEvidenceHash: "a".repeat(64),
+      })
+      .returning();
+    if (!artwork) throw new Error("Missing fixture");
+    const store = createActivityStore(db, programs);
+    const assetAddress = "A".repeat(32),
+      owner = "B".repeat(32);
+    const mint = {
+      programAddress: programs.registry,
+      signature: sig(3),
+      slot: 20n,
+      transactionIndex: 1,
+      outerInstructionIndex: 0,
+      innerInstructionIndex: -1,
+      eventIndex: 0,
+      kind: "OWNERSHIP" as const,
+      kathaId: artwork.kathaId,
+      assetAddress,
+      payload: {
+        name: "ArtworkMinted",
+        collection: programs.collection,
+        ownerWallet: owner,
+      },
+      chainRecordedAt: new Date(1000),
+    };
+    const first = {
+      ...stream,
+      expected: null,
+      head: { signature: sig(3), slot: 20n },
+      events: [
+        {
+          ...mint,
+          kind: "REGISTRY" as const,
+          assetAddress: null,
+          signature: sig(2),
+          slot: 19n,
+          payload: {
+            name: "ArtworkRegistered",
+            collection: programs.collection,
+            artistId: artwork.artistId,
+            category: artwork.category,
+            creationYear: artwork.creationYear,
+            authorshipEvidenceHash: artwork.authorshipEvidenceHash,
+            creatorWallet: null,
+          },
+        },
+        mint,
+      ],
+    };
+    expect(await store.commit(first)).toEqual({ inserted: 2, replay: false });
+    expect(await store.commit(first)).toEqual({ inserted: 0, replay: true });
+    await expect(
+      store.commit({
+        ...first,
+        events: [
+          { ...mint, payload: { ...mint.payload, ownerWallet: "E".repeat(32) } },
+        ],
+      }),
+    ).rejects.toThrow("conflict");
+    const coreStream = { ...stream, programAddress: programs.core };
+    // Both discovered streams can contain the very same Registry observation.
+    expect(await store.commit({ ...first, ...coreStream })).toEqual({
+      inserted: 0,
+      replay: false,
+    });
+    const transfer = {
+      ...mint,
+      programAddress: programs.core,
+      kind: "OWNERSHIP" as const,
+      kathaId: null,
+      signature: sig(4),
+      transactionIndex: 2,
+      payload: {
+        name: "CoreTransfer",
+        collection: programs.collection,
+        ownerWallet: "E".repeat(32),
+      },
+    };
+    const next = {
+      ...coreStream,
+      expected: first.head,
+      head: { signature: sig(4), slot: 20n },
+      events: [transfer],
+    };
+    // Failure after event insertion rolls back the event and checkpoint too.
+    await expect(
+      store.commit({
+        ...next,
+        events: [
+          { ...transfer, payload: { ...transfer.payload, ownerWallet: "invalid" } },
+        ],
+      }),
+    ).rejects.toThrow();
+    expect(await store.cursor(coreStream)).toEqual(first.head);
+    expect(
+      await db
+        .select()
+        .from(indexedEvents)
+        .where(
+          and(
+            eq(indexedEvents.cluster, "LOCALNET"),
+            eq(indexedEvents.signature, sig(4)),
+          ),
+        ),
+    ).toHaveLength(0);
+    const results = await Promise.all([store.commit(next), store.commit(next)]);
+    expect(results.map((r) => r.inserted).sort()).toEqual([0, 1]);
+    const restarted = createActivityStore(db, programs);
+    expect(await restarted.cursor(coreStream)).toEqual(next.head);
+    const later = {
+      ...transfer,
+      signature: sig(5),
+      transactionIndex: 3,
+      payload: { ...transfer.payload, ownerWallet: "F".repeat(32) },
+    };
+    expect(
+      await restarted.commit({
+        ...next,
+        expected: next.head,
+        head: { signature: sig(5), slot: 20n },
+        events: [later],
+      }),
+    ).toEqual({ inserted: 1, replay: false });
+    // A stale worker cannot advance, even to another signature in the same slot.
+    await expect(store.commit(next)).rejects.toThrow("conflict");
+    const [projection] = await db
+      .select()
+      .from(artworkOwnership)
+      .where(
+        and(
+          eq(artworkOwnership.cluster, stream.cluster),
+          eq(artworkOwnership.artworkId, artwork.id),
+        ),
+      );
+    expect(projection?.ownerWallet).toBe("F".repeat(32));
+    // Delayed Registry observation retains evidence without rewinding the owner.
+    expect(
+      await store.commit({
+        ...stream,
+        expected: first.head,
+        head: { signature: sig(6), slot: 21n },
+        events: [{ ...transfer, signature: sig(6), transactionIndex: 0 }],
+      }),
+    ).toEqual({ inserted: 1, replay: false });
+    const [unchanged] = await db
+      .select()
+      .from(artworkOwnership)
+      .where(
+        and(
+          eq(artworkOwnership.cluster, stream.cluster),
+          eq(artworkOwnership.artworkId, artwork.id),
+        ),
+      );
+    expect(unchanged?.ownerWallet).toBe("F".repeat(32));
+    await expect(store.cursor({ ...stream, fromSlot: 11n })).rejects.toThrow(
+      "conflict",
+    );
+    await expect(
+      store.commit({ ...first, programAddress: "Z".repeat(32) }),
+    ).rejects.toThrow("conflict");
+    await expect(
+      store.commit({
+        ...next,
+        expected: { signature: sig(5), slot: 20n },
+        head: { signature: sig(7), slot: 22n },
+        events: [
+          {
+            ...transfer,
+            signature: sig(7),
+            slot: 22n,
+            payload: { ...transfer.payload, collection: "Z".repeat(32) },
+          },
+        ],
+      }),
+    ).rejects.toThrow("conflict");
+    await expect(
+      store.commit({
+        ...first,
+        cluster: "DEVNET",
+        events: [
+          {
+            ...first.events[0]!,
+            payload: { ...first.events[0]!.payload, artistId: randomUUID() },
+          },
+        ],
+      }),
+    ).rejects.toThrow("conflict");
+    await expect(
+      store.commit({
+        ...next,
+        expected: { signature: sig(5), slot: 20n },
+        head: { signature: sig(8), slot: 22n },
+        events: [
+          { ...transfer, signature: sig(8), slot: 22n, assetAddress: "G".repeat(32) },
+        ],
+      }),
+    ).rejects.toThrow("conflict");
+    await expect(
+      store.commit({ ...first, events: [{ ...mint, signature: sig(9) }] }),
+    ).rejects.toThrow("conflict");
+    await db
+      .update(indexerCheckpoints)
+      .set({ gapFromSlot: 10n, gapThroughSlot: 11n })
+      .where(
+        and(
+          eq(indexerCheckpoints.cluster, stream.cluster),
+          eq(indexerCheckpoints.programAddress, stream.programAddress),
+        ),
+      );
+    await expect(store.cursor(stream)).rejects.toThrow("conflict");
+  } finally {
+    await connection.close();
+  }
+});

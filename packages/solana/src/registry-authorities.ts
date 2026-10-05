@@ -32,3 +32,18 @@ export function createRegistryAuthorityReader(config: KathaRpcConfig) {
     return readRegistryAuthorities(account);
   };
 }
+
+/** Bind the worker's collection filter to the finalized Registry configuration. */
+export function createRegistryCollectionReader(config: KathaRpcConfig) {
+  const client = createKathaRpcClient(config);
+  return async (): Promise<string> => {
+    const [configAddress] = await findConfigPda();
+    const account = await fetchEncodedAccount(client.rpc, configAddress, {
+      commitment: "finalized",
+      abortSignal: AbortSignal.timeout(5000),
+    });
+    if (!account.exists) throw new TypeError("Registry is not initialized");
+    const { state } = await readRegistryConfiguration(account);
+    return nonzeroAddress(state.collection);
+  };
+}
