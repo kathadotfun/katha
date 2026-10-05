@@ -90,7 +90,9 @@ documents. Receipt reconciliation now verifies signed preparations and exact fin
 transactions, retaining unresolved attempts without creating domain history.
 Public provenance now exposes ordered finalized Registry/Core claims and condition
 history with immutable attribution, validated bindings, two-stream gaps/lag and
-persisted ownership-check freshness. Private report content remains excluded.
+persisted ownership-check freshness. Private report content remains excluded. The web scaffold now uses an editorial
+design foundation with warm ivory, charcoal, the approved Katha emblem and reusable
+visual tokens; navigation and full public pages follow in later steps.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -139,6 +141,7 @@ outside the current scope.
 - [Artwork draft editing](docs/development/artwork-draft-editing-api.md)
 - [Public artwork discovery](docs/development/artwork-discovery-api.md)
 - [Public artwork details](docs/development/artwork-details-api.md)
+- [Web design system](docs/development/design-system.md)
 - [Public provenance and condition timelines](docs/development/artwork-provenance-api.md)
 - [Local content-addressed storage](docs/development/local-storage.md)
 - [Canonical document preparation](docs/development/document-preparation.md)

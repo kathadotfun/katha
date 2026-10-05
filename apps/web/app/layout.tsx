@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Katha",
-  description: "A provenance and ownership platform for Nepal's cultural art.",
+  title: "Katha — Nepali Art & Real World Assets",
+  description:
+    "Nepali cultural art as Real World Assets, preserving artist authorship, cultural stories and verifiable provenance.",
 };
 
 export default function RootLayout({

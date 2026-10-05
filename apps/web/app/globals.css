@@ -1,12 +1,168 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light;
-  background: #faf9f6;
-  color: #272521;
-  font-family: Arial, Helvetica, sans-serif;
+/* Shared visual primitives; feature pages should use semantic tokens. */
+@theme {
+  --color-paper: #faf7f0;
+  --color-surface: #fffdf8;
+  --color-ink: #292723;
+  --color-muted: #686057;
+  --color-line: #d8cfc2;
+  --color-control: #847767;
+  --color-brand: #71332d;
+  --color-brand-hover: #54241f;
+  --color-brand-soft: #efe1dd;
+  --color-copper: #d6a671;
+  --color-success: #375948;
+  --color-success-soft: #e8eee7;
+  --color-warning: #775014;
+  --color-warning-soft: #f4ebd7;
+
+  --font-sans: "Helvetica Neue", Arial, sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.5;
+  --text-body: 1rem;
+  --text-body--line-height: 1.7;
+  --text-lead: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+  --text-lead--line-height: 1.65;
+  --text-display: clamp(2.75rem, 1.75rem + 4vw, 5.5rem);
+  --text-display--line-height: 1.08;
+  --text-display--letter-spacing: -0.035em;
+  --text-section: clamp(1.875rem, 1.25rem + 2vw, 3.25rem);
+  --text-section--line-height: 1.15;
+  --text-section--letter-spacing: -0.025em;
+
+  --radius-control: 0.25rem;
+  --container-page: 76rem;
+  --container-reading: 65ch;
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
 }
 
-body {
-  margin: 0;
+:root {
+  color-scheme: light;
+  --page-gutter: clamp(1.25rem, 4vw, 4rem);
+  --section-space: clamp(3.5rem, 8vw, 7rem);
+  --control-height: 2.75rem;
+  --motion-duration: 160ms;
+}
+
+@layer base {
+  html {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.7;
+  }
+
+  body {
+    margin: 0;
+    min-width: 0;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-serif);
+    font-weight: 400;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  a {
+    text-underline-offset: 0.2em;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 4px;
+  }
+
+  ::selection {
+    background: var(--color-brand);
+    color: var(--color-surface);
+  }
+}
+
+@layer components {
+  .page-container {
+    width: min(100% - 2 * var(--page-gutter), var(--container-page));
+    margin-inline: auto;
+  }
+
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: var(--text-caption);
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .text-link {
+    color: var(--color-brand);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+  }
+
+  .button-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: var(--control-height);
+    padding: 0.625rem 1.25rem;
+    border: 1px solid var(--color-brand);
+    border-radius: var(--radius-control);
+    background: var(--color-brand);
+    color: var(--color-surface);
+    font-weight: 600;
+    line-height: 1.5;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background-color var(--motion-duration) ease,
+      border-color var(--motion-duration) ease;
+  }
+
+  .button-primary:hover:not(:disabled) {
+    border-color: var(--color-brand-hover);
+    background: var(--color-brand-hover);
+  }
+
+  .button-primary:disabled {
+    border-color: var(--color-line);
+    background: var(--color-line);
+    color: var(--color-muted);
+    cursor: not-allowed;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+
+  .button-primary {
+    border-color: ButtonText;
+  }
 }

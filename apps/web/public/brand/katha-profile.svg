@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Katha profile logo</title>
+  <desc id="desc">A clean stepped-diamond emblem inspired by the geometry of Nepali Dhaka weaving, in warm paper and copper on deep red.</desc>
+  <rect width="1024" height="1024" fill="#71332D"/>
+  <g transform="translate(512 512) scale(1.2)">
+    <polygon points="-48,280 48,280 48,208 120,208 120,136 192,136 192,64 264,64 264,-64 192,-64 192,-136 120,-136 120,-208 48,-208 48,-280 -48,-280 -48,-208 -120,-208 -120,-136 -192,-136 -192,-64 -264,-64 -264,64 -192,64 -192,136 -120,136 -120,208 -48,208" fill="#F3E8D8"/>
+    <polygon points="0,160 160,0 0,-160 -160,0" fill="#71332D"/>
+    <polygon points="0,46 46,0 0,-46 -46,0" fill="#D6A671"/>
+  </g>
+</svg>

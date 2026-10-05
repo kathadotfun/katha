@@ -2,8 +2,8 @@
 
 The public web application lives in `apps/web`. It uses the Next.js App Router,
 TypeScript, React, and Tailwind CSS. The current page is only a working scaffold;
-public browsing, artwork records, and the Katha design system are added in later
-steps.
+the [design system](design-system.md) now defines colours, typography and the
+approved emblem. Navigation, public browsing and artwork records follow in later steps.
 
 ## Run the application
 
