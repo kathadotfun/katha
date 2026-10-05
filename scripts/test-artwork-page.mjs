@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -19,13 +20,22 @@ const metadataHash = createHash("sha256").update(metadataBytes).digest("hex");
 let apiOrigin;
 let requests = 0;
 let homeMode = "READY";
+let longContent = false;
+let artworkOutage = false;
+const longTitle = "Synthetic".repeat(20);
 const api = createServer((request, response) => {
   requests++;
   response.setHeader("Content-Type", "application/json");
   const path = new URL(request.url, "http://localhost").pathname;
   if (path.startsWith("/artists/")) {
     const slug = path.split("/").at(-1);
-    if (slug === artistFixture.slug) return response.end(JSON.stringify(artistFixture));
+    if (slug === artistFixture.slug)
+      return response.end(
+        JSON.stringify({
+          ...artistFixture,
+          ...(longContent ? { biography: "Synthetic".repeat(150) } : {}),
+        }),
+      );
     if (slug === "empty-artist")
       return response.end(
         JSON.stringify({
@@ -71,7 +81,7 @@ const api = createServer((request, response) => {
     const summary = {
       kathaId: artworkFixture.kathaId,
       category: artworkFixture.category,
-      title: artworkFixture.title,
+      title: longContent ? longTitle : artworkFixture.title,
       creationYear: artworkFixture.creationYear,
       artist: artworkFixture.artist,
       heroImage: {
@@ -116,7 +126,21 @@ const api = createServer((request, response) => {
   }
   if (path === `/storage/public/${metadataHash}.json`)
     return response.end(metadataBytes);
+  if (path === `/storage/public/${artworkFixture.media[0].contentHash}.png`) {
+    response.setHeader("Content-Type", "image/png");
+    // A synthetic one-pixel PNG; no artist evidence or external image fetch.
+    return response.end(
+      Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    );
+  }
   const id = path.split("/").at(-1);
+  if (id === "KATHA-PAUBHA-000001" && artworkOutage) {
+    response.statusCode = 503;
+    return response.end(JSON.stringify({ message: "PRIVATE_UPSTREAM_SENTINEL" }));
+  }
   if (id === "KATHA-PAUBHA-000001")
     return response.end(
       JSON.stringify({
@@ -278,6 +302,8 @@ try {
     const failure = await page(id);
     assert.ok([200, 500].includes(failure.status));
     assert.ok(failure.html.includes("digest"));
+    assert.ok(failure.html.includes("Artwork information unavailable | Katha"));
+    assert.ok(failure.html.includes("noindex"));
     assert.ok(!failure.html.includes("PRIVATE_UPSTREAM_SENTINEL"));
     assert.ok(!failure.html.includes('<h1 id="artwork-title"'));
   }
@@ -397,11 +423,29 @@ try {
   for (const slug of ["wrong-profile", "unavailable-profile"]) {
     const failedArtist = await artistPage(slug);
     assert.ok(failedArtist.html.includes("digest"));
+    assert.ok(failedArtist.html.includes("Artist information unavailable | Katha"));
+    assert.ok(failedArtist.html.includes("noindex"));
     assert.ok(!failedArtist.html.includes("PRIVATE_UPSTREAM_SENTINEL"));
     assert.ok(!failedArtist.html.includes('<h1 id="artist-name"'));
   }
   assert.ok(success.html.includes(`href="/artists/${artistFixture.slug}"`));
   assert.ok(catalogue.html.includes(`href="/artists/${artistFixture.slug}"`));
+  if (process.argv.includes("--browser")) {
+    const { runPublicBrowsingJourneys } = await import("./test-public-browsing.mjs");
+    await runPublicBrowsingJourneys({
+      origin,
+      apiOrigin,
+      setHomeMode: (mode) => {
+        homeMode = mode;
+      },
+      setLongContent: (enabled) => {
+        longContent = enabled;
+      },
+      setArtworkOutage: (enabled) => {
+        artworkOutage = enabled;
+      },
+    });
+  }
   globalThis.console.log(
     "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch; exploration filters, paging, images, empty/unavailable states, invalid query rejection and navigation; artist profile, scoped works, paging, empty/unavailable works, slug validation, missing/unverified profiles, outage, identity mismatch and artist links; homepage cultural content, canonical URL, featured artwork/artist links, empty/unavailable catalogue states and safe upstream errors passed.",
   );

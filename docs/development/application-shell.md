@@ -13,19 +13,21 @@ name. The footer describes Nepali cultural stories and permanent artist authorsh
 links to `https://x.com/kathadotfun`, and displays the owned domain `katha.fun` as
 text. There is no embedded social widget or assumption that hosted services are live.
 
-Current primary navigation has three implemented destinations:
+Current primary navigation has four implemented destinations:
 
 | Label       | Destination                                                      |
 | ----------- | ---------------------------------------------------------------- |
+| Explore     | `/explore`                                                       |
 | Home        | `/`                                                              |
 | Our purpose | `/#purpose`, the existing main heading                           |
 | Traditions  | `/#traditions`, the existing Mandala/Paubha/Thangka introduction |
 
-Internal navigation uses [Next.js Link](https://nextjs.org/docs/app/api-reference/components/link),
-which emits real anchors. These destinations also work with JavaScript disabled.
-Catalogue, artist, wallet and collector navigation will be added when their actual
-pages exist. No placeholder route, disabled collecting action or invented artwork
-is introduced by the shell.
+Home and Explore use Next.js links. Purpose and Traditions use native anchors so
+same-page keyboard activation transfers focus to the target. A small homepage
+mount effect restores focus to these two headings when cross-page navigation
+arrives before streamed content exists. No other fragment is intercepted.
+Artist profiles are reached from artwork attribution; wallet and collector pages
+remain planned. No placeholder collecting action is exposed.
 
 The header and footer are normal document content, not fixed overlays. Navigation
 is always visible, wraps when necessary and stacks below the brand on narrow
@@ -50,7 +52,7 @@ wallet provider or script that injects `window.ethereum`.
 Reduced-motion and forced-colour preferences retain the design foundation's
 rules. Nothing in the shell relies on animation or JavaScript to become visible.
 The current main heading and body explicitly describe Real World Assets, Nepali
-culture, Mandala, Paubha and Thangka; the complete cultural homepage is a later step.
+culture, Mandala, Paubha and Thangka; the cultural homepage and its published works are implemented.
 
 ## Verification
 
@@ -70,4 +72,5 @@ Run `pnpm --filter @katha/web dev` for visual checks at 320px, 390px and desktop
 widths, with 200% zoom, keyboard-only navigation, reduced motion and forced colours.
 Tab first to the skip link, activate it, then verify Home, Our purpose, Traditions
 and the footer X link. Check wrapping and horizontal overflow. Repeat with JavaScript
-disabled. Broader responsive/accessibility browser coverage arrives in step 086.
+disabled. The [public browsing suite](public-browsing-tests.md) exercises these journeys
+in Chromium. Human screen-reader and real-artwork reviews remain necessary.

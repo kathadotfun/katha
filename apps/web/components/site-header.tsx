@@ -27,14 +27,14 @@ export function SiteHeader() {
               </Link>
             </li>
             <li>
-              <Link href="/#purpose" className="site-nav-link">
+              <a href="/#purpose" className="site-nav-link">
                 Our purpose
-              </Link>
+              </a>
             </li>
             <li>
-              <Link href="/#traditions" className="site-nav-link">
+              <a href="/#traditions" className="site-nav-link">
                 Traditions
-              </Link>
+              </a>
             </li>
           </ul>
         </nav>

@@ -620,7 +620,9 @@ test("artist artwork failures, emptiness and invalid page queries preserve biogr
   }
 });
 
+const homeFocusModule = await viewModule("../components/home-fragment-focus.tsx", {});
 const homeModule = await viewModule("../components/home-page.tsx", {
+  "./home-fragment-focus": homeFocusModule,
   "../lib/artwork-page": new URL("../lib/artwork-page.ts", import.meta.url).href,
   "../lib/artwork-exploration": new URL(
     "../lib/artwork-exploration.ts",

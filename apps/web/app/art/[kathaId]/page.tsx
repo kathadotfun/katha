@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PublicApiError } from "../../../lib/public-api";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { ArtworkDetail } from "../../../components/artwork-detail";
@@ -32,12 +33,21 @@ const getArtwork = cache(async (id: string) => {
 export async function generateMetadata({
   params,
 }: ArtworkPageProps): Promise<Metadata> {
-  const artwork = await getArtwork((await params).kathaId);
-  return {
-    title: `${artwork.title} — ${artwork.artist.displayName} | Katha`,
-    description: `${artworkCategoryLabels[artwork.category]} by ${artwork.artist.displayName}, ${artwork.creationYear}. A documented physical artwork on Katha.`,
-    alternates: { canonical: artworkCanonicalUrl(artwork.kathaId) },
-  };
+  try {
+    const artwork = await getArtwork((await params).kathaId);
+    return {
+      title: `${artwork.title} — ${artwork.artist.displayName} | Katha`,
+      description: `${artworkCategoryLabels[artwork.category]} by ${artwork.artist.displayName}, ${artwork.creationYear}. A documented physical artwork on Katha.`,
+      alternates: { canonical: artworkCanonicalUrl(artwork.kathaId) },
+    };
+  } catch (error) {
+    if (error instanceof PublicApiError)
+      return {
+        title: "Artwork information unavailable | Katha",
+        robots: { index: false, follow: true },
+      };
+    throw error;
+  }
 }
 
 export default async function ArtworkPage({ params, searchParams }: ArtworkPageProps) {

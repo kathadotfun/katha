@@ -1,3 +1,4 @@
+import { HomeFragmentFocus } from "./home-fragment-focus";
 import { ArtworkPhoto } from "./artwork-photo";
 import { artworkCategoryLabels } from "../lib/artwork-page";
 import { explorationPhotoUrl } from "../lib/artwork-exploration";
@@ -36,6 +37,7 @@ export function KathaHomepage({
 }) {
   return (
     <div className="page-container py-[var(--section-space)]">
+      <HomeFragmentFocus />
       <section aria-labelledby="purpose">
         <p className="eyebrow text-brand">Katha · Real World Assets</p>
         <h1 id="purpose" tabIndex={-1} className="mt-8 max-w-4xl text-display">

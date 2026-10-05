@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function ArtworkPhoto({
   src,
@@ -14,6 +14,12 @@ export function ArtworkPhoto({
   primary?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
+  const imageRef = useRef<HTMLImageElement>(null);
+  useEffect(() => {
+    // Image errors can precede hydration, before React attaches onError.
+    if (imageRef.current?.complete && imageRef.current.naturalWidth === 0)
+      setFailed(true);
+  }, [src]);
   return (
     <figure className="min-w-0">
       <div
@@ -25,6 +31,7 @@ export function ArtworkPhoto({
           </p>
         ) : (
           <img
+            ref={imageRef}
             src={src}
             alt={alt}
             loading={primary ? "eager" : "lazy"}
