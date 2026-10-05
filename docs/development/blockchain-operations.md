@@ -11,8 +11,8 @@ Each operation belongs to an artwork, requesting wallet and LOCALNET/DEVNET
 cluster. It stores the operation kind, idempotency key, request hash, expected
 program address, ordered account addresses and ordered document/evidence hashes.
 Registry and Marketplace artwork operation kinds are available in the schema.
-The preparation service currently supports Registry kinds only; signing, receipt
-reconciliation and marketplace behavior remain separate work.
+The preparation service currently supports Registry kinds only; signing and marketplace behavior remain separate work.
+[Receipt reconciliation](operation-receipts-api.md) now supports prepared Registry operations.
 
 An idempotency key is unique within a wallet and cluster, across operation kinds.
 Keys contain 1–128 ASCII letters, digits, underscores or hyphens. A retry must look
@@ -32,7 +32,7 @@ artist evidence, contact details or signing material.
 
 ## Receipt attempts and status
 
-An operation starts `PREPARED`, without receipts. Each submitted signature creates
+An operation starts `PREPARED`, without receipts. Each verified signed attempt creates
 an `UNKNOWN` receipt containing its cluster and exact transaction-message hash.
 Signatures are unique per cluster, so one transaction cannot be attached to two
 operations. A composite foreign key binds receipt cluster to operation cluster.
@@ -54,9 +54,10 @@ finalization time. JSON consumers must serialize slots as integer decimal string
 Creation, observation and operation-update times come from the database clock.
 
 A network timeout or temporary missing signature remains `UNKNOWN`. Classify an
-attempt as `FAILED` only after the later reconciliation layer has conclusive
-failure evidence, including an expiry decision that rules out successful landing.
-The schema has no RPC connection and cannot verify such evidence itself.
+attempt as `FAILED` only after reconciliation has conclusive failure evidence.
+The current endpoint requires a matching finalized transaction with an execution
+error; it does not infer expiry. The schema has no RPC connection and cannot verify
+such evidence itself.
 
 ## Reconciliation and recovery
 
@@ -69,10 +70,10 @@ Manual operation-status changes that disagree with its receipts are rejected.
 After successful finalization, new attempts are rejected, while an older unresolved
 attempt may still be marked failed without erasing the successful outcome.
 
-When reconciliation is implemented, validate the finalized transaction's success,
+Receipt reconciliation validates the finalized transaction's success,
 signer, cluster, program/instruction, accounts and commitments against the stored
-expectations before updating the receipt. Update related finalized domain records
-in the same transaction. A failed transaction or failed database write must not
+expectations before updating the receipt. Receipt and aggregate operation status update
+in one transaction; domain projection writes belong to indexing. A failed transaction or failed database write must not
 create provenance. The tests verify that rolling back receipt reconciliation also
 rolls back the derived operation status. These tables themselves never create
 verification, condition, custody or ownership history.
@@ -83,8 +84,8 @@ retain the original immutable request, and do not retry an unresolved operation
 blindly. Logical idempotency cannot prevent double execution of different signed
 transactions on chain; future preparation must honor program-level identity,
 revision and sale guards. Authorization and unsigned simulation are implemented by the preparation
-service. Feature endpoints, wallet submission and chain receipt validation remain
-later steps, particularly receipt reconciliation in step 072.
+service. Registry preparation endpoints and signed receipt validation now exist; wallet
+submission and event indexing remain separate workflows.
 
 Wallet and artwork references use restrictive deletion. A wallet referenced by an
 operation cannot be removed using the earlier wallet cleanup path; revoke its
@@ -104,4 +105,5 @@ snapshot/journal; generation alone does not describe triggers.
 The internal [unsigned-operation service](blockchain-operation-preparation.md)
 now persists exact canonical intents and immutable simulated message preparations.
 Migration0010 retains refreshed blockhash messages separately from eventual
-transaction receipts; no generic HTTP route or receipt reconciliation is added.
+transaction receipts; no generic preparation HTTP route is added. The receipt endpoint validates
+a signed copy of one retained preparation before accepting the derived signature.

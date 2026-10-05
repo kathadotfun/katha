@@ -1,3 +1,6 @@
+import { createOperationReceipts } from "./operation-receipts.js";
+import { createOperationReceiptStore } from "@katha/db";
+import { createOperationReceiptReader } from "@katha/solana";
 import { createMetadataRevisions } from "./metadata-revisions.js";
 import { createMetadataRevisionStore } from "@katha/db";
 import { createMetadataRevisionReader } from "@katha/solana";
@@ -165,6 +168,12 @@ function startApi() {
       createMetadataRevisionReader(rpcConfig),
       createOperationChain(rpcConfig),
       storage,
+      config.KATHA_CLUSTER,
+    ),
+    createOperationReceipts(
+      createOperationReceiptStore(database.db),
+      sessions,
+      createOperationReceiptReader(rpcConfig),
       config.KATHA_CLUSTER,
     ),
   );

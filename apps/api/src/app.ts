@@ -1,3 +1,8 @@
+import type { OperationReceiptsBoundary } from "./operation-receipts.js";
+import {
+  operationReceiptParamsSchema,
+  operationReceiptRequestSchema,
+} from "@katha/shared";
 import type { MetadataRevisionsBoundary } from "./metadata-revisions.js";
 import { metadataRevisionRequestSchema } from "@katha/shared";
 import type { ArtworkMintingBoundary } from "./artwork-minting.js";
@@ -78,6 +83,7 @@ export function createApi(
   custodyOperations?: CustodyOperationsBoundary,
   minting?: ArtworkMintingBoundary,
   metadataRevisions?: MetadataRevisionsBoundary,
+  receipts?: OperationReceiptsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -369,6 +375,24 @@ export function createApi(
           await parseJson(c, metadataRevisionRequestSchema),
         ),
         201,
+      );
+    });
+  }
+  if (receipts) {
+    app.use("/operations/*", async (c, next) => {
+      c.header("Cache-Control", "no-store");
+      await next();
+    });
+    app.post("/operations/:operationId/receipts", async (c) => {
+      const { operationId } = parseParams(c, operationReceiptParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await receipts.reconcile(
+          c.req.header("Authorization"),
+          operationId,
+          await parseJson(c, operationReceiptRequestSchema),
+        ),
+        200,
       );
     });
   }

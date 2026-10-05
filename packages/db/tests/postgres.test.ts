@@ -3709,3 +3709,234 @@ it("rechecks metadata revision snapshots under save locks and rolls back raced e
     await connection.close();
   }
 });
+
+it("atomically reconciles owned prepared receipts, terminal retries and competing success", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const { createOperationReceiptStore, createOperationPreparationStore } =
+    await import("../src/index.js");
+  const address = "J".repeat(32); // Persistence-only synthetic identity, never signs.
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "receipt-store-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Fixture missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic receipts",
+        creationYear: 2026,
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw new Error("Fixture missing");
+    const operation = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET" as const,
+      kind: "REGISTER_ARTWORK" as const,
+      idempotencyKey: "receipt-store-1",
+      requestHash: "a".repeat(64),
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: ["b".repeat(64)],
+    };
+    const preparation = {
+      canonicalRequest: '{"synthetic":"receipt preparation"}',
+      messageHash: "c".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 10n,
+      simulationUnits: 20n,
+    };
+    operation.requestHash = createHash("sha256")
+      .update(preparation.canonicalRequest)
+      .digest("hex");
+    const preparedStore = createOperationPreparationStore(db),
+      store = createOperationReceiptStore(db);
+    const prepare = async (key: string) => {
+      const saved = await preparedStore.save(
+        { ...operation, idempotencyKey: key },
+        address,
+        artwork.kathaId,
+        preparation,
+      );
+      if (saved.status !== "saved") throw new Error("Preparation failed");
+      return saved;
+    };
+    const first = await prepare("receipt-store-1");
+    expect(
+      await store.load(first.operationId, first.preparationId, randomUUID()),
+    ).toBeNull();
+    expect(
+      await store.load(first.operationId, first.preparationId, wallet.id),
+    ).not.toBeNull();
+    const signature = "K".repeat(88);
+    const persist = (
+      signatureValue: string,
+      observation: Parameters<typeof store.save>[6],
+    ) =>
+      store.save(
+        first.operationId,
+        first.preparationId,
+        wallet.id,
+        "LOCALNET",
+        signatureValue,
+        preparation.messageHash,
+        observation,
+      );
+    const raced = await Promise.all([
+      persist(signature, { status: "UNKNOWN" }),
+      persist(signature, { status: "UNKNOWN" }),
+    ]);
+    expect(raced.map((r) => r.status)).toEqual(["saved", "saved"]);
+    if (raced[0]!.status === "saved" && raced[1]!.status === "saved")
+      expect(raced[0]!.receipt.id).toBe(raced[1]!.receipt.id);
+    expect(
+      (
+        await store.save(
+          first.operationId,
+          first.preparationId,
+          wallet.id,
+          "DEVNET",
+          "L".repeat(88),
+          preparation.messageHash,
+          { status: "UNKNOWN" },
+        )
+      ).status,
+    ).toBe("conflict");
+    expect(
+      (
+        await store.save(
+          first.operationId,
+          first.preparationId,
+          wallet.id,
+          "LOCALNET",
+          "L".repeat(88),
+          "d".repeat(64),
+          { status: "UNKNOWN" },
+        )
+      ).status,
+    ).toBe("conflict");
+    await persist("L".repeat(88), { status: "UNKNOWN" });
+    const finalized = {
+      status: "FINALIZED" as const,
+      slot: 9007199254740993n,
+      chainRecordedAt: new Date("2026-10-05T00:00:00.000Z"),
+    };
+    const finals = await Promise.all([
+      persist(signature, finalized),
+      persist("L".repeat(88), finalized),
+    ]);
+    expect(finals.map((r) => r.status).sort()).toEqual(["conflict", "saved"]);
+    const winner = finals[0]!.status === "saved" ? signature : "L".repeat(88);
+    const replay = await persist(winner, finalized);
+    expect(replay.status).toBe("saved");
+    if (replay.status === "saved") {
+      expect(replay.receipt.slot).toBe(9007199254740993n);
+      expect(replay.operationStatus).toBe("FINALIZED");
+    }
+    expect((await persist("M".repeat(88), { status: "UNKNOWN" })).status).toBe(
+      "conflict",
+    );
+    const loser = winner === signature ? "L".repeat(88) : signature;
+    expect(
+      (await persist(loser, { status: "FAILED", failureCode: "TRANSACTION_FAILED" }))
+        .status,
+    ).toBe("saved");
+    const second = await prepare("receipt-store-2");
+    expect(
+      (
+        await store.save(
+          second.operationId,
+          second.preparationId,
+          wallet.id,
+          "LOCALNET",
+          winner,
+          preparation.messageHash,
+          { status: "UNKNOWN" },
+        )
+      ).status,
+    ).toBe("conflict");
+    await expect(
+      store.save(
+        second.operationId,
+        second.preparationId,
+        wallet.id,
+        "LOCALNET",
+        "N".repeat(88),
+        preparation.messageHash,
+        { ...finalized, slot: -1n },
+      ),
+    ).rejects.toThrow();
+    expect(
+      await db
+        .select()
+        .from(transactionReceipts)
+        .where(eq(transactionReceipts.operationId, second.operationId)),
+    ).toHaveLength(0);
+    const [secondOperation] = await db
+      .select()
+      .from(blockchainOperations)
+      .where(eq(blockchainOperations.id, second.operationId));
+    expect(secondOperation?.status).toBe("PREPARED");
+    const failed = await store.save(
+      second.operationId,
+      second.preparationId,
+      wallet.id,
+      "LOCALNET",
+      "N".repeat(88),
+      preparation.messageHash,
+      { status: "FAILED", failureCode: "TRANSACTION_FAILED" },
+    );
+    expect(failed.status).toBe("saved");
+    if (failed.status === "saved") expect(failed.operationStatus).toBe("FAILED");
+    expect(
+      (
+        await store.save(
+          second.operationId,
+          second.preparationId,
+          wallet.id,
+          "LOCALNET",
+          "N".repeat(88),
+          preparation.messageHash,
+          finalized,
+        )
+      ).status,
+    ).toBe("conflict");
+    expect(
+      await db
+        .select()
+        .from(custodyEvents)
+        .where(eq(custodyEvents.artworkId, artwork.id)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(verifications)
+        .where(eq(verifications.artworkId, artwork.id)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(artworkOwnership)
+        .where(eq(artworkOwnership.artworkId, artwork.id)),
+    ).toHaveLength(0);
+  } finally {
+    await connection.close();
+  }
+});

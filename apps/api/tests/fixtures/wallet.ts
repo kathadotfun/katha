@@ -17,6 +17,7 @@ export function temporaryWallet() {
   }
   return {
     address,
+    signBytes: (message: Uint8Array) => sign(null, message, privateKey),
     signMessage: (message: string) =>
       sign(null, Buffer.from(message, "utf8"), privateKey).toString("base64"),
   };

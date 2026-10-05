@@ -81,7 +81,8 @@ finalized physical delivery. Mint preparation now verifies committed metadata,
 initial inspection and held custody, and reserves one idempotent unsigned Core mint
 intent per artwork and cluster. Metadata commitment preparation now supports
 initial, pre-mint and atomic post-mint Registry/Core revisions from immutable stored
-documents.
+documents. Receipt reconciliation now verifies signed preparations and exact finalized
+transactions, retaining unresolved attempts without creating domain history.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -116,6 +117,7 @@ outside the current scope.
 - [Custody and manual fulfillment API](docs/development/custody-operations-api.md)
 - [Artwork mint preparation](docs/development/artwork-minting-api.md)
 - [Metadata commitment preparation](docs/development/metadata-revisions-api.md)
+- [Finalized operation receipts](docs/development/operation-receipts-api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

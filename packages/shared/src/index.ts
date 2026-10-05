@@ -155,6 +155,7 @@ export {
 
 export {
   operationIntentSchema,
+  preparedInstructionSchema,
   registryOperationKindSchema,
   unsignedOperationResponseSchema,
   type OperationIntent,
@@ -174,3 +175,4 @@ export {
   metadataRevisionRequestSchema,
   type MetadataRevisionRequest,
 } from "./metadata-revision-api.js";
+export * from "./operation-receipt-api.js";

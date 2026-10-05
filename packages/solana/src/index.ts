@@ -109,3 +109,12 @@ export {
   type MetadataRevisionReader,
   type MetadataRevisionSnapshot,
 } from "./metadata-revision-reader.js";
+export {
+  validateSignedPreparation,
+  ReceiptValidationError,
+  createOperationReceiptReader,
+  createOperationReceiptReaderFromRpc,
+  type ReceiptPreparation,
+  type ReceiptObservation,
+  type OperationReceiptReader,
+} from "./operation-receipt.js";

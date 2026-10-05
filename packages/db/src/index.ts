@@ -159,3 +159,8 @@ export {
   createMetadataRevisionStore,
   type MetadataRevisionStore,
 } from "./metadata-revision-store.js";
+export {
+  createOperationReceiptStore,
+  type OperationReceiptStore,
+  type ReceiptStoreObservation,
+} from "./operation-receipt-store.js";

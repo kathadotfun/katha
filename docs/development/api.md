@@ -82,3 +82,7 @@ intent per artwork/cluster. Preparing an unsigned transaction does not publish o
 [Metadata commitment preparation](metadata-revisions-api.md) exposes authorized
 unsigned initial, pre-mint and atomic post-mint metadata transactions with exact
 stored-byte validation, reviewed version/hash checks and save-time eligibility guards.
+
+[Finalized operation receipts](operation-receipts-api.md) now records verified signed
+attempts and reconciles exact finalized transactions. No submission or event indexing
+is performed by the receipt endpoint.

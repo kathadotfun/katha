@@ -26,7 +26,8 @@ import type { StorageProvider } from "../../src/storage.js";
 import { temporaryWallet } from "./wallet.js";
 
 export async function registrationFixture() {
-  const wallet = temporaryWallet().address;
+  const testWallet = temporaryWallet();
+  const wallet = testWallet.address;
   const at = new Date("2026-10-05T00:00:00.000Z");
   const artistId = randomUUID();
   const artworkId = randomUUID();
@@ -221,6 +222,7 @@ export async function registrationFixture() {
     supportedTransactionVersions: [0],
   };
   return {
+    testWallet,
     service,
     request,
     snapshot,

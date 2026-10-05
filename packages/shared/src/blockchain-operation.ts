@@ -27,6 +27,24 @@ export const operationIntentSchema = z.strictObject({
   // Internal callers supply only already validated domain inputs, never raw HTTP JSON.
   parameters: z.record(z.string().min(1).max(100), z.json()),
 });
+// Internal canonical preparation shape; receipt validation compares compiled privileges.
+export const preparedInstructionSchema = z.strictObject({
+  programAddress: walletAddressSchema,
+  accounts: z
+    .array(
+      z.strictObject({
+        address: walletAddressSchema,
+        role: z.number().int().min(0).max(3),
+      }),
+    )
+    .min(1)
+    .max(64),
+  dataHex: z
+    .string()
+    .min(16)
+    .max(8192)
+    .regex(/^(?:[0-9a-f]{2})+$/),
+});
 export const unsignedOperationResponseSchema = z.strictObject({
   operationId: z.uuid(),
   preparationId: z.uuid(),
