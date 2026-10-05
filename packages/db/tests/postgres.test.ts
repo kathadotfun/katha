@@ -3178,3 +3178,162 @@ it("rechecks condition-attestation snapshots under save locks and rolls back rac
     await connection.close();
   }
 });
+
+it("serializes private fulfillment retries and status changes, and rejects stale custody operation snapshots", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const db = connection.db;
+  const { createCustodyOperationStore, fulfillmentRequests } =
+    await import("../src/index.js");
+  const address = "E".repeat(32);
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "custody-operation-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Fixture missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic custody",
+        creationYear: 2026,
+        authorshipEvidenceHash: "a".repeat(64),
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw new Error("Fixture missing");
+    const store = createCustodyOperationStore(db);
+    const input = {
+      requestId: randomUUID(),
+      kind: "DELIVERY" as const,
+      recipientName: "Synthetic",
+      contactEmail: "synthetic@example.invalid",
+      contactPhone: null,
+      addressLines: ["Synthetic address"],
+      city: "Synthetic",
+      region: null,
+      postalCode: null,
+      countryCode: "NP",
+      deliveryInstructions: null,
+    };
+    const results = await Promise.all([
+      store.create(artwork, address, input),
+      store.create(artwork, address, input),
+    ]);
+    expect(results[0]?.id).toBe(input.requestId);
+    expect(results[1]?.id).toBe(input.requestId);
+    expect(
+      await store.create(artwork, address, { ...input, recipientName: "Changed" }),
+    ).toBeNull();
+    expect(
+      await db
+        .select()
+        .from(fulfillmentRequests)
+        .where(eq(fulfillmentRequests.id, input.requestId)),
+    ).toHaveLength(1);
+    const snapshot = await store.load(artwork.kathaId, input.requestId);
+    const found = await store.findRequest(input.requestId);
+    if (!found || !snapshot) throw new Error("Snapshot missing");
+    const statusInput = {
+      expectedUpdatedAt: found.request.updatedAt.toISOString(),
+      status: "APPROVED" as const,
+    };
+    const changed = await Promise.all([
+      store.update(found, address, statusInput),
+      store.update(found, address, statusInput),
+    ]);
+    expect(changed.filter(Boolean)).toHaveLength(1);
+    const canonicalRequest = '{"synthetic":"custody"}';
+    const hash = createHash("sha256").update(canonicalRequest).digest("hex");
+    const operation = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET" as const,
+      kind: "UPDATE_CUSTODY" as const,
+      idempotencyKey: "custody-save-guard",
+      requestHash: hash,
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: [],
+    };
+    const preparation = {
+      canonicalRequest,
+      messageHash: "a".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 10n,
+      simulationUnits: 20n,
+    };
+    expect(
+      (
+        await store
+          .operations(snapshot)
+          .save(operation, address, artwork.kathaId, preparation)
+      ).status,
+    ).toBe("conflict");
+    expect(
+      await db
+        .select()
+        .from(blockchainOperations)
+        .where(eq(blockchainOperations.idempotencyKey, operation.idempotencyKey)),
+    ).toHaveLength(0);
+    const current = await store.load(artwork.kathaId, input.requestId);
+    if (!current) throw new Error("Snapshot missing");
+    expect(
+      (
+        await store
+          .operations(current)
+          .save(operation, address, artwork.kathaId, preparation)
+      ).status,
+    ).toBe("saved");
+    const approved = await store.findRequest(input.requestId);
+    if (!approved) throw new Error("Snapshot missing");
+    expect(
+      await store.update(approved, address, {
+        expectedUpdatedAt: approved.request.updatedAt.toISOString(),
+        status: "RECEIVED",
+      }),
+    ).toBeNull();
+    const dispatched = await store.update(approved, address, {
+      expectedUpdatedAt: approved.request.updatedAt.toISOString(),
+      status: "DISPATCHED",
+      courier: "Synthetic",
+    });
+    if (!dispatched) throw new Error("Dispatch missing");
+    const dispatchedSnapshot = await store.findRequest(input.requestId);
+    if (!dispatchedSnapshot) throw new Error("Snapshot missing");
+    expect(
+      await store.update(dispatchedSnapshot, address, {
+        expectedUpdatedAt: dispatched.updatedAt.toISOString(),
+        status: "RECEIVED",
+        courier: "Changed",
+      }),
+    ).toBeNull();
+    expect(
+      await store.update(dispatchedSnapshot, address, {
+        expectedUpdatedAt: dispatched.updatedAt.toISOString(),
+        status: "RECEIVED",
+      }),
+    ).toMatchObject({ status: "RECEIVED" });
+    expect(
+      await db
+        .select()
+        .from(custodyEvents)
+        .where(eq(custodyEvents.artworkId, artwork.id)),
+    ).toHaveLength(0);
+  } finally {
+    await connection.close();
+  }
+});

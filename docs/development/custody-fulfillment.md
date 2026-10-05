@@ -106,3 +106,7 @@ immutable history, chronological ordering, missing artwork links, private
 fulfillment validation and status guards, locked dispatched details and custody
 independence. Fixtures use synthetic contacts and addresses only. The development
 database and real delivery information are never used.
+
+[Custody and manual fulfillment API](custody-operations-api.md) prepares unsigned
+custody attestations and exposes private owner requests/admin coordination. Manual
+request status never creates finalized custody or transfers Core ownership.

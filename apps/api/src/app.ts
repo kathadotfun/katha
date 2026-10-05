@@ -1,3 +1,10 @@
+import type { CustodyOperationsBoundary } from "./custody-operations.js";
+import {
+  custodyPreparationRequestSchema,
+  fulfillmentCreateRequestSchema,
+  fulfillmentUpdateRequestSchema,
+  fulfillmentIdParamsSchema,
+} from "@katha/shared";
 import type { ConditionAttestationBoundary } from "./condition-attestation.js";
 import { conditionAttestationRequestSchema } from "@katha/shared";
 import type { ArtworkVerificationBoundary } from "./artwork-verification.js";
@@ -64,6 +71,7 @@ export function createApi(
   registration?: ArtworkRegistrationBoundary,
   verification?: ArtworkVerificationBoundary,
   conditionAttestation?: ConditionAttestationBoundary,
+  custodyOperations?: CustodyOperationsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -277,6 +285,56 @@ export function createApi(
           await parseJson(c, conditionAttestationRequestSchema),
         ),
         201,
+      );
+    });
+  }
+  if (custodyOperations) {
+    app.use("/fulfillment/*", async (c, next) => {
+      c.header("Cache-Control", "no-store");
+      await next();
+    });
+    app.post("/admin/artworks/:kathaId/operations/custody", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await custodyOperations.prepare(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, custodyPreparationRequestSchema),
+        ),
+        201,
+      );
+    });
+    app.post("/fulfillment/artworks/:kathaId", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await custodyOperations.create(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, fulfillmentCreateRequestSchema),
+        ),
+        201,
+      );
+    });
+    app.get("/fulfillment/:requestId", async (c) => {
+      const { requestId } = parseParams(c, fulfillmentIdParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await custodyOperations.detail(c.req.header("Authorization"), requestId),
+        200,
+      );
+    });
+    app.patch("/admin/fulfillment/:requestId", async (c) => {
+      const { requestId } = parseParams(c, fulfillmentIdParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await custodyOperations.update(
+          c.req.header("Authorization"),
+          requestId,
+          await parseJson(c, fulfillmentUpdateRequestSchema),
+        ),
+        200,
       );
     });
   }

@@ -16,38 +16,42 @@ handlers. Role configuration and finalized Registry authority checks are explain
 in [authorization](api-authorization.md); document preparation itself checks the
 configured verifier role, not a finalized Registry role.
 
-| Method and path                                            | Access                                  | Input contract                                                | Success contract / status                                  |
-| ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------- |
-| `GET /health/live`                                         | Public                                  | None                                                          | `{ "status": "alive" }` / 200                              |
-| `GET /health/ready`                                        | Public                                  | None                                                          | `{ "status": "ready" }` / 200; unavailable / 503           |
-| `POST /auth/challenge`                                     | Public                                  | `walletChallengeRequestSchema`                                | `walletChallengeResponseSchema` / 201                      |
-| `POST /auth/verify`                                        | Public, signed challenge                | `walletVerifyRequestSchema`                                   | `walletSessionResponseSchema` / 200                        |
-| `GET /auth/session`                                        | Session                                 | None                                                          | `walletSessionSchema` / 200                                |
-| `POST /auth/logout`                                        | Session                                 | None                                                          | Empty body / 204                                           |
-| `POST /admin/artists`                                      | Admin                                   | `artistCreateRequestSchema`                                   | `artistResponseSchema` / 201                               |
-| `POST /verifier/artists/:artistId/verification`            | Verifier                                | UUID path; `artistVerificationRequestSchema`                  | `artistResponseSchema` / 200                               |
-| `GET /artists`                                             | Public                                  | `paginationQuerySchema`                                       | `paginatedResponseSchema(publicArtistSummarySchema)` / 200 |
-| `GET /artists/:slug`                                       | Public                                  | `artistSlugParamsSchema`                                      | `publicArtistDetailSchema` / 200                           |
-| `POST /admin/artworks`                                     | Admin                                   | `artworkDraftCreateRequestSchema`                             | `artworkDraftResponseSchema` / 201                         |
-| `POST /admin/artworks/:kathaId/operations/registration`    | Admin + Registry registration authority | Permanent ID; empty query; `artworkRegistrationRequestSchema` | `unsignedOperationResponseSchema` / 201                    |
-| `POST /verifier/artworks/:kathaId/operations/verification` | Verifier + Registry verifier authority  | Permanent ID; empty query; `artworkVerificationRequestSchema` | `unsignedOperationResponseSchema` / 201                    |
-| `POST /verifier/artworks/:kathaId/operations/condition`    | Verifier + current Registry verifier    | `conditionAttestationRequestSchema`                           | `unsignedOperationResponseSchema` / 201                    |
-| `PATCH /admin/artworks/:kathaId`                           | Admin                                   | Permanent ID; `artworkDraftUpdateRequestSchema`               | `artworkDraftResponseSchema` / 200                         |
-| `GET /artworks`                                            | Public                                  | `artworkDiscoveryQuerySchema`                                 | `artworkDiscoveryResponseSchema` / 200                     |
-| `GET /artworks/:kathaId`                                   | Public                                  | Permanent ID; empty query                                     | `publicArtworkDetailSchema` / 200                          |
-| `POST /verifier/artworks/:kathaId/documents/metadata`      | Verifier                                | Permanent ID; `metadataPreparationRequestSchema`              | `preparedDocumentResponseSchema` / 201                     |
-| `POST /verifier/artworks/:kathaId/documents/condition`     | Verifier                                | Permanent ID; `conditionPreparationRequestSchema`             | `preparedDocumentResponseSchema` / 201                     |
-| `GET /storage/public/:filename`                            | Public, approved reference              | Hash filename; empty query                                    | Verified bytes and validated MIME type / 200               |
+| Method and path                                            | Access                                     | Input contract                                                | Success contract / status                                  |
+| ---------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------- |
+| `GET /health/live`                                         | Public                                     | None                                                          | `{ "status": "alive" }` / 200                              |
+| `GET /health/ready`                                        | Public                                     | None                                                          | `{ "status": "ready" }` / 200; unavailable / 503           |
+| `POST /auth/challenge`                                     | Public                                     | `walletChallengeRequestSchema`                                | `walletChallengeResponseSchema` / 201                      |
+| `POST /auth/verify`                                        | Public, signed challenge                   | `walletVerifyRequestSchema`                                   | `walletSessionResponseSchema` / 200                        |
+| `GET /auth/session`                                        | Session                                    | None                                                          | `walletSessionSchema` / 200                                |
+| `POST /auth/logout`                                        | Session                                    | None                                                          | Empty body / 204                                           |
+| `POST /admin/artists`                                      | Admin                                      | `artistCreateRequestSchema`                                   | `artistResponseSchema` / 201                               |
+| `POST /verifier/artists/:artistId/verification`            | Verifier                                   | UUID path; `artistVerificationRequestSchema`                  | `artistResponseSchema` / 200                               |
+| `GET /artists`                                             | Public                                     | `paginationQuerySchema`                                       | `paginatedResponseSchema(publicArtistSummarySchema)` / 200 |
+| `GET /artists/:slug`                                       | Public                                     | `artistSlugParamsSchema`                                      | `publicArtistDetailSchema` / 200                           |
+| `POST /admin/artworks`                                     | Admin                                      | `artworkDraftCreateRequestSchema`                             | `artworkDraftResponseSchema` / 201                         |
+| `POST /admin/artworks/:kathaId/operations/registration`    | Admin + Registry registration authority    | Permanent ID; empty query; `artworkRegistrationRequestSchema` | `unsignedOperationResponseSchema` / 201                    |
+| `POST /verifier/artworks/:kathaId/operations/verification` | Verifier + Registry verifier authority     | Permanent ID; empty query; `artworkVerificationRequestSchema` | `unsignedOperationResponseSchema` / 201                    |
+| `POST /verifier/artworks/:kathaId/operations/condition`    | Verifier + current Registry verifier       | `conditionAttestationRequestSchema`                           | `unsignedOperationResponseSchema` / 201                    |
+| `PATCH /admin/artworks/:kathaId`                           | Admin                                      | Permanent ID; `artworkDraftUpdateRequestSchema`               | `artworkDraftResponseSchema` / 200                         |
+| `GET /artworks`                                            | Public                                     | `artworkDiscoveryQuerySchema`                                 | `artworkDiscoveryResponseSchema` / 200                     |
+| `GET /artworks/:kathaId`                                   | Public                                     | Permanent ID; empty query                                     | `publicArtworkDetailSchema` / 200                          |
+| `POST /verifier/artworks/:kathaId/documents/metadata`      | Verifier                                   | Permanent ID; `metadataPreparationRequestSchema`              | `preparedDocumentResponseSchema` / 201                     |
+| `POST /verifier/artworks/:kathaId/documents/condition`     | Verifier                                   | Permanent ID; `conditionPreparationRequestSchema`             | `preparedDocumentResponseSchema` / 201                     |
+| `GET /storage/public/:filename`                            | Public, approved reference                 | Hash filename; empty query                                    | Verified bytes and validated MIME type / 200               |
+| `POST /admin/artworks/:kathaId/operations/custody`         | Admin + current Registry custody authority | `custodyPreparationRequestSchema`                             | `unsignedOperationResponseSchema` / 201                    |
+| `POST /fulfillment/artworks/:kathaId`                      | Session + current Core owner               | `fulfillmentCreateRequestSchema`                              | `fulfillmentResponseSchema` / 201                          |
+| `GET /fulfillment/:requestId`                              | Original requester or admin                | `fulfillmentIdParamsSchema`, empty query                      | `fulfillmentResponseSchema` / 200                          |
+| `PATCH /admin/fulfillment/:requestId`                      | Admin                                      | `fulfillmentUpdateRequestSchema`                              | `fulfillmentResponseSchema` / 200                          |
 
 Wallet challenge expiry, exact signed-message requirements, single-use verification
 and logout behavior are in [wallet authentication](wallet-authentication.md).
-[Artwork registration preparation](artwork-registration-api.md) now returns simulated
-unsigned transactions; the connected wallet signs them. Other operation routes
-remain pending. Uninstalled paths return the shared 404 envelope after applicable middleware;
-protected prefixes still require their role before a not-found response. Upload, draft-list, verification/condition/custody/mint/metadata transaction
-preparation, receipt, provenance timeline, custody-write and marketplace routes are
-not yet installed. A configured HTTP method or multipart ceiling does not create
-an endpoint.
+[Artwork registration](artwork-registration-api.md), [verification](artwork-verification-api.md),
+[condition](condition-attestation-api.md) and [custody](custody-operations-api.md)
+preparation return unsigned transactions for the authorized wallet. Private
+fulfillment status is manual coordination, separate from finalized custody.
+Uninstalled paths return the shared 404 envelope after applicable middleware.
+Upload, draft-list, mint/metadata transaction preparation, receipts, provenance
+and marketplace routes remain planned.
 
 ## Input and concurrency rules
 
@@ -231,3 +235,6 @@ Prepared operations are private pending intent, separate from finalized attestat
 
 [Condition attestation preparation](condition-attestation-api.md) validates exact private
 report bytes and reviewed chain version, with owner/custody scope after minting.
+
+[Custody and manual fulfillment](custody-operations-api.md) separates private request
+status from authority-signed physical movement and finalized history.

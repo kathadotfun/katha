@@ -145,3 +145,7 @@ test submission. Automated signing uses temporary synthetic identities only.
 
 See the official [Solana simulation RPC](https://solana.com/docs/rpc/http/simulatetransaction)
 and [Kit wire encoding](https://www.solanakit.com/api/functions/getBase64EncodedWireTransaction).
+
+[Custody and manual fulfillment API](custody-operations-api.md) prepares unsigned
+custody attestations and exposes private owner requests/admin coordination. Manual
+request status never creates finalized custody or transfers Core ownership.

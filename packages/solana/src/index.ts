@@ -93,3 +93,8 @@ export { buildRecordMintedConditionTransaction } from "./attestation.js";
 export type { MintedConditionAccounts } from "./attestation.js";
 
 export * from "./condition-attestation-reader.js";
+export {
+  createCustodyReader,
+  createCustodyReaderFromRpc,
+  type CustodyReader,
+} from "./custody-reader.js";

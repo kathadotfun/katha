@@ -75,7 +75,9 @@ preparation endpoint now binds approved metadata and immutable identity. A verif
 endpoint prepares artwork authentication after explicit manual confirmation and
 validated registered attribution. Condition preparation binds exact private report
 bytes and current chain version, including minted owner/custody scope; remaining
-HTTP operation routes are planned.
+HTTP operation routes are planned. Custody preparation and private owner fulfillment
+requests now support separately authorized manual coordination without claiming
+finalized physical delivery.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -107,6 +109,7 @@ outside the current scope.
 - [Artwork registration preparation](docs/development/artwork-registration-api.md)
 - [Artwork verification preparation](docs/development/artwork-verification-api.md)
 - [Condition attestation preparation](docs/development/condition-attestation-api.md)
+- [Custody and manual fulfillment API](docs/development/custody-operations-api.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

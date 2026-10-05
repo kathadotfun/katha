@@ -70,3 +70,7 @@ without creating finalized verification history or publishing the artwork.
 unminted or minted condition instructions. Minted follow-up reports bind the current
 Core owner and held custody revision in their hashed private document; execution
 rechecks scope. Preparation does not finalize inspection state or approve resale.
+
+[Custody and manual fulfillment API](custody-operations-api.md) prepares unsigned
+custody attestations and exposes private owner requests/admin coordination. Manual
+request status never creates finalized custody or transfers Core ownership.

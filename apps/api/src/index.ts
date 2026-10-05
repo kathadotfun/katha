@@ -1,3 +1,6 @@
+import { createCustodyOperations } from "./custody-operations.js";
+import { createCustodyOperationStore } from "@katha/db";
+import { createCustodyReader } from "@katha/solana";
 import { createConditionAttestation } from "./condition-attestation.js";
 import { createConditionAttestationStore } from "@katha/db";
 import { createConditionAttestationReader } from "@katha/solana";
@@ -126,6 +129,14 @@ function startApi() {
       createConditionAttestationReader(rpcConfig),
       createOperationChain(rpcConfig),
       storage,
+      config.KATHA_CLUSTER,
+    ),
+    createCustodyOperations(
+      createCustodyOperationStore(database.db),
+      authorization,
+      sessions,
+      createCustodyReader(rpcConfig),
+      createOperationChain(rpcConfig),
       config.KATHA_CLUSTER,
     ),
   );

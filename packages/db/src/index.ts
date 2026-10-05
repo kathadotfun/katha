@@ -146,3 +146,7 @@ export {
 export * from "./artwork-verification-store.js";
 
 export * from "./condition-attestation-store.js";
+export {
+  createCustodyOperationStore,
+  type CustodyOperationStore,
+} from "./custody-operation-store.js";

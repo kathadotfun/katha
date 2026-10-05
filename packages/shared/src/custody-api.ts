@@ -1,0 +1,77 @@
+import { kathaIdSchema } from "./artwork-identity.js";
+import { z } from "zod";
+import { walletAddressSchema } from "./artwork-domain.js";
+import { physicalCustodyTransitionSchema } from "./artwork-lifecycle.js";
+import { artworkRegistrationRequestSchema } from "./artwork-registration-api.js";
+const timestamp = z.iso.datetime({ precision: 3 });
+export const custodyPreparationRequestSchema = artworkRegistrationRequestSchema
+  .omit({ metadataVersionId: true })
+  .extend({
+    expectedCustodyRevision: z
+      .string()
+      .max(20)
+      .regex(/^(0|[1-9][0-9]*)$/)
+      .refine(
+        (v) =>
+          /^(0|[1-9][0-9]*)$/.test(v) &&
+          v.length <= 20 &&
+          BigInt(v) < 18446744073709551615n,
+      ),
+    transition: physicalCustodyTransitionSchema,
+    collectorWallet: walletAddressSchema.nullable(),
+    movementConfirmed: z.literal(true),
+    fulfillmentId: z
+      .uuid()
+      .transform((v) => v.toLowerCase())
+      .optional(),
+  });
+const nonblank = (max: number) => z.string().trim().min(1).max(max);
+export const fulfillmentCreateRequestSchema = z
+  .strictObject({
+    requestId: z.uuid().transform((v) => v.toLowerCase()),
+    kind: z.enum(["DELIVERY", "RETURN_TO_KATHA"]),
+    recipientName: nonblank(200),
+    contactEmail: z.email().max(254).nullable(),
+    contactPhone: z
+      .string()
+      .regex(/^[+0-9][0-9 ()-]{4,39}$/)
+      .nullable(),
+    addressLines: z.array(nonblank(200)).min(1).max(5),
+    city: nonblank(120),
+    region: nonblank(120).nullable(),
+    postalCode: nonblank(32).nullable(),
+    countryCode: z.string().regex(/^[A-Z]{2}$/),
+    deliveryInstructions: nonblank(2000).nullable(),
+  })
+  .refine((v) => v.contactEmail !== null || v.contactPhone !== null);
+export const fulfillmentUpdateRequestSchema = z.strictObject({
+  expectedUpdatedAt: timestamp,
+  status: z.enum(["APPROVED", "DISPATCHED", "RECEIVED", "CANCELLED"]),
+  manualConfirmation: z.literal(true),
+  courier: nonblank(120).nullable().optional(),
+  trackingReference: nonblank(200).nullable().optional(),
+});
+export const fulfillmentIdParamsSchema = z.strictObject({
+  requestId: z.uuid().transform((v) => v.toLowerCase()),
+});
+export const fulfillmentResponseSchema = z.strictObject({
+  id: z.uuid(),
+  kathaId: kathaIdSchema,
+  kind: z.enum(["DELIVERY", "RETURN_TO_KATHA"]),
+  status: z.enum(["REQUESTED", "APPROVED", "DISPATCHED", "RECEIVED", "CANCELLED"]),
+  recipientName: nonblank(200),
+  contactEmail: z.email().nullable(),
+  contactPhone: z.string().nullable(),
+  addressLines: z.array(z.string()),
+  city: z.string(),
+  region: z.string().nullable(),
+  postalCode: z.string().nullable(),
+  countryCode: z.string(),
+  deliveryInstructions: z.string().nullable(),
+  courier: z.string().nullable(),
+  trackingReference: z.string().nullable(),
+  createdAt: timestamp,
+  updatedAt: timestamp,
+});
+export type FulfillmentCreateRequest = z.infer<typeof fulfillmentCreateRequestSchema>;
+export type FulfillmentUpdateRequest = z.infer<typeof fulfillmentUpdateRequestSchema>;

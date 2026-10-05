@@ -6,6 +6,7 @@ import {
   type PhysicalCustodyTransition,
 } from "@katha/shared";
 import {
+  address,
   compileTransaction,
   createNoopSigner,
   getBase64EncodedWireTransaction,
@@ -108,7 +109,7 @@ export interface ArtworkMintAccounts extends MetadataRevisionAccounts {
 export interface CustodyTransactionInput {
   kathaId: KathaId;
   transition: PhysicalCustodyTransition;
-  collector: Address | null;
+  collector: string | null;
 }
 export interface CustodyRevisionInput extends CustodyTransactionInput {
   expectedRevision: bigint;
@@ -144,7 +145,7 @@ function custodyInput(
   if (transition.to === "COLLECTOR_HELD") {
     if (input.collector === null)
       throw new TypeError("Collector custody requires a subject");
-    collector = nonzeroAddress(input.collector);
+    collector = nonzeroAddress(address(input.collector));
     if (collector === authority)
       throw new TypeError("Collector custody must identify a distinct custodian");
   } else if (input.collector !== null)
