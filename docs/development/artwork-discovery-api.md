@@ -11,14 +11,14 @@ GET /artworks?category=PAUBHA&limit=20&offset=0
 The optional category is exactly `MANDALA`, `PAUBHA` or `THANGKA`. Limit defaults
 to 20 and accepts 1–100; offset defaults to 0 and accepts 0–100000. Numbers must be
 canonical decimal strings. Duplicate parameters, unknown keys and invalid values
-return `400 VALIDATION_ERROR`. Clients cannot select another cluster through query
+return `400 INVALID_REQUEST`. Clients cannot select another cluster through query
 parameters. Storage failures return the standard redacted 500 response.
 
 Responses contain `items` and `pagination: { limit, offset, hasMore }`. Items have
 `kathaId`, `category`, `title`, `creationYear`, `artist: { id, slug, displayName }`
 and nullable `heroImage: { id, contentHash, altText }`. The hash identifies approved
-image bytes; it is not a URL. Storage delivery enters through the later storage
-provider. Only a public IMAGE/HERO relation is included; absent or private heroes
+image bytes; it is not a URL. Approved bytes are delivered through the
+[public storage route](document-preparation.md#public-delivery). Only a public IMAGE/HERO relation is included; absent or private heroes
 produce null. Captions, provider storage keys, evidence, inspection documents,
 wallet addresses and fulfillment information are omitted through explicit database
 and response projections.

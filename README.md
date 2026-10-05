@@ -34,7 +34,7 @@ bridge to the artwork record, not proof by itself.
 Katha is under active development. This repository currently contains the public
 product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
-orchestration, a minimal Next.js web scaffold, a bare Hono API service, an initial
+orchestration, a minimal Next.js web scaffold, a Hono API service, an initial
 shared TypeScript package, a Node-only Drizzle database package, a Solana client
 package, an Anchor Registry, an empty Marketplace program, and a local
 PostgreSQL service. The Solana package includes Kit clients, a Core adapter,
@@ -95,6 +95,7 @@ outside the current scope.
 - [Workspace task orchestration](docs/development/turborepo.md)
 - [Next.js web application](docs/development/nextjs.md)
 - [Hono API service](docs/development/api.md)
+- [Content API contracts and privacy boundaries](docs/development/content-api-contracts.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

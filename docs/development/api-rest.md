@@ -1,8 +1,8 @@
 # REST boundaries
 
 The API installs its request-ID/error boundary first, then restricted CORS and
-body limits, before routes. Installed routes are health probes and [wallet authentication](wallet-authentication.md). Product endpoints will use the parsing helpers and shared schemas
-as they are introduced.
+body limits, before routes. The [content API reference](content-api-contracts.md)
+lists installed health, wallet, content and document routes and their shared schemas.
 
 ## Shared contracts and validation
 
@@ -35,10 +35,9 @@ future filter contracts can extend its shape explicitly.
   fields and out-of-range values are rejected.
 
 Responses use `{ items, pagination: { limit, offset, hasMore } }` with numeric
-pagination values. Choose a stable ordering with a unique tie-breaker in each
-future list handler and fetch at most `limit + 1` rows to determine `hasMore`;
-return at most `limit` items. Offset pagination does not promise snapshot stability
-under concurrent updates. No list endpoint or database query is added here.
+pagination values. Installed list handlers use stable ordering and fetch at most `limit + 1` rows
+to determine `hasMore`; they return at most `limit` items. Offset pagination does not promise snapshot stability
+under concurrent updates. Artist lists and artwork discovery implement these conventions.
 
 ## CORS
 
@@ -55,8 +54,8 @@ are Content-Type and Authorization. Unsupported preflight methods/headers receiv
 
 The testable app factory defaults to no permitted browser origins. Production
 passes explicit configuration. CORS does not authenticate clients, validate wallet
-sessions or replace authorization/CSRF defenses. Wallet sessions use explicit bearer authentication; administrative/verifier role
-enforcement remains a separate step. CORS does not create a session.
+sessions or replace authorization/CSRF defenses. Wallet sessions use explicit bearer authentication; [administrative/verifier guards](api-authorization.md) enforce their independent
+configured roles. CORS does not create a session.
 
 ## Body limits
 

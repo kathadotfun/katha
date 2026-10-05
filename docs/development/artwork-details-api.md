@@ -4,7 +4,7 @@
 permanent Katha ID. It uses exactly the [discovery publication predicate](artwork-discovery-api.md):
 unpublished, future-published, unverified or incomplete lifecycle records return
 `404 NOT_FOUND`, just like absent records. No private draft information is disclosed.
-Malformed IDs and any query parameter return `400 VALIDATION_ERROR`; callers cannot
+Malformed IDs and any query parameter return `400 INVALID_REQUEST`; callers cannot
 choose a cluster or include private fields. Unexpected storage or response-integrity
 errors produce the standard redacted 500 response.
 
@@ -24,8 +24,8 @@ The shared `publicArtworkDetailSchema` defines strict public JSON:
   names. Optional documentation remains null when absent; it is never fabricated.
 - Media: ordered PUBLIC records with id, kind, role, position, SHA-256 content hash,
   MIME type and nullable alt text. Provider keys, captions and private media are
-  omitted. IDs/hashes are not downloadable URLs; delivery enters through the storage
-  provider in its later step.
+  omitted. IDs/hashes are not downloadable URLs; approved delivery uses the
+  [public storage route](document-preparation.md#public-delivery).
 - Verification: VERIFIED status, verifier wallet, inspection time, document hash
   and finalized transaction reference.
 - Metadata: latest finalized chain version, public document URI, hash and transaction.

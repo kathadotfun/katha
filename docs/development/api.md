@@ -1,8 +1,12 @@
 # Hono API service
 
-The Node.js API lives in `apps/api`. It is a minimal Hono service using the
-`@hono/node-server` adapter. It exposes liveness and database readiness probes. Other paths receive a JSON
-not-found response with a server-generated request ID. See [API errors and logging](api-errors-logging.md).
+The Node.js API lives in `apps/api` and uses Hono with the `@hono/node-server`
+adapter. It provides health probes, wallet sessions, protected artist/draft and
+canonical-document workflows, public content queries and approved storage delivery.
+See the [content API contract reference](content-api-contracts.md) for installed
+routes, schemas, roles, examples and privacy boundaries. Unknown paths receive a
+JSON not-found response with a server-generated request ID. See
+[API errors and logging](api-errors-logging.md).
 
 ## Run the service
 
