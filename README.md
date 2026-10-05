@@ -68,7 +68,10 @@ with category filtering and a publication gate, plus public artwork details with
 finalized attestation summaries and explicit indexed ownership/freshness. A local
 storage provider validates content-addressed bytes with separate public/private
 namespaces. Authorized document preparation now preserves canonical public metadata
-and private condition bytes; media upload workflows remain planned.
+and private condition bytes; media upload workflows remain planned. Internal
+unsigned-operation helpers now authorize and simulate exact wallet transactions,
+preserving idempotent intents and immutable preparation history. Feature-specific
+HTTP operation routes remain planned.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -96,6 +99,7 @@ outside the current scope.
 - [Next.js web application](docs/development/nextjs.md)
 - [Hono API service](docs/development/api.md)
 - [Content API contracts and privacy boundaries](docs/development/content-api-contracts.md)
+- [Unsigned blockchain operation preparation](docs/development/blockchain-operation-preparation.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)

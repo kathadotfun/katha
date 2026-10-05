@@ -152,3 +152,11 @@ export {
   preparedDocumentResponseSchema,
   type ConditionPreparationRequest,
 } from "./document-preparation.js";
+
+export {
+  operationIntentSchema,
+  registryOperationKindSchema,
+  unsignedOperationResponseSchema,
+  type OperationIntent,
+  type UnsignedOperationResponse,
+} from "./blockchain-operation.js";

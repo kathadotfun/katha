@@ -128,3 +128,12 @@ export {
   createPublicDocumentStore,
   type PublicDocumentStore,
 } from "./document-preparation-store.js";
+
+export {
+  operationPreparations,
+  type NewOperationPreparation,
+} from "./schema/operation-preparations.js";
+export {
+  createOperationPreparationStore,
+  type OperationPreparationStore,
+} from "./operation-preparation-store.js";

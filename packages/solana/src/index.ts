@@ -72,3 +72,12 @@ export type {
   RegistryAuthorities,
   RegistryAuthorityRole,
 } from "./registry-authorities.js";
+
+export {
+  createOperationChain,
+  createOperationChainFromRpc,
+  encodeUnsignedRegistryTransaction,
+  OperationSimulationError,
+  type OperationChain,
+  type UnsignedRegistryTransaction,
+} from "./operation-preparation.js";

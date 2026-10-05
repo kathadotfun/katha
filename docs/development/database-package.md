@@ -121,3 +121,12 @@ The main `packages/db/tsconfig.json` includes source, tests and the Drizzle conf
 with Node types, so editor diagnostics and command-line type checking share the
 same project. `tsconfig.build.json` emits only `src/`; tests and CLI config never
 enter `dist`.
+
+## Unsigned preparation history
+
+Migration0010 adds immutable operation preparations while preserving existing
+operation/receipt rows. The store retains exact private intent and unsigned message
+bytes under wallet-scoped idempotency and validates artwork identity. See
+[unsigned operation preparation](blockchain-operation-preparation.md) for concurrency,
+rollback and simulation boundaries. Apply forward migrations with `pnpm db:migrate`
+after starting local PostgreSQL; no development database is modified by tests.

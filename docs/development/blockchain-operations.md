@@ -10,15 +10,16 @@ creates the tables and reviewed custom lifecycle guards. Apply it through the
 Each operation belongs to an artwork, requesting wallet and LOCALNET/DEVNET
 cluster. It stores the operation kind, idempotency key, request hash, expected
 program address, ordered account addresses and ordered document/evidence hashes.
-Registry and Marketplace artwork operation kinds are available; this step adds
-no transaction preparation, signing, RPC reconciliation or marketplace behavior.
+Registry and Marketplace artwork operation kinds are available in the schema.
+The preparation service currently supports Registry kinds only; signing, receipt
+reconciliation and marketplace behavior remain separate work.
 
 An idempotency key is unique within a wallet and cluster, across operation kinds.
 Keys contain 1–128 ASCII letters, digits, underscores or hyphens. A retry must look
 up that scoped key and compare the immutable request hash and expected inputs.
 Return the existing operation for an identical request; reject conflicting input.
-The unique constraint handles races, but the future API must implement this
-request comparison and caller authorization. A new key is necessary for a new
+The unique constraint handles races; the preparation store serializes retries
+and implements request comparison after service authorization. A new key is necessary for a new
 logical operation. Database rows and keys cannot be deleted or rewritten.
 
 Account arrays contain 1–64 base58-shaped addresses; hash arrays contain 0–32
@@ -81,8 +82,9 @@ reconcile it; submitting it does not prove success. Keep retry attempts distinct
 retain the original immutable request, and do not retry an unresolved operation
 blindly. Logical idempotency cannot prevent double execution of different signed
 transactions on chain; future preparation must honor program-level identity,
-revision and sale guards. Authorization, simulation, submission and chain receipt
-validation are later API steps, particularly receipt reconciliation in step 072.
+revision and sale guards. Authorization and unsigned simulation are implemented by the preparation
+service. Feature endpoints, wallet submission and chain receipt validation remain
+later steps, particularly receipt reconciliation in step 072.
 
 Wallet and artwork references use restrictive deletion. A wallet referenced by an
 operation cannot be removed using the earlier wallet cleanup path; revoke its
@@ -96,3 +98,10 @@ missing references, cluster/signature binding, incomplete outcomes, failure and
 retry, competing finalizations, bigint precision, rollback, retained history and
 independence from provenance. Preserve custom SQL guards alongside the generated
 snapshot/journal; generation alone does not describe triggers.
+
+## Preparation service
+
+The internal [unsigned-operation service](blockchain-operation-preparation.md)
+now persists exact canonical intents and immutable simulated message preparations.
+Migration0010 retains refreshed blockhash messages separately from eventual
+transaction receipts; no generic HTTP route or receipt reconciliation is added.

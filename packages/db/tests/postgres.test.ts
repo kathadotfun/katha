@@ -63,7 +63,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(10);
+    expect(applicationCount).toBe(11);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -79,7 +79,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
     const result = await connection.db.execute(
       sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
     );
-    expect(result[0]?.count).toBe(11);
+    expect(result[0]?.count).toBe(12);
     await connection.db.transaction(async (tx) => {
       await tx.execute(sql`insert into migration_probe (id) values (1)`);
     });
@@ -134,7 +134,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(11);
+    ).toBe(12);
     await connection.close();
     await expect(connection.db.execute(sql`select 1`)).rejects.toThrow();
   } finally {
@@ -2537,3 +2537,157 @@ it("deduplicates indexed events and guards checkpoints, ownership, listings and 
     await second.close();
   }
 }, 30_000);
+
+it("atomically retains immutable operation intents and refreshed unsigned preparations under concurrent retries", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const other = createDatabase(url);
+  const {
+    createOperationPreparationStore,
+    operationPreparations,
+    blockchainOperations,
+    wallets,
+    transactionReceipts,
+  } = await import("../src/index.js");
+  const address = "9".repeat(32); // Synthetic persistence-only wallet; never signs.
+  const canonicalRequest = '{"synthetic":"operation preparation"}';
+  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+  const db = connection.db;
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "preparation-artist",
+        displayName: "Synthetic Artist",
+        biography: "Synthetic biography",
+        region: "Lalitpur",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic preparation",
+        creationYear: 2026,
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw new Error("Fixtures missing");
+    const input = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET" as const,
+      kind: "REGISTER_ARTWORK" as const,
+      idempotencyKey: "preparation-race",
+      requestHash: digest(canonicalRequest),
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: [],
+    };
+    const preparation = {
+      canonicalRequest,
+      messageHash: "a".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 20n,
+      simulationUnits: 30n,
+    };
+    const stores = [
+      createOperationPreparationStore(db),
+      createOperationPreparationStore(other.db),
+    ];
+    const results = await Promise.all(
+      stores.map((store) => store.save(input, address, artwork.kathaId, preparation)),
+    );
+    expect(results[0]).toEqual(results[1]);
+    const result = results[0]!;
+    if (result.status !== "saved") throw new Error("Save failed");
+    const count = async () =>
+      db
+        .select()
+        .from(operationPreparations)
+        .where(eq(operationPreparations.operationId, result.operationId));
+    expect(await count()).toHaveLength(1);
+    const refreshed = await stores[0]!.save(input, address, artwork.kathaId, {
+      ...preparation,
+      messageHash: "b".repeat(64),
+      transactionBase64: "AAAB",
+      blockhash: address,
+      lastValidBlockHeight: 110n,
+    });
+    expect(refreshed.status).toBe("saved");
+    expect(await count()).toHaveLength(2);
+    const collision = await stores[0]!.save(
+      { ...input, requestHash: "c".repeat(64) },
+      address,
+      artwork.kathaId,
+      preparation,
+    );
+    expect(collision.status).toBe("conflict");
+    expect(
+      (await stores[0]!.save(input, "8".repeat(32), artwork.kathaId, preparation))
+        .status,
+    ).toBe("conflict");
+    expect(
+      (await stores[0]!.save(input, address, "KATHA-PAUBHA-999999", preparation))
+        .status,
+    ).toBe("not_found");
+    expect(
+      (
+        await stores[0]!.save(input, address, artwork.kathaId, {
+          ...preparation,
+          transactionBase64: "AAAC",
+        })
+      ).status,
+    ).toBe("conflict");
+    await expect(
+      db
+        .update(operationPreparations)
+        .set({ transactionBase64: "AAAD" })
+        .where(eq(operationPreparations.id, result.preparationId)),
+    ).rejects.toMatchObject({
+      cause: { constraint_name: "operation_preparations_permanent" },
+    });
+    await expect(
+      db
+        .delete(operationPreparations)
+        .where(eq(operationPreparations.id, result.preparationId)),
+    ).rejects.toMatchObject({
+      cause: { constraint_name: "operation_preparations_permanent" },
+    });
+    const rollbackInput = { ...input, idempotencyKey: "preparation-rollback" };
+    await expect(
+      stores[0]!.save(rollbackInput, address, artwork.kathaId, {
+        ...preparation,
+        canonicalRequest: '{"tampered":true}',
+      }),
+    ).rejects.toMatchObject({
+      cause: { constraint_name: "operation_preparations_intent_match" },
+    });
+    expect(
+      await db
+        .select()
+        .from(blockchainOperations)
+        .where(eq(blockchainOperations.idempotencyKey, rollbackInput.idempotencyKey)),
+    ).toHaveLength(0);
+    await db.insert(transactionReceipts).values({
+      operationId: result.operationId,
+      cluster: "LOCALNET",
+      signature: "6".repeat(88),
+      messageHash: preparation.messageHash,
+    });
+    expect(
+      (await stores[0]!.save(input, address, artwork.kathaId, preparation)).status,
+    ).toBe("conflict");
+    expect(await count()).toHaveLength(2);
+  } finally {
+    await Promise.all([connection.close(), other.close()]);
+  }
+});
