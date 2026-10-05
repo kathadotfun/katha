@@ -1,3 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createDocumentPreparation } from "../src/document-preparation.js";
+import { createLocalStorageProvider } from "../src/local-storage.js";
 import { createArtworkDetails } from "../src/artwork-details.js";
 import { randomUUID, createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -8,6 +13,7 @@ import {
   validateDatabaseUrl,
   createArtistStore,
   createPublicArtworkStore,
+  createDocumentPreparationStore,
   createPublicArtworkDetailStore,
   artworkMaterials,
   custodyEvents,
@@ -55,6 +61,7 @@ it("discovers only explicitly published, finalized artworks on the configured cl
   const freshUrl = new URL(url);
   freshUrl.pathname = `/${name}`;
   const database = createDatabase(freshUrl.toString());
+  const storageDirectory = await mkdtemp(join(tmpdir(), "katha-doc-pg-"));
   let created = false;
   const wallet = temporaryWallet();
   let fixtureNumber = 0;
@@ -488,8 +495,144 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     ).rejects.toMatchObject({
       cause: { code: "23514", constraint_name: "artworks_publication_time_valid" },
     });
+    const documentArtwork = await fixture({ published: false });
+    const storage = createLocalStorageProvider({
+      root: join(storageDirectory, ".storage"),
+    });
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j1l8AAAAASUVORK5CYII=",
+      "base64",
+    );
+    const image = await storage.put({
+      bytes: png,
+      mimeType: "image/png",
+      visibility: "PUBLIC",
+    });
+    await database.db
+      .$client`UPDATE artwork_media SET storage_key=${image.storageKey}, content_hash=${image.contentHash}, byte_size=${image.byteSize} WHERE artwork_id=${documentArtwork.id}`;
+    await database.db
+      .insert(artworkMaterials)
+      .values({ artworkId: documentArtwork.id, name: "Canvas", position: 0 });
+    const documents = createDocumentPreparation(
+      createDocumentPreparationStore(database.db),
+      storage,
+      "http://localhost:3001",
+    );
+    const session = {
+      walletAddress: wallet.address,
+      walletId: randomUUID(),
+      cluster: "localnet" as const,
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+    };
+    const request = { expectedUpdatedAt: documentArtwork.updatedAt.toISOString() };
+    const failing = createDocumentPreparation(
+      createDocumentPreparationStore(database.db),
+      {
+        read: async () => {
+          throw new Error("Synthetic storage failure");
+        },
+        put: storage.put,
+      },
+      "http://localhost:3001",
+    );
+    await expect(
+      failing.metadata(documentArtwork.kathaId, request, session),
+    ).rejects.toThrow("Synthetic storage failure");
+    expect(
+      await database.db.query.artworkMetadataVersions.findMany({
+        where: (t, { eq }) => eq(t.artworkId, documentArtwork.id),
+      }),
+    ).toHaveLength(1);
+
+    const prepared = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        documents.metadata(documentArtwork.kathaId, request, session),
+      ),
+    );
+    expect(new Set(prepared.map((record) => record.id)).size).toBe(1);
+    expect(prepared[0]?.version).toBe(2);
+    const rows = await database.db.query.artworkMetadataVersions.findMany({
+      where: (t, { eq }) => eq(t.artworkId, documentArtwork.id),
+      orderBy: (t, { asc }) => asc(t.version),
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.status).toBe("FINALIZED");
+    expect(rows[1]?.status).toBe("PREPARED");
+    expect(rows[1]?.canonicalDocument).not.toContain("PRIVATE");
+    await expect(
+      documents.metadata(
+        documentArtwork.kathaId,
+        { expectedUpdatedAt: "2020-01-01T00:00:00.000Z" },
+        session,
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const privateImage = await storage.put({
+      bytes: png,
+      mimeType: "image/png",
+      visibility: "PRIVATE",
+    });
+    const [conditionMedia] = await database.db
+      .insert(artworkMedia)
+      .values({
+        artworkId: documentArtwork.id,
+        kind: "IMAGE",
+        role: "CONDITION",
+        visibility: "PRIVATE",
+        position: 1,
+        storageKey: privateImage.storageKey,
+        contentHash: privateImage.contentHash,
+        mimeType: "image/png",
+        byteSize: BigInt(privateImage.byteSize),
+      })
+      .returning();
+    if (!conditionMedia) throw new Error("Expected condition media");
+    const inspectedAt = new Date(Date.now() - 1000).toISOString();
+    const report = {
+      ...request,
+      reportId: randomUUID(),
+      inspectorId: randomUUID(),
+      grade: "GOOD",
+      reason: "PRE_SALE",
+      inspectedAt,
+      reportedAt: inspectedAt,
+      notes: "PRIVATE REPORT",
+      mediaIds: [conditionMedia.id],
+    };
+    const condition = await documents.condition(
+      documentArtwork.kathaId,
+      report,
+      session,
+    );
+    expect(condition.uri).toBeNull();
+    expect(condition.version).toBe(2);
+    expect(
+      (await documents.condition(documentArtwork.kathaId, report, session)).id,
+    ).toBe(condition.id);
+    const changed = {
+      ...report,
+      notes: "PRIVATE SECOND REPORT",
+      reportId: randomUUID(),
+    };
+    expect(
+      (await documents.condition(documentArtwork.kathaId, changed, session)).version,
+    ).toBe(3);
+    await expect(
+      documents.condition(
+        documentArtwork.kathaId,
+        { ...report, notes: "Attempt overwrite" },
+        session,
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const reports = await database.db.query.conditionReports.findMany({
+      where: (t, { eq }) => eq(t.artworkId, documentArtwork.id),
+    });
+    expect(reports).toHaveLength(3);
+    expect(reports.find((row) => row.id === condition.id)?.notes).toBe(
+      "PRIVATE REPORT",
+    );
     expect(logs.join("")).not.toContain("PRIVATE");
   } finally {
+    await rm(storageDirectory, { recursive: true, force: true });
     await database.close();
     try {
       if (created) await parent.db.execute(`DROP DATABASE "${name}"`);

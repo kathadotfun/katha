@@ -3,8 +3,9 @@
 The API's `StorageProvider` boundary exposes `put({ bytes, mimeType, visibility })`
 and `read(reference)`. `createLocalStorageProvider({ root, maxBytes })` supplies the
 local development implementation. Construction/import does not create directories
-or read environment files. Future document preparation and media workflows inject
-this boundary; this step adds no HTTP upload/download route or publication action.
+or read environment files. [Canonical document preparation](document-preparation.md) and future media workflows
+inject this boundary. Approved public delivery uses that document service; the
+provider itself mounts no directory and adds no upload or private download route.
 
 ## References and immutable writes
 

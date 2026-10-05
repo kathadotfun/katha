@@ -1,3 +1,9 @@
+import type { PublicDocumentsBoundary } from "./public-documents.js";
+import type { DocumentPreparationBoundary } from "./document-preparation.js";
+import {
+  metadataPreparationRequestSchema,
+  conditionPreparationRequestSchema,
+} from "@katha/shared";
 import type { ArtworkDetailsBoundary } from "./artwork-details.js";
 import { artworkDetailParamsSchema, artworkDetailQuerySchema } from "@katha/shared";
 import type { ArtworkDiscoveryBoundary } from "./artwork-discovery.js";
@@ -47,6 +53,8 @@ export function createApi(
   artworkDrafts?: ArtworkDraftsBoundary,
   discovery?: ArtworkDiscoveryBoundary,
   details?: ArtworkDetailsBoundary,
+  documents?: DocumentPreparationBoundary,
+  publicDocuments?: PublicDocumentsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -185,6 +193,40 @@ export function createApi(
       parseQuery(c, artworkDetailQuerySchema);
       const { kathaId } = parseParams(c, artworkDetailParamsSchema);
       return c.json(await details.detail(kathaId));
+    });
+  }
+  if (documents) {
+    app.post("/verifier/artworks/:kathaId/documents/metadata", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      return c.json(
+        await documents.metadata(
+          kathaId,
+          await parseJson(c, metadataPreparationRequestSchema),
+          c.get("walletSession"),
+        ),
+        201,
+      );
+    });
+    app.post("/verifier/artworks/:kathaId/documents/condition", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      return c.json(
+        await documents.condition(
+          kathaId,
+          await parseJson(c, conditionPreparationRequestSchema),
+          c.get("walletSession"),
+        ),
+        201,
+      );
+    });
+  }
+  if (publicDocuments) {
+    app.get("/storage/public/:filename", async (c) => {
+      parseQuery(c, artworkDetailQuerySchema);
+      const result = await publicDocuments.read(c.req.param("filename"));
+      c.header("Content-Type", result.mimeType);
+      c.header("X-Content-Type-Options", "nosniff");
+      c.header("Cache-Control", "no-store");
+      return c.body(new Uint8Array(result.bytes));
     });
   }
   app.onError(errorResponse);

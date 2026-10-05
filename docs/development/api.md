@@ -49,4 +49,6 @@ bounded pagination. [Public artwork details](artwork-details-api.md) expose appr
 content, finalized summaries and explicit indexed ownership/freshness.
 
 The [local storage provider](local-storage.md) supplies immutable validated bytes
-for later document and media workflows. No storage HTTP route is exposed yet.
+for [canonical document preparation](document-preparation.md) and later media
+workflows. Public delivery resolves approved metadata/media references; private
+objects have no HTTP route.

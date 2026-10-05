@@ -144,3 +144,11 @@ export {
   publicArtworkDetailSchema,
   type PublicArtworkDetail,
 } from "./artwork-detail-api.js";
+
+export {
+  metadataPreparationRequestSchema,
+  conditionPreparationRequestSchema,
+  metadataDocumentSchema,
+  preparedDocumentResponseSchema,
+  type ConditionPreparationRequest,
+} from "./document-preparation.js";
