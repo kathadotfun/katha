@@ -1,5 +1,7 @@
 import type {
   ArtworkVerificationRequest,
+  ConditionPreparationRequest,
+  ConditionAttestationRequest,
   ArtworkRegistrationRequest,
 } from "@katha/shared";
 import type { ArtworkMediaUpload, ArtworkMediaUpdate } from "@katha/shared";
@@ -117,6 +119,55 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readCondition(kathaId: string, signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.readCondition(kathaId, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    prepareConditionDocument(
+      kathaId: string,
+      input: ConditionPreparationRequest,
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (value) => api.prepareConditionDocument(kathaId, input, value, signal),
+        signal,
+      );
+    },
+    async uploadConditionEvidence(
+      kathaId: string,
+      updatedAt: string,
+      file: File,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.uploadConditionEvidence(kathaId, updatedAt, file, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareConditionAttestation(
+      kathaId: string,
+      input: ConditionAttestationRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.prepareConditionAttestation(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readVerification(kathaId: string, signal: AbortSignal) {
       const result = await authorized(
         (value) => api.readVerification(kathaId, value, signal),

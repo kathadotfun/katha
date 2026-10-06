@@ -56,7 +56,8 @@ on-chain condition versions are separate counters.
 
 Preparation leaves the report PREPARED and creates no finalized inspection,
 verification, custody, publication or ownership history. The connected wallet must
-review and sign. Finalized receipt reconciliation is scheduled for its own step.
+review and sign. Finalized receipts are reconciled through the existing receipt endpoint; indexing
+applies the condition projection.
 Reads and simulation do not reserve chain state; execution retains authoritative
 permission, duplicate, timestamp, version, owner and custody checks.
 
@@ -67,3 +68,37 @@ Run `pnpm test`, `pnpm db:test`, `pnpm program:test`, `pnpm program:build`,
 `pnpm format:check`. Tests use synthetic data, mocked API RPC/simulation and an
 offline Surfpool lifecycle with the real Core program fixture. No Devnet signing,
 deployment, physical inspection or receipt finalization is claimed.
+
+## Protected inspection review and evidence
+
+`GET /verifier/artworks/:kathaId/condition` returns the strict shared
+`conditionInspectionReviewSchema`, with finalized condition version, eligible reasons,
+current minted owner/custody scope and observation time. It validates chain
+relationships and registered attribution before private reads. The latest report's
+canonical private bytes are returned only to its author, after exact-byte integrity
+checks. Evidence entries contain IDs, hashes, image MIME types and integer-string
+sizes; storage keys and private download URLs are omitted.
+
+`POST /verifier/artworks/:kathaId/condition/evidence` accepts multipart `metadata`
+and `file` only. Metadata uses `artworkMediaUploadSchema` with role CONDITION,
+visibility PRIVATE, image MIME type, approvedPublic false and the saved artwork
+timestamp. File MIME/signature, upload limits, stored bytes and hashes are checked.
+The store appends one private image after content freeze; existing media are not
+updated or reordered. Success is 201 with a refreshed protected review.
+
+`POST /verifier/artworks/:kathaId/documents/condition` now checks the finalized
+inspection scope, eligible reason and IDs from the reviewed private-image list before
+the existing canonical document preparation boundary saves the report. The caller
+supplies a stable new report UUID. The existing response has URI null. Public metadata
+is not modified. All three endpoints require the verifier allowlist, correct cluster
+and current Registry verifier authority; responses are no-store, queries/body fields
+are strict, and errors remain redacted.
+
+An unresolved condition signature for any report on this artwork/cluster blocks
+new evidence, report replacement and transaction preparation. Evidence/report writes
+recheck under the artwork lock; condition receipt persistence takes its shared lock.
+Finalized report-specific receipts block re-attestation of the same report hash.
+Status queries isolate operation kind, report hash, artwork and cluster; an earlier
+UNKNOWN receipt cannot be hidden by a newer unsigned preparation.
+
+See [inspection administration](condition-inspection-web.md) for the operator flow.

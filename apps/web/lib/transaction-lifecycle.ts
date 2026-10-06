@@ -4,6 +4,7 @@ import type {
   RegistrationIdentity,
 } from "@katha/shared";
 import {
+  type ConditionTransactionReview,
   inspectPreparedTransaction,
   validateSignedTransaction,
 } from "./prepared-transaction.ts";
@@ -198,6 +199,7 @@ export function createTransactionLifecycle(
       expected: Pick<UnsignedOperationResponse, "kind" | "kathaId"> & {
         registration?: RegistrationIdentity;
         verification?: { authorshipEvidenceHash: string };
+        condition?: ConditionTransactionReview;
       },
     ) {
       if (

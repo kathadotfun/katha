@@ -1,6 +1,7 @@
 import {
   createArtworkRegistrationStatusStore,
   createArtworkVerificationStatusStore,
+  createConditionAttestationStatusStore,
 } from "@katha/db";
 import { createArtworkMediaStore } from "@katha/db";
 import { createArtworkMedia } from "./artwork-media.js";
@@ -97,6 +98,14 @@ function startApi() {
     },
     createRegistryAuthorityReader(rpcConfig),
   );
+  const documents = createDocumentPreparation(
+    createDocumentPreparationStore(
+      database.db,
+      config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+    ),
+    storage,
+    config.KATHA_PUBLIC_API_ORIGIN,
+  );
   const app = createApi(
     logger,
     readiness,
@@ -121,11 +130,7 @@ function startApi() {
         config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
       ),
     ),
-    createDocumentPreparation(
-      createDocumentPreparationStore(database.db),
-      storage,
-      config.KATHA_PUBLIC_API_ORIGIN,
-    ),
+    documents,
     createPublicDocuments(createPublicDocumentStore(database.db), storage),
     createArtworkRegistration(
       createArtworkRegistrationStore(
@@ -162,12 +167,30 @@ function startApi() {
       ),
     ),
     createConditionAttestation(
-      createConditionAttestationStore(database.db),
+      createConditionAttestationStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
       authorization,
       createConditionAttestationReader(rpcConfig),
       createOperationChain(rpcConfig),
       storage,
       config.KATHA_CLUSTER,
+      {
+        readStatus: createConditionAttestationStatusStore(
+          database.db,
+          config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+        ),
+        documents,
+        evidence: createArtworkMedia(
+          createArtworkMediaStore(
+            database.db,
+            true,
+            config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+          ),
+          storage,
+        ),
+      },
     ),
     createCustodyOperations(
       createCustodyOperationStore(database.db),

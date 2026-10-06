@@ -205,4 +205,5 @@ export {
 export {
   createArtworkRegistrationStatusStore,
   createArtworkVerificationStatusStore,
+  createConditionAttestationStatusStore,
 } from "./artwork-registration-status-store.js";

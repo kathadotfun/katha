@@ -25,6 +25,14 @@ export function ArtworkVerificationLookup() {
           spellCheck={false}
         />
       </label>
+      {parsed.success && (
+        <Link
+          className="text-link mt-4 mr-6 inline-block"
+          href={`/admin/artworks/${parsed.data.kathaId}/condition`}
+        >
+          Open condition inspection
+        </Link>
+      )}
       {parsed.success ? (
         <Link
           className="text-link mt-4 inline-block"

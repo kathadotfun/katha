@@ -28,6 +28,12 @@ export default async function VerificationPage({
         Review Nepal’s cultural artwork in person and attest to its authenticity with
         the authorized verifier wallet.
       </p>
+      <Link
+        className="text-link mt-6 inline-block"
+        href={`/admin/artworks/${parsed.data.kathaId}/condition`}
+      >
+        Open condition inspection
+      </Link>
       <ArtworkVerificationPanel kathaId={parsed.data.kathaId} />
     </div>
   );

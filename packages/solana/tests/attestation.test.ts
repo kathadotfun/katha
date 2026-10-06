@@ -14,6 +14,7 @@ import {
 } from "@solana/kit";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  readConditionInspectionScope,
   buildInitializeConditionTransaction,
   buildRecordUnmintedConditionTransaction,
   buildVerifyArtworkTransaction,
@@ -503,5 +504,78 @@ describe("Verifier transaction builders", () => {
           next,
         ),
       ).rejects.toThrow();
+  });
+});
+
+describe("Finalized inspection review scope", () => {
+  it("reads initial and later unminted condition versions", async () => {
+    const f = await fixtures();
+    const accounts = {
+      ...f.accounts,
+      conditionHeadAccount: {
+        ...f.accounts.conditionHeadAccount,
+        data: Uint8Array.from(f.accounts.conditionHeadAccount.data),
+        exists: true as const,
+      },
+      custodyHeadAccount: { exists: false as const, address: f.artwork },
+      assetAccount: { exists: false as const, address: f.artwork },
+    };
+    expect(
+      await readConditionInspectionScope(authority, accounts, kathaId),
+    ).toMatchObject({ version: 1, minted: false, scope: null });
+    expect(
+      await readConditionInspectionScope(
+        authority,
+        {
+          ...accounts,
+          conditionHeadAccount: { exists: false, address: f.head },
+          currentReportAccount: null,
+        },
+        kathaId,
+      ),
+    ).toMatchObject({ version: 0, minted: false, scope: null });
+  });
+  it("rejects forged current report relationships", async () => {
+    const f = await fixtures();
+    const accounts = {
+      ...f.accounts,
+      conditionHeadAccount: {
+        ...f.accounts.conditionHeadAccount,
+        data: Uint8Array.from(f.accounts.conditionHeadAccount.data),
+        exists: true as const,
+      },
+      currentReportAccount: account(
+        f.report,
+        getConditionAttestationEncoder().encode({
+          ...f.reportArgs,
+          reportHash: new Uint8Array(32),
+        }),
+        201,
+      ),
+      custodyHeadAccount: { exists: false as const, address: f.artwork },
+      assetAccount: { exists: false as const, address: f.artwork },
+    };
+    await expect(
+      readConditionInspectionScope(authority, accounts, kathaId),
+    ).rejects.toThrow();
+  });
+  it("requires the current verifier authority", async () => {
+    const f = await fixtures();
+    await expect(
+      readConditionInspectionScope(
+        payer,
+        {
+          ...f.accounts,
+          conditionHeadAccount: {
+            ...f.accounts.conditionHeadAccount,
+            data: Uint8Array.from(f.accounts.conditionHeadAccount.data),
+            exists: true as const,
+          },
+          custodyHeadAccount: { exists: false, address: f.artwork },
+          assetAccount: { exists: false, address: f.artwork },
+        },
+        kathaId,
+      ),
+    ).rejects.toThrow();
   });
 });

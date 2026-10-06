@@ -1,4 +1,9 @@
 import {
+  conditionInspectionReviewSchema,
+  conditionPreparationRequestSchema,
+  conditionAttestationRequestSchema,
+  type ConditionPreparationRequest,
+  type ConditionAttestationRequest,
   artworkVerificationReviewSchema,
   artworkVerificationRequestSchema,
   type ArtworkVerificationRequest,
@@ -119,6 +124,107 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readCondition(kathaId: string, token: string, signal: AbortSignal) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = conditionInspectionReviewSchema.parse(
+        await request(
+          `/verifier/artworks/${path.kathaId}/condition`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareConditionDocument(
+      kathaId: string,
+      input: ConditionPreparationRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const data = conditionPreparationRequestSchema.parse(input);
+      const result = preparedDocumentResponseSchema.parse(
+        await request(
+          `/verifier/artworks/${path.kathaId}/documents/condition`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.id !== data.reportId ||
+        result.uri !== null
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async uploadConditionEvidence(
+      kathaId: string,
+      updatedAt: string,
+      file: File,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const input = artworkMediaUploadSchema.parse({
+        expectedUpdatedAt: updatedAt,
+        mimeType: file.type,
+        role: "CONDITION",
+        visibility: "PRIVATE",
+        altText: null,
+        caption: null,
+        approvedPublic: false,
+      });
+      if (
+        file.size < 1 ||
+        file.size > ARTWORK_MEDIA_MAX_BYTES ||
+        !file.type.startsWith("image/")
+      )
+        throw new WalletSessionApiError("INVALID_REQUEST");
+      const form = new FormData();
+      form.set("metadata", JSON.stringify(input));
+      form.set("file", file, "inspection-evidence");
+      const result = conditionInspectionReviewSchema.parse(
+        await request(
+          `/verifier/artworks/${path.kathaId}/condition/evidence`,
+          form,
+          token,
+          signal,
+        ),
+      );
+      if (result.kathaId !== path.kathaId || result.updatedAt === updatedAt)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareConditionAttestation(
+      kathaId: string,
+      input: ConditionAttestationRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const data = conditionAttestationRequestSchema.parse(input);
+      const result = unsignedOperationResponseSchema.parse(
+        await request(
+          `/verifier/artworks/${path.kathaId}/operations/condition`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.kind !== "RECORD_CONDITION" ||
+        !data.supportedTransactionVersions.includes(result.transactionVersion)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readVerification(kathaId: string, token: string, signal: AbortSignal) {
       const path = artworkDraftParamsSchema.parse({ kathaId });
       const result = artworkVerificationReviewSchema.parse(

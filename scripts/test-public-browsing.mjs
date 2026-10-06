@@ -1,7 +1,10 @@
+import { conditionFixture } from "../apps/web/tests/fixtures/condition.ts";
+import { canonicalDocumentBytes, sha256Hex } from "../packages/shared/dist/index.js";
 import { verificationFixture } from "../apps/web/tests/fixtures/verification.ts";
 import { registrationFixture } from "../apps/web/tests/fixtures/registration.ts";
 /* global Request */
 import { Buffer } from "node:buffer";
+import { TextDecoder } from "node:util";
 import { walletSignInMessage } from "../packages/shared/dist/index.js";
 import { renderTransactionReviewPhase } from "../apps/web/tests/fixtures/transaction-review.mjs";
 import assert from "node:assert/strict";
@@ -282,6 +285,128 @@ export async function runPublicBrowsingJourneys({
             headers: adminHeaders,
             json: registration.operation,
           });
+        },
+      );
+      let inspection = await conditionFixture();
+      let inspectionPage = inspection.page,
+        inspectionCalls = 0,
+        rejectInspection = true;
+      await context.route(
+        `${apiOrigin}/verifier/artworks/*/condition`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          if (!verifierAllowed)
+            return route.fulfill({
+              status: 403,
+              headers: adminHeaders,
+              json: { error: "forbidden" },
+            });
+          return route.fulfill({ headers: adminHeaders, json: inspectionPage });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/verifier/artworks/*/condition/evidence`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          const form = await new Request(route.request().url(), {
+            method: "POST",
+            headers: route.request().headers(),
+            body: route.request().postDataBuffer(),
+          }).formData();
+          const metadata = JSON.parse(form.get("metadata")),
+            file = form.get("file");
+          assert.equal(metadata.visibility, "PRIVATE");
+          assert.equal(metadata.role, "CONDITION");
+          assert.equal(metadata.approvedPublic, false);
+          assert.equal(metadata.expectedUpdatedAt, inspectionPage.updatedAt);
+          const hash = await sha256Hex(new Uint8Array(await file.arrayBuffer()));
+          inspectionPage = {
+            ...inspectionPage,
+            updatedAt: "2026-10-06T00:00:01.000Z",
+            media: [
+              ...inspectionPage.media,
+              {
+                id: "eeeeeeee-1111-4111-8111-111111111111",
+                contentHash: hash,
+                mimeType: "image/png",
+                byteSize: String(file.size),
+              },
+            ],
+          };
+          return route.fulfill({
+            status: 201,
+            headers: adminHeaders,
+            json: inspectionPage,
+          });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/verifier/artworks/*/documents/condition`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          const data = route.request().postDataJSON(),
+            { expectedUpdatedAt, mediaIds, ...fields } = data;
+          assert.equal(expectedUpdatedAt, inspectionPage.updatedAt);
+          assert.equal(data.reason, "INITIAL_VERIFICATION");
+          const document = {
+            ...fields,
+            kathaId: inspectionPage.kathaId,
+            verifierWallet: inspection.operation.feePayer,
+            mediaHashes: mediaIds.map(
+              (id) => inspectionPage.media.find((item) => item.id === id).contentHash,
+            ),
+          };
+          inspection = await conditionFixture("initial", undefined, { document });
+          inspectionPage = {
+            ...inspectionPage,
+            report: { ...inspection.page.report, version: 2 },
+          };
+          assert.equal(
+            inspectionPage.report.canonicalDocument,
+            new TextDecoder().decode(canonicalDocumentBytes(document)),
+          );
+          return route.fulfill({
+            status: 201,
+            headers: adminHeaders,
+            json: {
+              id: document.reportId,
+              kathaId: document.kathaId,
+              version: 2,
+              status: "PREPARED",
+              documentHash: inspectionPage.report.documentHash,
+              uri: null,
+            },
+          });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/verifier/artworks/*/operations/condition`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          const input = route.request().postDataJSON();
+          inspectionCalls++;
+          assert.equal(input.reportId, inspectionPage.report.id);
+          assert.equal(input.expectedConditionVersion, 0);
+          assert.equal(input.expectedUpdatedAt, inspectionPage.updatedAt);
+          return rejectInspection
+            ? route.fulfill({
+                status: 409,
+                headers: adminHeaders,
+                json: { error: "PRIVATE_INSPECTION_ERROR" },
+              })
+            : route.fulfill({
+                status: 201,
+                headers: adminHeaders,
+                json: inspection.operation,
+              });
         },
       );
       const verification = await verificationFixture();
@@ -1110,6 +1235,153 @@ export async function runPublicBrowsingJourneys({
         path: `${artifacts}/verification-admin-${width}.png`,
         fullPage: true,
       });
+      await adminMain
+        .getByRole("link", { name: "Open condition inspection", exact: true })
+        .click();
+      await expect(
+        adminMain.getByRole("heading", { name: "Condition inspection", exact: true }),
+      ).toBeVisible();
+      const conditionSave = adminMain.getByRole("button", {
+        name: "Save private condition report",
+        exact: true,
+      });
+      await expect(conditionSave).toBeDisabled();
+      await audit("inspection protected initial scope");
+      await adminMain.getByLabel("Inspection image", { exact: true }).setInputFiles({
+        name: "synthetic.png",
+        mimeType: "image/png",
+        buffer: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64",
+        ),
+      });
+      await adminMain
+        .getByRole("button", { name: "Upload private evidence", exact: true })
+        .click();
+      await expect(adminMain.getByText("Evidence 2", { exact: false })).toBeVisible();
+      await adminMain
+        .getByLabel("Actual inspection date and time (your local timezone)", {
+          exact: true,
+        })
+        .fill("2026-10-05T10:00");
+      await adminMain
+        .getByLabel("Private condition notes", { exact: true })
+        .fill("Synthetic private browser inspection notes");
+      await adminMain.getByRole("checkbox", { name: /Evidence 2/ }).check();
+      await adminMain
+        .getByRole("checkbox", {
+          name: /I physically inspected this artwork and approve these notes/,
+        })
+        .check();
+      await conditionSave.click();
+      await expect(adminMain).toContainText("Saved private report · Version 2");
+      await adminMain
+        .getByText("Review exact private canonical report", { exact: true })
+        .click();
+      await expect(adminMain).toContainText(
+        "Synthetic private browser inspection notes",
+      );
+      await audit("inspection private document review");
+      const conditionPrepare = adminMain.getByRole("button", {
+        name: "Prepare and simulate condition attestation",
+        exact: true,
+      });
+      const conditionApproval = adminMain.getByRole("checkbox", {
+        name: /I reviewed the exact saved report and hash/,
+      });
+      await conditionApproval.check();
+      await conditionPrepare.click();
+      await expect(adminMain.getByRole("alert")).toContainText("changed");
+      await expect(adminMain).not.toContainText("PRIVATE_INSPECTION_ERROR");
+      await audit("inspection stale preparation");
+      rejectInspection = false;
+      await adminMain
+        .getByRole("button", { name: "Reload inspection state", exact: true })
+        .click();
+      await conditionApproval.check();
+      await conditionPrepare.click();
+      await expect(
+        adminMain.getByRole("heading", {
+          name: "Condition attestation transaction review",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        adminMain.getByRole("button", {
+          name: "Approve in wallet and submit",
+          exact: true,
+        }),
+      ).toBeEnabled();
+      assert.equal(inspectionCalls, 2);
+      await audit("inspection simulation before wallet approval");
+      await adminMain
+        .getByRole("button", { name: "Cancel transaction review", exact: true })
+        .click();
+      inspectionPage = {
+        ...inspectionPage,
+        unresolved: true,
+        attestation: {
+          finalized: false,
+          unresolved: true,
+          receipt: {
+            status: "UNKNOWN",
+            signature: "6".repeat(88),
+            slot: null,
+            indexed: false,
+          },
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload inspection state", exact: true })
+        .click();
+      await expect(adminMain).toContainText(
+        "A retained condition signature is unresolved",
+      );
+      await expect(conditionPrepare).toBeDisabled();
+      await expect(conditionSave).toBeDisabled();
+      await audit("inspection unresolved signature");
+      inspectionPage = {
+        ...inspectionPage,
+        unresolved: false,
+        attestation: {
+          finalized: true,
+          unresolved: false,
+          receipt: {
+            status: "FINALIZED",
+            signature: "6".repeat(88),
+            slot: "10",
+            indexed: false,
+          },
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload inspection state", exact: true })
+        .click();
+      await expect(adminMain).toContainText("Finalized; condition indexing pending.");
+      await audit("inspection finalized indexing pending");
+      inspectionPage.attestation.receipt.indexed = true;
+      await adminMain
+        .getByRole("button", { name: "Reload inspection state", exact: true })
+        .click();
+      await expect(adminMain).toContainText("Condition event indexed.");
+      await audit("inspection indexed");
+      await page.screenshot({
+        path: `${artifacts}/condition-admin-${width}.png`,
+        fullPage: true,
+      });
+      verifierAllowed = false;
+      await adminMain
+        .getByRole("button", { name: "Reload inspection state", exact: true })
+        .click();
+      await expect(adminMain).not.toContainText(
+        "Synthetic private browser inspection notes",
+      );
+      await expect(adminMain.getByRole("alert")).toContainText("A verifier session");
+      await audit("inspection permission revoked");
+      verifierAllowed = true;
+      await adminMain
+        .getByRole("link", { name: "Artwork authenticity", exact: true })
+        .click();
       verifierAllowed = false;
       await adminMain
         .getByRole("button", { name: "Reload verification state" })

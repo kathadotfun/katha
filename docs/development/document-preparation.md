@@ -112,3 +112,9 @@ Administrators can prepare the same canonical public metadata through
 [registration workflow](artwork-registration-web.md). The request/response and
 exact-byte rules match the verifier metadata route. This does not grant admin-only
 wallets access to private condition preparation.
+
+The integrated condition endpoint requires the current verifier authority and a
+finalized inspection review. Only reviewed private condition-image IDs are selectable;
+reason and owner/custody scope must match that review. UNKNOWN condition signatures
+block replacement documents under the artwork lock. See
+[condition inspection](condition-inspection-web.md).

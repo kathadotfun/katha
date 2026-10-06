@@ -88,6 +88,18 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readCondition: async () => {
+      throw new Error("Unexpected condition read");
+    },
+    prepareConditionDocument: async () => {
+      throw new Error("Unexpected condition document");
+    },
+    uploadConditionEvidence: async () => {
+      throw new Error("Unexpected condition evidence");
+    },
+    prepareConditionAttestation: async () => {
+      throw new Error("Unexpected condition attestation");
+    },
     readVerification: async () => {
       throw new Error("Unexpected verifier read");
     },

@@ -220,3 +220,8 @@ export {
   artworkVerificationReviewSchema,
   type ArtworkVerificationReview,
 } from "./artwork-registration-review.js";
+
+export {
+  conditionInspectionReviewSchema,
+  type ConditionInspectionReview,
+} from "./condition-inspection.js";

@@ -5,6 +5,7 @@ import {
   transactionReceipts,
 } from "./schema/blockchain-operations.js";
 import { operationPreparations } from "./schema/operation-preparations.js";
+import { artworks } from "./schema/artworks.js";
 import { wallets } from "./schema/wallet-sessions.js";
 export type ReceiptStoreObservation =
   | { status: "UNKNOWN" }
@@ -44,6 +45,28 @@ export function createOperationReceiptStore(db: Database) {
       observation: ReceiptStoreObservation,
     ) {
       return db.transaction(async (tx) => {
+        // Condition writers lock the artwork before the operation to avoid a lock-order cycle.
+        // Operation identity is immutable; reselect and lock the complete row below.
+        const [identity] = await tx
+          .select({
+            artworkId: blockchainOperations.artworkId,
+            kind: blockchainOperations.kind,
+          })
+          .from(blockchainOperations)
+          .where(
+            and(
+              eq(blockchainOperations.id, operationId),
+              eq(blockchainOperations.walletId, walletId),
+              eq(blockchainOperations.cluster, cluster),
+            ),
+          );
+        if (identity?.kind === "RECORD_CONDITION" && identity.artworkId) {
+          await tx
+            .select({ id: artworks.id })
+            .from(artworks)
+            .where(eq(artworks.id, identity.artworkId))
+            .for("share");
+        }
         const [operation] = await tx
           .select()
           .from(blockchainOperations)

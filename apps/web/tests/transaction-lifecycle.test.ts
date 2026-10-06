@@ -1,3 +1,4 @@
+import { conditionFixture } from "./fixtures/condition.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -21,6 +22,7 @@ import {
   ArtworkCategory,
 } from "@katha/solana/registry";
 import {
+  decodeCanonicalTransaction,
   inspectPreparedTransaction,
   validateSignedTransaction,
 } from "../lib/prepared-transaction.ts";
@@ -37,10 +39,11 @@ import { provenanceFixture } from "./fixtures/provenance.ts";
 
 async function fixture(
   version: 0 | 1 = 0,
-  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK" = "REGISTER_ARTWORK",
+  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK" | "RECORD_CONDITION" = "REGISTER_ARTWORK",
 ) {
   const signer = await generateKeyPairSigner();
-  const kathaId = "KATHA-PAUBHA-000001";
+  const kathaId =
+    kind === "RECORD_CONDITION" ? "KATHA-PAUBHA-000050" : "KATHA-PAUBHA-000001";
   const id = "aaaaaaaa-1111-4111-8111-111111111111";
   const [artwork] = await findArtworkPda({ kathaId });
   const ix =
@@ -59,21 +62,27 @@ async function fixture(
           creationYear: 2026,
           authorshipEvidenceHash: new Uint8Array(32),
         });
-  const transaction = compileTransaction(
-    pipe(
-      createTransactionMessage({ version }),
-      (msg) => setTransactionMessageFeePayer(signer.address, msg),
-      (msg) =>
-        setTransactionMessageLifetimeUsingBlockhash(
-          {
-            blockhash: blockhash("11111111111111111111111111111111"),
-            lastValidBlockHeight: 100n,
-          },
-          msg,
+  const inspection =
+    kind === "RECORD_CONDITION"
+      ? await conditionFixture("initial", signer.address)
+      : null;
+  const transaction = inspection
+    ? decodeCanonicalTransaction(inspection.operation.transactionBase64)
+    : compileTransaction(
+        pipe(
+          createTransactionMessage({ version }),
+          (msg) => setTransactionMessageFeePayer(signer.address, msg),
+          (msg) =>
+            setTransactionMessageLifetimeUsingBlockhash(
+              {
+                blockhash: blockhash("11111111111111111111111111111111"),
+                lastValidBlockHeight: 100n,
+              },
+              msg,
+            ),
+          (msg) => appendTransactionMessageInstruction(ix, msg),
         ),
-      (msg) => appendTransactionMessageInstruction(ix, msg),
-    ),
-  );
+      );
   const signed = await signTransaction([signer.keyPair], transaction);
   const wire = String(getBase64EncodedWireTransaction(signed));
   const signature = getSignatureFromTransaction(signed);
@@ -137,6 +146,18 @@ async function fixture(
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    readCondition: async () => {
+      throw new Error("Unexpected condition read");
+    },
+    prepareConditionDocument: async () => {
+      throw new Error("Unexpected condition document");
+    },
+    uploadConditionEvidence: async () => {
+      throw new Error("Unexpected condition evidence");
+    },
+    prepareConditionAttestation: async () => {
+      throw new Error("Unexpected condition attestation");
+    },
     readVerification: async () => {
       throw new Error("Unexpected verifier read");
     },
@@ -240,8 +261,21 @@ async function fixture(
         ]
       : [],
   });
-  const flow = createTransactionLifecycle(connection, session, rpc, history);
+  const flow = createTransactionLifecycle(
+    connection,
+    session,
+    rpc,
+    history,
+    kind === "RECORD_CONDITION"
+      ? async (operation, retainedSignature) => {
+          assert.equal(operation.kind, "RECORD_CONDITION");
+          assert.equal(retainedSignature, signature);
+          return indexed;
+        }
+      : undefined,
+  );
   return {
+    inspection,
     signer,
     operation,
     wire,
@@ -656,5 +690,31 @@ test("verification approval signs once and waits for finalized protected indexin
   assert.equal(f.calls.filter((call) => call === "sign").length, 1);
   assert.equal(f.calls.filter((call) => call === "submit").length, 1);
   flow.dispose();
+  f.flow.dispose();
+});
+
+test("condition attestation signs only after approval and reconciles one retained signature", async () => {
+  const f = await fixture(0, "RECORD_CONDITION");
+  assert.ok(f.inspection);
+  await f.flow.load(f.operation, {
+    kind: "RECORD_CONDITION",
+    kathaId: f.operation.kathaId,
+    condition: {
+      document: f.inspection.document,
+      reportHash: f.inspection.page.report!.documentHash,
+      expectedVersion: 0,
+    },
+  });
+  assert.equal(f.flow.getSnapshot().phase, "review");
+  assert.ok(!f.calls.includes("sign"));
+  f.setStatus("FINALIZED");
+  await f.flow.approveAndSend();
+  assert.equal(f.calls.filter((value) => value === "sign").length, 1);
+  assert.equal(f.flow.getSnapshot().signature, f.signature);
+  assert.equal(f.flow.getSnapshot().phase, "indexing-delay");
+  f.setIndexed();
+  await f.flow.checkConfirmation();
+  assert.equal(f.flow.getSnapshot().phase, "indexed");
+  assert.equal(f.calls.filter((value) => value === "sign").length, 1);
   f.flow.dispose();
 });

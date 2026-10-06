@@ -388,13 +388,20 @@ export function createApi(
       );
     });
     app.post("/verifier/artworks/:kathaId/documents/condition", async (c) => {
+      parseQuery(c, artworkDetailQuerySchema);
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       return c.json(
-        await documents.condition(
-          kathaId,
-          await parseJson(c, conditionPreparationRequestSchema),
-          c.get("walletSession"),
-        ),
+        await (conditionAttestation
+          ? conditionAttestation.prepareDocument(
+              c.req.header("Authorization"),
+              kathaId,
+              await parseJson(c, conditionPreparationRequestSchema),
+            )
+          : documents.condition(
+              kathaId,
+              await parseJson(c, conditionPreparationRequestSchema),
+              c.get("walletSession"),
+            )),
         201,
       );
     });
@@ -448,6 +455,60 @@ export function createApi(
     });
   }
   if (conditionAttestation) {
+    app.get("/verifier/artworks/:kathaId/condition", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await conditionAttestation.review(c.req.header("Authorization"), kathaId),
+      );
+    });
+    app.post("/verifier/artworks/:kathaId/condition/evidence", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      if (
+        c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !==
+        "multipart/form-data"
+      )
+        throw new DomainError("UNSUPPORTED_MEDIA_TYPE");
+      let form: FormData;
+      try {
+        form = await c.req.raw.formData();
+      } catch {
+        throw new DomainError("INVALID_REQUEST");
+      }
+      const keys = [...form.keys()],
+        file = form.get("file"),
+        raw = form.get("metadata");
+      if (
+        keys.length !== 2 ||
+        !keys.includes("file") ||
+        !keys.includes("metadata") ||
+        !(file instanceof File) ||
+        typeof raw !== "string" ||
+        raw.length > 4096
+      )
+        throw new DomainError("INVALID_REQUEST");
+      if (file.size > ARTWORK_MEDIA_MAX_BYTES)
+        throw new DomainError("PAYLOAD_TOO_LARGE");
+      let input: unknown;
+      try {
+        input = JSON.parse(raw);
+      } catch {
+        throw new DomainError("INVALID_REQUEST");
+      }
+      const parsed = artworkMediaUploadSchema.safeParse(input);
+      if (!parsed.success || file.size < 1 || file.type !== parsed.data.mimeType)
+        throw new DomainError("INVALID_REQUEST");
+      return c.json(
+        await conditionAttestation.uploadEvidence(
+          c.req.header("Authorization"),
+          kathaId,
+          parsed.data,
+          new Uint8Array(await file.arrayBuffer()),
+        ),
+        201,
+      );
+    });
     app.post("/verifier/artworks/:kathaId/operations/condition", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       parseQuery(c, artworkDetailQuerySchema);

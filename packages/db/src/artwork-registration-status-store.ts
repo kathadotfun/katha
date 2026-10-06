@@ -9,7 +9,8 @@ import { indexedEvents } from "./schema/blockchain-read-models.js";
 function createArtworkOperationStatusStore(
   db: Database,
   cluster: "LOCALNET" | "DEVNET",
-  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK",
+  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK" | "RECORD_CONDITION",
+  reportHash?: string,
 ) {
   return async (kathaId: string) =>
     db.transaction(async (tx) => {
@@ -26,6 +27,9 @@ function createArtworkOperationStatusStore(
             eq(artworks.kathaId, kathaId),
             eq(blockchainOperations.cluster, cluster),
             eq(blockchainOperations.kind, kind),
+            ...(reportHash
+              ? [sql`${reportHash} = any(${blockchainOperations.expectedHashes})`]
+              : []),
           ),
         )
         .orderBy(desc(blockchainOperations.createdAt), desc(blockchainOperations.id));
@@ -47,6 +51,9 @@ function createArtworkOperationStatusStore(
             eq(blockchainOperations.cluster, cluster),
             eq(transactionReceipts.cluster, cluster),
             eq(blockchainOperations.kind, kind),
+            ...(reportHash
+              ? [sql`${reportHash} = any(${blockchainOperations.expectedHashes})`]
+              : []),
           ),
         )
         .orderBy(
@@ -70,6 +77,9 @@ function createArtworkOperationStatusStore(
             eq(blockchainOperations.cluster, cluster),
             eq(transactionReceipts.cluster, cluster),
             eq(blockchainOperations.kind, kind),
+            ...(reportHash
+              ? [sql`${reportHash} = any(${blockchainOperations.expectedHashes})`]
+              : []),
             eq(transactionReceipts.status, "UNKNOWN"),
           ),
         )
@@ -117,4 +127,17 @@ export function createArtworkVerificationStatusStore(
   cluster: "LOCALNET" | "DEVNET",
 ) {
   return createArtworkOperationStatusStore(db, cluster, "VERIFY_ARTWORK");
+}
+
+export function createConditionAttestationStatusStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET",
+) {
+  return (kathaId: string, reportHash: string) =>
+    createArtworkOperationStatusStore(
+      db,
+      cluster,
+      "RECORD_CONDITION",
+      reportHash,
+    )(kathaId);
 }

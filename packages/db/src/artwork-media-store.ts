@@ -2,6 +2,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { artworks } from "./schema/artworks.js";
 import { artworkMedia, type ArtworkMediaRecord } from "./schema/artwork-media.js";
+import { unresolvedCondition } from "./condition-write-guard.js";
 import { lifecycleStarted } from "./artwork-draft-store.js";
 type Content = Pick<
   ArtworkMediaRecord,
@@ -21,7 +22,11 @@ type Snapshot = {
   editable: boolean;
 };
 export class MediaStoreConflict extends Error {}
-export function createArtworkMediaStore(db: Database) {
+export function createArtworkMediaStore(
+  db: Database,
+  conditionEvidence = false,
+  cluster: "LOCALNET" | "DEVNET" = "LOCALNET",
+) {
   return {
     async read(kathaId: string) {
       return db.transaction(async (tx): Promise<Snapshot | null> => {
@@ -43,7 +48,9 @@ export function createArtworkMediaStore(db: Database) {
         return {
           artwork,
           items,
-          editable: artwork.publishedAt === null && state?.frozen === false,
+          editable:
+            conditionEvidence ||
+            (artwork.publishedAt === null && state?.frozen === false),
         };
       });
     },
@@ -64,11 +71,18 @@ export function createArtworkMediaStore(db: Database) {
           .from(artworks)
           .where(eq(artworks.id, artwork.id));
         if (
-          artwork.publishedAt !== null ||
-          state?.frozen !== false ||
+          (!conditionEvidence &&
+            (artwork.publishedAt !== null || state?.frozen !== false)) ||
           artwork.updatedAt.toISOString() !== expectedUpdatedAt
         )
           throw new MediaStoreConflict();
+        if (conditionEvidence) {
+          const [pending] = await tx
+            .select({ blocked: unresolvedCondition(artwork.id, cluster) })
+            .from(artworks)
+            .where(eq(artworks.id, artwork.id));
+          if (pending?.blocked) throw new MediaStoreConflict();
+        }
         const existing = await tx
           .select()
           .from(artworkMedia)
@@ -81,6 +95,45 @@ export function createArtworkMediaStore(db: Database) {
           existing.some((item) => !values.some((value) => value.id === item.id))
         )
           throw new MediaStoreConflict();
+        if (conditionEvidence) {
+          if (
+            values.length !== existing.length + 1 ||
+            existing.some(
+              (item, index) =>
+                values[index]?.id !== item.id ||
+                Object.entries(values[index]!).some(
+                  ([key, value]) =>
+                    key in item && value !== item[key as keyof ArtworkMediaRecord],
+                ),
+            )
+          )
+            throw new MediaStoreConflict();
+          const next = values.at(-1)!;
+          if (
+            next.id ||
+            next.role !== "CONDITION" ||
+            next.visibility !== "PRIVATE" ||
+            next.kind !== "IMAGE"
+          )
+            throw new MediaStoreConflict();
+          await tx
+            .insert(artworkMedia)
+            .values({ ...next, artworkId: artwork.id, position: existing.length });
+          const [updated] = await tx
+            .update(artworks)
+            .set({
+              updatedAt: sql`greatest(clock_timestamp(), ${artworks.updatedAt} + interval '1 millisecond')`,
+            })
+            .where(eq(artworks.id, artwork.id))
+            .returning();
+          if (!updated) throw new MediaStoreConflict();
+          const items = await tx
+            .select()
+            .from(artworkMedia)
+            .where(eq(artworkMedia.artworkId, artwork.id))
+            .orderBy(asc(artworkMedia.position));
+          return { artwork: updated, items, editable: true };
+        }
         // Unique position/hero constraints require vacating current slots before swaps.
         await tx
           .update(artworkMedia)

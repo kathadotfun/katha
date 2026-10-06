@@ -41,7 +41,7 @@ export function createOperationPreparationStore(
           .select()
           .from(artworks)
           .where(eq(artworks.id, operation.artworkId))
-          .for("share");
+          .for(operation.kind === "RECORD_CONDITION" ? "update" : "share");
         if (!artwork || artwork.kathaId !== kathaId)
           return { status: "not_found" as const };
         if (guard && !(await guard(tx, artwork, preparation)))

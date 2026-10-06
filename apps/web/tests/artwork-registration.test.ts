@@ -202,12 +202,17 @@ test("uncertain writes pause and pending preparations cannot activate after sign
   assert.equal(f.count().preparations, 0);
   await manager.read();
   let finish!: (value: typeof f.operation) => void;
+  let entered!: () => void;
+  const preparationStarted = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
   f.session.prepareRegistration = () =>
     new Promise((resolve) => {
       finish = resolve;
+      entered();
     });
   const pending = manager.prepare(true);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await preparationStarted;
   f.clear();
   finish(f.operation);
   await pending;

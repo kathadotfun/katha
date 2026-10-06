@@ -67,6 +67,9 @@ export async function conditionFixture(
   const bytes = canonicalDocumentBytes(document);
   const hash = await sha256Hex(bytes);
   const snapshot: ConditionAttestationSnapshot = {
+    media: [],
+    unresolved: false,
+    attested: false,
     artwork: f.snapshot.artwork,
     artist: f.snapshot.artist,
     report: {
@@ -267,5 +270,6 @@ export async function conditionFixture(
     read,
     request,
     service,
+    storage,
   };
 }

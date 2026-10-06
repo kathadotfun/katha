@@ -12,6 +12,7 @@ import {
 } from "@katha/shared";
 import {
   createNoopSigner,
+  address,
   type Address,
   type EncodedAccount,
   type ReadonlyUint8Array,
@@ -180,7 +181,7 @@ export async function readAuthorizedArtwork(
 }
 
 async function verifiedArtwork(
-  context: RegistryTransactionContext,
+  context: Pick<RegistryTransactionContext, "authorityAddress">,
   accounts: VerifiedArtworkAccounts,
   identity: string,
   minted = false,
@@ -530,6 +531,121 @@ export async function buildRecordMintedConditionTransaction(
       verification: prepared.verification,
       head,
       report: condition.report,
+    },
+  };
+}
+
+/** Validate the finalized inspection scope without constructing a transaction. */
+export async function readConditionInspectionScope(
+  authorityAddress: string,
+  accounts: VerifiedArtworkAccounts & {
+    conditionHeadAccount: import("@solana/kit").MaybeEncodedAccount;
+    currentReportAccount: import("@solana/kit").EncodedAccount | null;
+    custodyHeadAccount: import("@solana/kit").MaybeEncodedAccount;
+    assetAccount: import("@solana/kit").MaybeEncodedAccount;
+  },
+  kathaId: string,
+) {
+  const prepared = await verifiedArtwork(
+    { authorityAddress: address(authorityAddress) },
+    accounts,
+    kathaId,
+    true,
+  );
+  let version = 0;
+  if (accounts.conditionHeadAccount.exists) {
+    const [head, bump] = await findHeadPda({ artwork: prepared.artwork });
+    checkAccount(
+      accounts.conditionHeadAccount,
+      head,
+      KathaRegistryAccount.ConditionHead,
+      getConditionHeadSize(),
+    );
+    const state = getConditionHeadDecoder().decode(accounts.conditionHeadAccount.data);
+    if (
+      state.artwork !== prepared.artwork ||
+      state.bump !== bump ||
+      state.version < 1 ||
+      state.version >= 0xffffffff ||
+      !accounts.currentReportAccount
+    )
+      throw new TypeError("Invalid condition head");
+    checkAccount(
+      accounts.currentReportAccount,
+      state.currentReport,
+      KathaRegistryAccount.ConditionAttestation,
+      201,
+    );
+    const report = getConditionAttestationDecoder().decode(
+      accounts.currentReportAccount.data,
+    );
+    const [reportAddress, reportBump] = await findReportPda({
+      reportId: report.reportId,
+    });
+    if (
+      reportAddress !== state.currentReport ||
+      report.bump !== reportBump ||
+      report.artwork !== prepared.artwork ||
+      report.version !== state.version ||
+      !equalBytes(report.reportHash, state.currentHash)
+    )
+      throw new TypeError("Invalid current condition report");
+    version = state.version;
+  }
+  const minted = prepared.record.coreAsset.__option === "Some";
+  if (!minted) return { version, minted, scope: null, record: prepared.record };
+  if (!version || !accounts.assetAccount.exists || !accounts.custodyHeadAccount.exists)
+    throw new TypeError("Minted inspection scope is unavailable");
+  const [asset] = await findAssetPda({ artwork: prepared.artwork });
+  if (
+    prepared.record.coreAsset.__option !== "Some" ||
+    prepared.record.coreAsset.value !== asset
+  )
+    throw new TypeError("Invalid Core asset binding");
+  const core = readCoreAsset(
+    accounts.assetAccount,
+    asset,
+    prepared.configuration.collection,
+  );
+  const [custodyAddress, bump] = await findInitializeCustodyHeadPda({
+    artwork: prepared.artwork,
+  });
+  checkAccount(
+    accounts.custodyHeadAccount,
+    custodyAddress,
+    KathaRegistryAccount.CustodyHead,
+    115,
+  );
+  const custody = getCustodyHeadDecoder().decode(accounts.custodyHeadAccount.data);
+  const [transition] = await findTransitionCustodyTransitionPda({
+    artwork: prepared.artwork,
+    nextRevision: custody.revision,
+  });
+  if (
+    core.name !== kathaId ||
+    custody.artwork !== prepared.artwork ||
+    custody.bump !== bump ||
+    custody.revision < 1n ||
+    custody.revision > 0xffffffffn ||
+    custody.latestTransition !== transition ||
+    custody.subject.__option !== "Some" ||
+    (custody.state === CustodyState.KathaHeld
+      ? custody.subject.value !== prepared.configuration.custodyAuthority
+      : custody.state !== CustodyState.CollectorHeld ||
+        custody.subject.value !== core.owner)
+  )
+    throw new TypeError("Invalid inspection custody scope");
+  return {
+    version,
+    minted,
+    record: prepared.record,
+    scope: {
+      ownerWallet: String(core.owner),
+      custodyRevision: Number(custody.revision),
+      custodyState:
+        custody.state === CustodyState.KathaHeld
+          ? ("KATHA_HELD" as const)
+          : ("COLLECTOR_HELD" as const),
     },
   };
 }

@@ -1,4 +1,5 @@
 import { and, asc, ne, desc, eq } from "drizzle-orm";
+import { unresolvedCondition } from "./condition-write-guard.js";
 import type { Database } from "./connection.js";
 import { artworks } from "./schema/artworks.js";
 import { artists } from "./schema/artists.js";
@@ -29,7 +30,10 @@ type Condition = Pick<
   | "ownerWallet"
   | "custodyRevision"
 >;
-export function createDocumentPreparationStore(db: Database) {
+export function createDocumentPreparationStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET" = "LOCALNET",
+) {
   return {
     async prepare(
       kathaId: string,
@@ -47,6 +51,13 @@ export function createDocumentPreparationStore(db: Database) {
         if (!artwork) return { status: "not_found" as const };
         if (artwork.updatedAt.toISOString() !== expectedUpdatedAt)
           return { status: "conflict" as const };
+        if (kind === "CONDITION") {
+          const [pending] = await tx
+            .select({ blocked: unresolvedCondition(artwork.id, cluster) })
+            .from(artworks)
+            .where(eq(artworks.id, artwork.id));
+          if (pending?.blocked) return { status: "conflict" as const };
+        }
         const [artist] = await tx
           .select()
           .from(artists)

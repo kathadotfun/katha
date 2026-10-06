@@ -18,6 +18,9 @@ import {
   sha256Hex,
   registrationIdentitySchema,
   type RegistrationIdentity,
+  type ConditionReportDocument,
+  conditionReportDocumentSchema,
+  canonicalDocumentBytes,
   type UnsignedOperationResponse,
 } from "@katha/shared";
 import {
@@ -29,8 +32,19 @@ import {
   findArtworkPda,
   findConfigPda,
   findVerificationPda,
+  findHeadPda,
+  findReportPda,
+  findAssetPda,
+  findInitializeCustodyHeadPda,
+  ConditionGrade,
+  ConditionReason,
 } from "@katha/solana/registry";
 
+export type ConditionTransactionReview = {
+  document: ConditionReportDocument;
+  reportHash: string;
+  expectedVersion: number;
+};
 const kinds: Record<
   UnsignedOperationResponse["kind"],
   readonly KathaRegistryInstruction[]
@@ -72,6 +86,7 @@ export async function inspectPreparedTransaction(
     kathaId: string;
     registration?: RegistrationIdentity;
     verification?: { authorshipEvidenceHash: string };
+    condition?: ConditionTransactionReview;
   },
 ) {
   const operation = unsignedOperationResponseSchema.parse(input);
@@ -165,6 +180,105 @@ export async function inspectPreparedTransaction(
       ).join("") !== context.verification.authorshipEvidenceHash
     )
       throw new Error("Verification commitment mismatch.");
+  }
+  if (context.condition) {
+    const { document: inputDocument, reportHash, expectedVersion } = context.condition;
+    const document = conditionReportDocumentSchema.parse(inputDocument);
+    const hex = (bytes: ArrayLike<number>) =>
+      Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+    const uuid = (value: string) =>
+      Uint8Array.from(value.replaceAll("-", "").match(/../g)!, (value) =>
+        Number.parseInt(value, 16),
+      );
+    const [[verification], [head], [report], [custodyHead], [asset]] =
+      await Promise.all([
+        findVerificationPda({ artwork }),
+        findHeadPda({ artwork }),
+        findReportPda({ reportId: uuid(document.reportId) }),
+        findInitializeCustodyHeadPda({ artwork }),
+        findAssetPda({ artwork }),
+      ]);
+    const grade = {
+      EXCELLENT: ConditionGrade.Excellent,
+      GOOD: ConditionGrade.Good,
+      FAIR: ConditionGrade.Fair,
+      POOR: ConditionGrade.Poor,
+      DAMAGED: ConditionGrade.Damaged,
+    };
+    const reason = {
+      INITIAL_VERIFICATION: ConditionReason.InitialVerification,
+      PRE_SALE: ConditionReason.PreSale,
+      POST_DELIVERY: ConditionReason.PostDelivery,
+      PRE_RESALE: ConditionReason.PreResale,
+      RETURN_TO_CUSTODY: ConditionReason.ReturnToCustody,
+      INSURANCE: ConditionReason.Insurance,
+    };
+    if (
+      parsed.instructionType !== KathaRegistryInstruction.InitializeCondition &&
+      parsed.instructionType !== KathaRegistryInstruction.RecordUnmintedCondition &&
+      parsed.instructionType !== KathaRegistryInstruction.RecordMintedCondition
+    )
+      throw new Error("Condition instruction required");
+    const minted =
+      parsed.instructionType === KathaRegistryInstruction.RecordMintedCondition;
+    const roles = [
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.WRITABLE,
+      AccountRole.WRITABLE,
+      ...(minted ? [AccountRole.READONLY, AccountRole.READONLY] : []),
+      AccountRole.WRITABLE_SIGNER,
+      AccountRole.READONLY,
+    ];
+    if (
+      document.kathaId !== context.kathaId ||
+      document.verifierWallet !== context.wallet ||
+      (await sha256Hex(canonicalDocumentBytes(document))) !== reportHash ||
+      !Number.isInteger(expectedVersion) ||
+      expectedVersion < 0 ||
+      expectedVersion >= 0xffffffff ||
+      hex(parsed.data.reportId) !== hex(uuid(document.reportId)) ||
+      hex(parsed.data.inspectorId) !== hex(uuid(document.inspectorId)) ||
+      hex(parsed.data.reportHash) !== reportHash ||
+      parsed.data.grade !== grade[document.grade] ||
+      parsed.data.reason !== reason[document.reason] ||
+      parsed.data.inspectedAt !==
+        BigInt(Math.floor(Date.parse(document.inspectedAt) / 1000)) ||
+      parsed.accounts.verification.address !== verification ||
+      parsed.accounts.head.address !== head ||
+      parsed.accounts.report.address !== report ||
+      parsed.accounts.verifierAuthority.address !== context.wallet ||
+      parsed.accounts.systemProgram.address !== "11111111111111111111111111111111" ||
+      instruction.accounts?.length !== roles.length ||
+      instruction.accounts.some((item, index) => item.role !== roles[index])
+    )
+      throw new Error("Condition commitment mismatch");
+    if (parsed.instructionType === KathaRegistryInstruction.InitializeCondition) {
+      if (
+        expectedVersion !== 0 ||
+        document.scope ||
+        document.reason !== "INITIAL_VERIFICATION"
+      )
+        throw new Error("Initial condition mismatch");
+    } else if (
+      parsed.data.expectedVersion !== expectedVersion ||
+      parsed.data.nextVersion !== expectedVersion + 1 ||
+      expectedVersion === 0
+    )
+      throw new Error("Condition version mismatch");
+    if (parsed.instructionType === KathaRegistryInstruction.RecordMintedCondition) {
+      if (
+        !document.scope ||
+        parsed.data.expectedOwner !== document.scope.ownerWallet ||
+        parsed.data.expectedCustodyRevision !==
+          BigInt(document.scope.custodyRevision) ||
+        parsed.accounts.custodyHead.address !== custodyHead ||
+        parsed.accounts.asset.address !== asset
+      )
+        throw new Error("Condition scope mismatch");
+    } else if (document.scope)
+      throw new Error("Unminted condition cannot have an owner scope");
   }
   return {
     operation,

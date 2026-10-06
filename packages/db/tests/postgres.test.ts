@@ -4690,3 +4690,318 @@ it("NFC assignment is race-safe, immutable and never reuses retired identifiers"
     await connection.close();
   }
 });
+
+it("appends immutable private condition evidence after content freeze and isolates report receipts", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL) throw Error("Run pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const {
+    createArtworkMediaStore,
+    createConditionAttestationStore,
+    createDocumentPreparationStore,
+    createOperationReceiptStore,
+    createConditionAttestationStatusStore,
+    conditionReports,
+    artworkMedia,
+  } = await import("../src/index.js");
+  const address = "K".repeat(31) + "7",
+    at = new Date("2026-10-05T00:00:00.000Z");
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "inspection-append-artist",
+        displayName: "Synthetic inspector artist",
+        biography: "Synthetic biography",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+        verificationStatus: "VERIFIED",
+        verifiedByWallet: address,
+        verifiedAt: at,
+        createdAt: at,
+        updatedAt: at,
+      })
+      .returning();
+    if (!artist) throw Error();
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic inspection artwork",
+        creationYear: 2026,
+        authorshipEvidenceHash: "e".repeat(64),
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw Error();
+    const reportId = randomUUID();
+    const canonicalDocument = JSON.stringify({
+      kathaId: artwork.kathaId,
+      reportId,
+      grade: "GOOD",
+      reason: "INITIAL_VERIFICATION",
+      inspectorId: artist.id,
+      verifierWallet: address,
+      notes: "Synthetic private notes",
+      mediaHashes: ["a".repeat(64)],
+      inspectedAt: at.toISOString(),
+      reportedAt: at.toISOString(),
+    });
+    const reportHash = createHash("sha256").update(canonicalDocument).digest("hex");
+    await db.insert(conditionReports).values({
+      id: reportId,
+      artworkId: artwork.id,
+      version: 1,
+      status: "PREPARED",
+      authorityWallet: address,
+      inspectorId: artist.id,
+      grade: "GOOD",
+      reason: "INITIAL_VERIFICATION",
+      inspectedAt: at,
+      reportedAt: at,
+      notes: "Synthetic private notes",
+      mediaHashes: ["a".repeat(64)],
+      canonicalDocument,
+      documentHash: reportHash,
+    });
+    const media = {
+      kind: "IMAGE" as const,
+      role: "HERO" as const,
+      visibility: "PUBLIC" as const,
+      mimeType: "image/png",
+      byteSize: 67n,
+      contentHash: "a".repeat(64),
+      storageKey: `public/${"a".repeat(64)}.png`,
+      altText: "Synthetic artwork",
+      caption: null,
+    };
+    await db
+      .insert(artworkMedia)
+      .values({ ...media, artworkId: artwork.id, position: 0 });
+    const normal = createArtworkMediaStore(db),
+      evidence = createArtworkMediaStore(db, true);
+    const before = await normal.read(artwork.kathaId);
+    expect(before?.editable).toBe(false);
+    if (!before) throw Error();
+    const next = {
+      ...media,
+      role: "CONDITION" as const,
+      visibility: "PRIVATE" as const,
+      contentHash: "c".repeat(64),
+      storageKey: `private/${"c".repeat(64)}.png`,
+      altText: null,
+    };
+    await expect(
+      normal.write(
+        artwork.kathaId,
+        before.artwork.updatedAt.toISOString(),
+        async (items) => [...items, next],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      evidence.write(
+        artwork.kathaId,
+        before.artwork.updatedAt.toISOString(),
+        async (items) => [...items, { ...next, visibility: "PUBLIC" }],
+      ),
+    ).rejects.toThrow();
+    const savedMedia = await evidence.write(
+      artwork.kathaId,
+      before.artwork.updatedAt.toISOString(),
+      async (items) => [...items, next],
+    );
+    if (!savedMedia) throw Error();
+    expect(savedMedia.items[0]).toEqual(before.items[0]);
+    expect(savedMedia.items[1]).toMatchObject({
+      position: 1,
+      role: "CONDITION",
+      visibility: "PRIVATE",
+    });
+    await expect(
+      evidence.write(
+        artwork.kathaId,
+        before.artwork.updatedAt.toISOString(),
+        async (items) => [...items, next],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      evidence.write(
+        artwork.kathaId,
+        savedMedia.artwork.updatedAt.toISOString(),
+        async (items) => [
+          { ...items[0]!, caption: "changed" },
+          ...items.slice(1),
+          next,
+        ],
+      ),
+    ).rejects.toThrow();
+    const store = createConditionAttestationStore(db),
+      snapshot = await store.load(artwork.kathaId);
+    if (!snapshot) throw Error();
+    expect(snapshot.media).toHaveLength(1);
+    const operation = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "LOCALNET" as const,
+      kind: "RECORD_CONDITION" as const,
+      idempotencyKey: "synthetic-inspection-receipt",
+      requestHash: createHash("sha256").update("{}").digest("hex"),
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: [reportHash],
+    };
+    const preparation = {
+      canonicalRequest: "{}",
+      messageHash: "f".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 10n,
+      simulationUnits: 20n,
+    };
+    const saved = await store
+      .operations(snapshot)
+      .save(operation, address, artwork.kathaId, preparation);
+    if (saved.status !== "saved") throw Error();
+    const receipts = createOperationReceiptStore(db),
+      status = createConditionAttestationStatusStore(db, "LOCALNET");
+    let release!: () => void, entered!: () => void;
+    const locked = new Promise<void>((resolve) => {
+        entered = resolve;
+      }),
+      resume = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    const holder = db.transaction(async (tx) => {
+      await tx
+        .select({ id: artworks.id })
+        .from(artworks)
+        .where(eq(artworks.id, artwork.id))
+        .for("update");
+      entered();
+      await resume;
+    });
+    await locked;
+    const saving = receipts.save(
+      saved.operationId,
+      saved.preparationId,
+      wallet.id,
+      "LOCALNET",
+      "5".repeat(88),
+      preparation.messageHash,
+      { status: "UNKNOWN" },
+    );
+    try {
+      let blocked = false;
+      for (let attempt = 0; attempt < 100 && !blocked; attempt++) {
+        const rows = await db.execute(
+          sql`select count(*)::integer as waiting from pg_stat_activity where wait_event_type = 'Lock' and query like '%"artworks"%' and query like '%for share%'`,
+        );
+        blocked = Number(rows[0]?.waiting) > 0;
+        if (!blocked) await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(blocked).toBe(true);
+    } finally {
+      release();
+      await holder;
+    }
+    expect(await saving).toMatchObject({ status: "saved" });
+    expect((await store.load(artwork.kathaId))?.unresolved).toBe(true);
+    expect(
+      (await createConditionAttestationStore(db, "DEVNET").load(artwork.kathaId))
+        ?.unresolved,
+    ).toBe(false);
+    expect(await status(artwork.kathaId, reportHash)).toMatchObject({
+      unresolved: true,
+      finalized: false,
+      receipt: { status: "UNKNOWN", indexed: false },
+    });
+    expect(await status(artwork.kathaId, "c".repeat(64))).toEqual({
+      unresolved: false,
+      finalized: false,
+      receipt: null,
+    });
+    await expect(
+      evidence.write(
+        artwork.kathaId,
+        savedMedia.artwork.updatedAt.toISOString(),
+        async (items) => [...items, next],
+      ),
+    ).rejects.toThrow();
+    let built = false;
+    const documents = createDocumentPreparationStore(db);
+    expect(
+      await documents.prepare(
+        artwork.kathaId,
+        savedMedia.artwork.updatedAt.toISOString(),
+        address,
+        "CONDITION",
+        async () => {
+          built = true;
+          throw Error("Should be blocked");
+        },
+      ),
+    ).toEqual({ status: "conflict" });
+    expect(built).toBe(false);
+    expect(
+      (
+        await store
+          .operations(snapshot)
+          .save(
+            { ...operation, idempotencyKey: "replacement-inspection" },
+            address,
+            artwork.kathaId,
+            preparation,
+          )
+      ).status,
+    ).toBe("conflict");
+    expect(
+      await receipts.save(
+        saved.operationId,
+        saved.preparationId,
+        wallet.id,
+        "LOCALNET",
+        "5".repeat(88),
+        preparation.messageHash,
+        { status: "FINALIZED", slot: 10n, chainRecordedAt: at },
+      ),
+    ).toMatchObject({ status: "saved" });
+    expect(await status(artwork.kathaId, reportHash)).toMatchObject({
+      unresolved: false,
+      finalized: true,
+      receipt: { status: "FINALIZED", indexed: false },
+    });
+    expect((await store.load(artwork.kathaId))?.unresolved).toBe(false);
+    expect((await store.load(artwork.kathaId))?.attested).toBe(true);
+    expect(
+      (
+        await store
+          .operations(snapshot)
+          .save(
+            { ...operation, idempotencyKey: "finalized-replacement" },
+            address,
+            artwork.kathaId,
+            preparation,
+          )
+      ).status,
+    ).toBe("conflict");
+    expect(
+      await createConditionAttestationStatusStore(db, "DEVNET")(
+        artwork.kathaId,
+        reportHash,
+      ),
+    ).toEqual({ finalized: false, unresolved: false, receipt: null });
+    const rows = await db
+      .select()
+      .from(artworkMedia)
+      .where(eq(artworkMedia.artworkId, artwork.id))
+      .orderBy(asc(artworkMedia.position));
+    expect(rows[0]).toEqual(before.items[0]);
+    expect(rows).toHaveLength(2);
+  } finally {
+    await connection.close();
+  }
+});

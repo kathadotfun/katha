@@ -133,3 +133,9 @@ artwork/config/verification PDAs, verifier address, system program and exact fiv
 account roles. Protected verification receipts provide indexing feedback for
 unpublished artworks, scoped to the finalized signature. No public provenance
 request is needed for this protected workflow.
+
+Condition inspection adds a reviewed private report context to instruction checking:
+UUID/hash, grade/reason, inspector, time and version must match; minted instructions
+also bind owner and custody revision plus Core/custody PDAs. The protected condition
+review provides receipt/indexing feedback for unpublished artworks. See
+[condition inspection administration](condition-inspection-web.md).

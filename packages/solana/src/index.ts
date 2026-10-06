@@ -143,3 +143,5 @@ export {
   type CoreOwnerObservation,
 } from "./history-reader.js";
 export { isRetryableRpcFailure } from "./rpc-retry.js";
+
+export { readConditionInspectionScope } from "./attestation.js";
