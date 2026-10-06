@@ -107,7 +107,9 @@ recovery from unavailable data. Authorized NFC administration now assigns unique
 public tag references, preserves their permanent artwork binding and supports
 terminal retirement. Public NFC resolution now redirects active tags to permanent
 artwork pages, hides unpublished bindings and rejects retired tags; physical tag
-writing remains planned.
+writing remains planned. The artwork page now explains physical identity, guides
+comparison with its documented features and inspections, and states that basic NFC
+can be cloned and does not independently prove authenticity.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 

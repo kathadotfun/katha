@@ -34,7 +34,14 @@ const provenanceModule = await viewModule("../components/artwork-provenance.tsx"
   "../lib/artwork-provenance": new URL("../lib/artwork-provenance.ts", import.meta.url)
     .href,
 });
+const physicalIdentityModule = await viewModule(
+  "../components/artwork-physical-identity.tsx",
+  {
+    "../lib/artwork-page": new URL("../lib/artwork-page.ts", import.meta.url).href,
+  },
+);
 const detailModule = await viewModule("../components/artwork-detail.tsx", {
+  "./artwork-physical-identity": physicalIdentityModule,
   "./artwork-photo": photoModule,
   "./artwork-care": careModule,
   "./artwork-provenance": provenanceModule,
@@ -696,4 +703,50 @@ test("homepage escapes public text and handles missing or unsupported photograph
     assert.ok(html.includes("Artwork photograph is not available"));
     assert.ok(!html.includes("/storage/public/"));
   }
+});
+
+test("physical identity links to the permanent record and inspection references without claiming NFC proof", () => {
+  const html = render();
+  const section = html.slice(
+    html.indexOf('<section aria-labelledby="artwork-physical-identity"'),
+    html.indexOf('<section aria-labelledby="artwork-care"'),
+  );
+  for (const text of [
+    "Physical identity and NFC",
+    "Permanent Katha ID",
+    artworkFixture.kathaId,
+    artworkFixture.artist.displayName,
+    "720 × 510 mm",
+    "A basic NFC tag can be cloned",
+    "attached to another object",
+    "does not independently prove authenticity, ownership, physical custody or delivery",
+    "does not confirm that a tag is attached, secure or currently active",
+    "unknown or retired tag",
+    "Physical inspection remains a manual process",
+  ])
+    assert.ok(section.includes(text), text);
+  assert.ok(section.includes(`href="/art/${artworkFixture.kathaId}"`));
+  for (const id of [
+    "artwork-details",
+    "artwork-authenticity",
+    "artwork-condition",
+    "artwork-provenance",
+  ]) {
+    assert.ok(section.includes(`href="#${id}"`));
+    assert.ok(html.includes(`id="${id}"`));
+  }
+  assert.ok(!section.includes(artworkFixture.ownership.ownerWallet));
+  assert.ok(!section.includes("/nfc/"));
+});
+
+test("physical identity does not invent dimensions or upgrade an absent photo into a physical match", () => {
+  const html = render({ ...artworkFixture, dimensions: null, media: [] });
+  const section = html.slice(
+    html.indexOf('<section aria-labelledby="artwork-physical-identity"'),
+    html.indexOf('<section aria-labelledby="artwork-care"'),
+  );
+  assert.ok(section.includes("Not documented"));
+  assert.ok(section.includes("Missing details are not evidence of a match"));
+  assert.ok(!section.includes("720 × 510"));
+  assert.ok(section.includes("A matching page alone cannot confirm"));
 });

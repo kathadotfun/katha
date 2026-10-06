@@ -1,3 +1,4 @@
+import { ArtworkPhysicalIdentity } from "./artwork-physical-identity";
 import type { PublicArtworkDetail } from "@katha/shared";
 import {
   artworkCategoryLabels,
@@ -140,6 +141,7 @@ export function ArtworkDetail({
           text={artwork.creationProcess}
         />
       </div>
+      <ArtworkPhysicalIdentity artwork={artwork} />
       <ArtworkCare artwork={artwork} />
       <ArtworkProvenance artwork={artwork} evidence={evidence} />
       {photos.length > 1 && (

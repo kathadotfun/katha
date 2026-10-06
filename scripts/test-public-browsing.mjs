@@ -109,6 +109,26 @@ export async function runPublicBrowsingJourneys({
       await page.locator('main a[href="/art/KATHA-PAUBHA-000001"]').click();
       await expect(page).toHaveURL(`${origin}/art/KATHA-PAUBHA-000001`);
       await expect(page.locator("#artwork-title")).toBeVisible();
+      const identity = page.locator(
+        'section[aria-labelledby="artwork-physical-identity"]',
+      );
+      await expect(
+        identity.getByRole("heading", { name: "Physical identity and NFC" }),
+      ).toBeVisible();
+      await expect(identity).toContainText("A basic NFC tag can be cloned");
+      await expect(
+        identity.getByRole("link", { name: "KATHA-PAUBHA-000001", exact: true }),
+      ).toHaveAttribute("href", "/art/KATHA-PAUBHA-000001");
+      for (const [name, id] of [
+        ["About the work", "artwork-details"],
+        ["recorded manual verification", "artwork-authenticity"],
+        ["latest available condition inspection", "artwork-condition"],
+        ["provenance and blockchain references", "artwork-provenance"],
+      ]) {
+        await identity.getByRole("link", { name, exact: true }).click();
+        await expect(page).toHaveURL(`${origin}/art/KATHA-PAUBHA-000001#${id}`);
+        await expect(page.locator(`#${id}`)).toBeInViewport();
+      }
       await audit("artwork");
       const photo = page
         .getByRole("img", { name: "Synthetic artwork image for testing" })

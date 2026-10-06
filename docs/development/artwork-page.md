@@ -36,6 +36,34 @@ Dimensions retain exact recorded millimetres with explicit height/width/depth or
 Origin preserves the recorded places; absent locality does not imply a particular
 city. Nepal's cultural identity comes from the documented object and artist.
 
+## Physical identity and NFC
+
+`ArtworkPhysicalIdentity` presents the permanent Katha ID as a link to the same
+local artwork route, recorded artist attribution and exact recorded dimensions.
+It uses the existing validated public artwork response; no tag lookup, hardware UID,
+assignment status or private evidence is added to the page contract. Dimensions
+remain explicitly undocumented when absent.
+
+The section guides visitors to compare the physical work with public photography,
+materials and technique in About the work, then links to the recorded manual
+verification, latest available condition inspection and provenance/blockchain
+references. It does not treat a visual match or matching ID as physical authentication.
+Existing verification, condition, digital ownership and custody remain separate.
+
+NFC copy explains that an assigned tag opens the permanent record, that basic NFC
+can be cloned, and that a copied link can be attached to another object. A successful
+tap does not independently prove authenticity, ownership, custody or delivery.
+The page makes no claim that a tag is attached, secure or currently active. Unknown
+or retired resolution is also not a verdict about the artwork's authenticity.
+Manual physical inspection remains necessary. See [NFC resolution](nfc-administration.md)
+for the public resolver's 302/404/410 behavior; physical tag writing is documented
+separately later.
+
+Render tests cover the identity, exact permanent link and existing reference anchors,
+accurate NFC limits, absent dimensions/photos and separation from the digital owner.
+The public Chromium journey verifies the section and every reference link at
+320, 768 and 1440 pixels; the full-page accessibility audit includes the section.
+
 ## Verification and physical care
 
 `ArtworkCare` renders only the validated public verification, condition and custody
