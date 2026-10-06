@@ -10,6 +10,7 @@ import {
   getPublicKeyFromAddress,
   verifySignature,
   address,
+  AccountRole,
   unwrapOption,
 } from "@solana/kit";
 import {
@@ -27,6 +28,7 @@ import {
   parseKathaRegistryInstruction,
   findArtworkPda,
   findConfigPda,
+  findVerificationPda,
 } from "@katha/solana/registry";
 
 const kinds: Record<
@@ -69,6 +71,7 @@ export async function inspectPreparedTransaction(
     kind: UnsignedOperationResponse["kind"];
     kathaId: string;
     registration?: RegistrationIdentity;
+    verification?: { authorshipEvidenceHash: string };
   },
 ) {
   const operation = unsignedOperationResponseSchema.parse(input);
@@ -136,6 +139,32 @@ export async function inspectPreparedTransaction(
       ).join("") !== expected.authorshipEvidenceHash
     )
       throw new Error("Registration attribution mismatch.");
+  }
+  if (context.verification) {
+    const [verification] = await findVerificationPda({ artwork });
+    if (
+      parsed.instructionType !== KathaRegistryInstruction.VerifyArtwork ||
+      instruction.accounts?.length !== 5 ||
+      instruction.accounts.some(
+        (account, index) =>
+          account.role !==
+          [
+            AccountRole.READONLY,
+            AccountRole.READONLY,
+            AccountRole.WRITABLE,
+            AccountRole.WRITABLE_SIGNER,
+            AccountRole.READONLY,
+          ][index],
+      ) ||
+      parsed.accounts.verification.address !== verification ||
+      parsed.accounts.verifierAuthority.address !== context.wallet ||
+      parsed.accounts.systemProgram.address !== "11111111111111111111111111111111" ||
+      !/^[0-9a-f]{64}$/.test(context.verification.authorshipEvidenceHash) ||
+      Array.from(parsed.data.expectedAuthorshipEvidenceHash, (value) =>
+        value.toString(16).padStart(2, "0"),
+      ).join("") !== context.verification.authorshipEvidenceHash
+    )
+      throw new Error("Verification commitment mismatch.");
   }
   return {
     operation,

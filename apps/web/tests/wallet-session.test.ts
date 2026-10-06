@@ -88,6 +88,12 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readVerification: async () => {
+      throw new Error("Unexpected verifier read");
+    },
+    prepareVerification: async () => {
+      throw new Error("Unexpected verifier preparation");
+    },
     readRegistration: async () => {
       throw new Error("unused");
     },

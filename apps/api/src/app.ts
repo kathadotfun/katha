@@ -429,6 +429,11 @@ export function createApi(
     });
   }
   if (verification) {
+    app.get("/verifier/artworks/:kathaId/verification", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(await verification.review(c.req.header("Authorization"), kathaId));
+    });
     app.post("/verifier/artworks/:kathaId/operations/verification", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       parseQuery(c, artworkDetailQuerySchema);

@@ -1,4 +1,7 @@
-import { createArtworkRegistrationStatusStore } from "@katha/db";
+import {
+  createArtworkRegistrationStatusStore,
+  createArtworkVerificationStatusStore,
+} from "@katha/db";
 import { createArtworkMediaStore } from "@katha/db";
 import { createArtworkMedia } from "./artwork-media.js";
 import { createNfcResolution } from "./nfc-resolution.js";
@@ -149,6 +152,14 @@ function startApi() {
       createOperationChain(rpcConfig),
       storage,
       config.KATHA_CLUSTER,
+      createArtworkRegistrationStatusStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
+      createArtworkVerificationStatusStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
     ),
     createConditionAttestation(
       createConditionAttestationStore(database.db),

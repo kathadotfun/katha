@@ -17,7 +17,8 @@ The permanent ID path is validated and the query must be empty. The strict share
   "expectedUpdatedAt": "2026-10-05T00:00:00.000Z",
   "metadataVersionId": "11111111-1111-4111-8111-111111111111",
   "supportedTransactionVersions": [0, 1],
-  "authenticityConfirmed": true
+  "authenticityConfirmed": true,
+  "reviewedEvidenceHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 }
 ```
 
@@ -28,7 +29,8 @@ API nor blockchain independently inspects the object. Never put private evidence
 contact details or inspection notes into this request or public Git.
 
 Caller-provided authorities, RPC URLs, program/account addresses, artist identities,
-hashes and instruction bytes are rejected. The existing registered authorship
+arbitrary hashes and instruction bytes are rejected. The reviewed evidence digest must
+exactly match the saved registered authorship commitment. The existing registered authorship
 commitment is the evidence hash authenticated by `verify_artwork`; this endpoint
 does not introduce an additional verification-document hash or condition report.
 
@@ -66,7 +68,7 @@ as authority and fee payer, and one required wallet signer. Localnet uses v0; De
 selects v1 when the wallet declares support, otherwise v0. A localnet v1-only wallet
 is rejected. Simulation must succeed before the private operation/preparation is saved.
 
-The canonical idempotent intent binds the manual confirmation, draft timestamp,
+The canonical idempotent intent binds the manual confirmation, reviewed evidence digest, draft timestamp,
 immutable attribution, authorship evidence and selected metadata UUID/version/hash/URI,
 plus actual instruction bytes/account roles. The metadata binding is off chain;
 this instruction authenticates authorship and does not change metadata commitments.
@@ -74,7 +76,7 @@ Use a new idempotency key if the semantic review changes. Unchanged retries can
 refresh the blockhash and preserve operation identity through the existing helper.
 
 A save guard rechecks draft identity/timestamp, artist approval, latest metadata
-status/identity/bytes/hash/URI and finalized verification eligibility under database
+status/identity/bytes/hash/URI and finalized/unresolved verification eligibility under database
 locks. A change during simulation returns 409 without inserting a new operation.
 The existing metadata writer locks the parent artwork before inserting a revision;
 future verification finalizers must follow the same parent-lock protocol. No RPC
@@ -84,6 +86,27 @@ Preparation changes only pending operation/preparation history. It never signs,
 broadcasts, inserts a finalized verification/receipt, publishes the artwork, changes
 custody or ownership, or mints an asset. The wallet reviews and signs; submission,
 receipt reconciliation and indexer projections are separate workflows.
+
+## Protected review
+
+`GET /verifier/artworks/:kathaId/verification` returns the strict shared
+`artworkVerificationReviewSchema` with `Cache-Control: no-store`. It requires a
+verifier session on the configured cluster before loading any artwork or document.
+Admin-only users cannot read this route. The projection contains the permanent ID,
+immutable attribution and evidence digest, verified-artist hint, exact approved public
+metadata, registration status and verification status. It excludes private artist
+fields, raw evidence, notes, bearer tokens, signed transaction bytes and operation
+intent internals. Empty queries and valid permanent-ID paths are required.
+
+Statuses separate finalization, unresolved attempts and indexing. Receipt lookup is
+scoped to the artwork, cluster and operation kind; an older UNKNOWN receipt remains
+visible even after a newer unsigned preparation. FINALIZED receipts take precedence,
+and indexing requires the matching artwork/program/cluster/signature event. The
+save guard rechecks retained UNKNOWN receipts before accepting another preparation.
+The browser requires locally reconciled finalized registration before proceeding;
+external registrations need reconciliation/indexer recovery before using that page.
+The API still validates finalized Registry accounts independently during preparation.
+A read permission is not a grant of Registry signing authority.
 
 ## Errors and checks
 

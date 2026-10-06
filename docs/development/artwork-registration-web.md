@@ -110,3 +110,8 @@ or sent. Real Localnet/Devnet wallet approval remains manual.
 
 RPC behavior follows official [simulation](https://solana.com/docs/rpc/http/simulatetransaction)
 and [submission](https://solana.com/docs/rpc/http/sendtransaction) contracts.
+
+After registration finalizes, **Review artwork authenticity** opens the verifier
+workflow. The signed-in wallet must independently hold the verifier allowlist and
+current Registry verification authority; registration does not grant authenticity.
+See [Artwork authenticity administration](artwork-verification-web.md).

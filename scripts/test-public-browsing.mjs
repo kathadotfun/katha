@@ -1,3 +1,4 @@
+import { verificationFixture } from "../apps/web/tests/fixtures/verification.ts";
 import { registrationFixture } from "../apps/web/tests/fixtures/registration.ts";
 /* global Request */
 import { Buffer } from "node:buffer";
@@ -281,6 +282,65 @@ export async function runPublicBrowsingJourneys({
             headers: adminHeaders,
             json: registration.operation,
           });
+        },
+      );
+      const verification = await verificationFixture();
+      let verificationPage = verification.page;
+      let verificationCalls = 0,
+        rejectArtworkVerification = true;
+      await context.route(
+        `${apiOrigin}/verifier/artworks/*/verification`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          if (!verifierAllowed)
+            return route.fulfill({
+              status: 403,
+              headers: adminHeaders,
+              json: { error: "forbidden" },
+            });
+          return route.fulfill({ headers: adminHeaders, json: verificationPage });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/verifier/artworks/*/operations/verification`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          const input = route.request().postDataJSON();
+          assert.deepEqual(
+            Object.keys(input).sort(),
+            [
+              "authenticityConfirmed",
+              "expectedUpdatedAt",
+              "idempotencyKey",
+              "metadataVersionId",
+              "reviewedEvidenceHash",
+              "supportedTransactionVersions",
+            ].sort(),
+          );
+          assert.equal(input.authenticityConfirmed, true);
+          assert.equal(
+            input.reviewedEvidenceHash,
+            verificationPage.identity.authorshipEvidenceHash,
+          );
+          assert.equal(input.expectedUpdatedAt, verificationPage.updatedAt);
+          verificationCalls++;
+          return rejectArtworkVerification
+            ? route.fulfill({
+                status: 409,
+                headers: adminHeaders,
+                json: { error: "PRIVATE_VERIFICATION_ERROR" },
+              })
+            : route.fulfill({
+                status: 201,
+                headers: adminHeaders,
+                json: verification.operation,
+              });
         },
       );
       await context.route("http://127.0.0.1:8899/**", async (route) => {
@@ -956,6 +1016,109 @@ export async function runPublicBrowsingJourneys({
         path: `${artifacts}/registration-admin-${width}.png`,
         fullPage: true,
       });
+      // Verifier-only review requires no administrative draft or media access.
+      adminAllowed = false;
+      verifierAllowed = true;
+      await adminMain
+        .getByRole("link", { name: "Review artwork authenticity", exact: true })
+        .click();
+      const authenticityPrepare = adminMain.getByRole("button", {
+        name: "Prepare and simulate verification",
+      });
+      await expect(adminMain).toContainText(
+        "No finalized artwork verification recorded.",
+      );
+      await expect(authenticityPrepare).toBeDisabled();
+      await audit("verification manual review");
+      await adminMain.getByLabel("Reviewed evidence SHA-256").fill("f".repeat(64));
+      await adminMain.getByLabel("I physically inspected", { exact: false }).check();
+      await adminMain
+        .getByLabel("I reviewed the artist attribution", { exact: false })
+        .check();
+      await expect(authenticityPrepare).toBeDisabled();
+      await expect(adminMain).toContainText("does not match the registered commitment");
+      await audit("verification evidence mismatch");
+      await adminMain.getByLabel("Reviewed evidence SHA-256").fill("e".repeat(64));
+      await authenticityPrepare.click();
+      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
+      await expect(adminMain).not.toContainText("PRIVATE_VERIFICATION_ERROR");
+      await audit("verification stale state");
+      rejectArtworkVerification = false;
+      await adminMain
+        .getByRole("button", { name: "Reload verification state" })
+        .click();
+      await adminMain.getByLabel("Reviewed evidence SHA-256").fill("e".repeat(64));
+      await adminMain.getByLabel("I physically inspected", { exact: false }).check();
+      await adminMain
+        .getByLabel("I reviewed the artist attribution", { exact: false })
+        .check();
+      await authenticityPrepare.click();
+      await expect(
+        adminMain.getByRole("button", { name: "Approve in wallet and submit" }),
+      ).toBeVisible();
+      assert.equal(verificationCalls, 2);
+      await audit("verification simulated before approval");
+      await adminMain
+        .getByRole("button", { name: "Cancel transaction review" })
+        .click();
+      verificationPage = {
+        ...verificationPage,
+        verification: {
+          finalized: false,
+          unresolved: true,
+          receipt: {
+            status: "UNKNOWN",
+            signature: "4".repeat(88),
+            slot: null,
+            indexed: false,
+          },
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload verification state" })
+        .click();
+      await expect(adminMain).toContainText(
+        "A retained verification signature is unresolved",
+      );
+      await expect(authenticityPrepare).toBeDisabled();
+      await audit("verification unresolved receipt");
+      verificationPage.verification = {
+        finalized: true,
+        unresolved: false,
+        receipt: {
+          status: "FINALIZED",
+          signature: "4".repeat(88),
+          slot: "10",
+          indexed: false,
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload verification state" })
+        .click();
+      await expect(adminMain).toContainText("Artwork verification finalized.");
+      await expect(adminMain).toContainText(
+        "Finalized; verification indexing pending.",
+      );
+      await audit("verification finalized indexing pending");
+      verificationPage.verification.receipt.indexed = true;
+      await adminMain
+        .getByRole("button", { name: "Reload verification state" })
+        .click();
+      await expect(adminMain).toContainText("Verification event indexed.");
+      await audit("verification indexed");
+      await page.screenshot({
+        path: `${artifacts}/verification-admin-${width}.png`,
+        fullPage: true,
+      });
+      verifierAllowed = false;
+      await adminMain
+        .getByRole("button", { name: "Reload verification state" })
+        .click();
+      await expect(adminMain.getByRole("alert")).toContainText("A verifier session");
+      await expect(adminMain).not.toContainText("Synthetic Nepali artwork");
+      await audit("verification authority revoked");
+      adminAllowed = true;
+      verifierAllowed = true;
       await adminMain
         .getByRole("link", { name: "Artwork documentation", exact: true })
         .click();

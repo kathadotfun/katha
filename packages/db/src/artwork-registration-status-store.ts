@@ -6,9 +6,10 @@ import {
   transactionReceipts,
 } from "./schema/blockchain-operations.js";
 import { indexedEvents } from "./schema/blockchain-read-models.js";
-export function createArtworkRegistrationStatusStore(
+function createArtworkOperationStatusStore(
   db: Database,
   cluster: "LOCALNET" | "DEVNET",
+  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK",
 ) {
   return async (kathaId: string) =>
     db.transaction(async (tx) => {
@@ -24,7 +25,7 @@ export function createArtworkRegistrationStatusStore(
           and(
             eq(artworks.kathaId, kathaId),
             eq(blockchainOperations.cluster, cluster),
-            eq(blockchainOperations.kind, "REGISTER_ARTWORK"),
+            eq(blockchainOperations.kind, kind),
           ),
         )
         .orderBy(desc(blockchainOperations.createdAt), desc(blockchainOperations.id));
@@ -45,7 +46,7 @@ export function createArtworkRegistrationStatusStore(
             eq(artworks.kathaId, kathaId),
             eq(blockchainOperations.cluster, cluster),
             eq(transactionReceipts.cluster, cluster),
-            eq(blockchainOperations.kind, "REGISTER_ARTWORK"),
+            eq(blockchainOperations.kind, kind),
           ),
         )
         .orderBy(
@@ -68,7 +69,7 @@ export function createArtworkRegistrationStatusStore(
             eq(artworks.kathaId, kathaId),
             eq(blockchainOperations.cluster, cluster),
             eq(transactionReceipts.cluster, cluster),
-            eq(blockchainOperations.kind, "REGISTER_ARTWORK"),
+            eq(blockchainOperations.kind, kind),
             eq(transactionReceipts.status, "UNKNOWN"),
           ),
         )
@@ -103,4 +104,17 @@ export function createArtworkRegistrationStatusStore(
           : null,
       };
     });
+}
+
+export function createArtworkRegistrationStatusStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET",
+) {
+  return createArtworkOperationStatusStore(db, cluster, "REGISTER_ARTWORK");
+}
+export function createArtworkVerificationStatusStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET",
+) {
+  return createArtworkOperationStatusStore(db, cluster, "VERIFY_ARTWORK");
 }

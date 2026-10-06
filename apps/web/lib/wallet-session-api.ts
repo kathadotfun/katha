@@ -1,4 +1,7 @@
 import {
+  artworkVerificationReviewSchema,
+  artworkVerificationRequestSchema,
+  type ArtworkVerificationRequest,
   artworkRegistrationReviewSchema,
   artworkRegistrationRequestSchema,
   metadataPreparationRequestSchema,
@@ -116,6 +119,45 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readVerification(kathaId: string, token: string, signal: AbortSignal) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = artworkVerificationReviewSchema.parse(
+        await request(
+          `/verifier/artworks/${path.kathaId}/verification`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareVerification(
+      kathaId: string,
+      input: ArtworkVerificationRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const data = artworkVerificationRequestSchema.parse(input);
+      const result = unsignedOperationResponseSchema.parse(
+        await request(
+          `/verifier/artworks/${path.kathaId}/operations/verification`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.kind !== "VERIFY_ARTWORK" ||
+        !data.supportedTransactionVersions.includes(result.transactionVersion)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readRegistration(kathaId: string, token: string, signal: AbortSignal) {
       const path = artworkDraftParamsSchema.parse({ kathaId });
       const result = artworkRegistrationReviewSchema.parse(

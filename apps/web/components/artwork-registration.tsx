@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   useWalletSession,
@@ -286,6 +287,14 @@ function RegistrationContent({
             Prepare canonical metadata
           </button>
         </>
+      )}
+      {page.registration.finalized && (
+        <Link
+          className="text-link mt-6 inline-block"
+          href={`/admin/artworks/${page.kathaId}/verification`}
+        >
+          Review artwork authenticity
+        </Link>
       )}
       {page.published && (
         <p className="mt-4">

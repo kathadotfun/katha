@@ -126,3 +126,10 @@ manual once the corresponding administration workflow is connected.
 
 RPC behavior follows official [simulation](https://solana.com/docs/rpc/http/simulatetransaction)
 and [submission](https://solana.com/docs/rpc/http/sendtransaction) documentation.
+
+The artwork authenticity workflow supplies the reviewed authorship digest to the
+transaction inspector. Before simulation it checks the decoded verification digest,
+artwork/config/verification PDAs, verifier address, system program and exact five
+account roles. Protected verification receipts provide indexing feedback for
+unpublished artworks, scoped to the finalized signature. No public provenance
+request is needed for this protected workflow.

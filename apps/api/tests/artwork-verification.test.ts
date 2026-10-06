@@ -299,3 +299,133 @@ it("maps locked snapshot or idempotent intent conflicts without returning a tran
     f.service.prepare("Bearer synthetic", f.snapshot.artwork.kathaId, f.request),
   ).rejects.toMatchObject({ code: "CONFLICT" });
 });
+
+it("projects only safe verifier review fields and denies access before loading", async () => {
+  const f = await verificationFixture();
+  const review = await f.service.review("Bearer synthetic", f.snapshot.artwork.kathaId);
+  expect(review.registration.finalized).toBe(true);
+  expect(review.verification.finalized).toBe(false);
+  expect(review.identity?.authorshipEvidenceHash).toBe(f.request.reviewedEvidenceHash);
+  expect(JSON.stringify(review)).not.toContain("PRIVATE ARTIST BIO");
+  expect(review).not.toHaveProperty("payoutWallet");
+  f.load.mockClear();
+  await expect(
+    f.service.review("Bearer outsider", f.snapshot.artwork.kathaId),
+  ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  expect(f.load).not.toHaveBeenCalled();
+  f.session.cluster = "devnet";
+  await expect(
+    f.service.review("Bearer synthetic", f.snapshot.artwork.kathaId),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(f.load).not.toHaveBeenCalled();
+});
+it("rejects evidence mismatch and unresolved signed verification before storage or chain reads", async () => {
+  const f = await verificationFixture();
+  await expect(
+    f.service.prepare("Bearer synthetic", f.snapshot.artwork.kathaId, {
+      ...f.request,
+      reviewedEvidenceHash: "f".repeat(64),
+    }),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  f.snapshot.unresolved = true;
+  await expect(
+    f.service.prepare("Bearer synthetic", f.snapshot.artwork.kathaId, f.request),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(f.read).not.toHaveBeenCalled();
+  expect(f.readChain).not.toHaveBeenCalled();
+  expect(f.save).not.toHaveBeenCalled();
+});
+it("retains safe finalized and unresolved receipt status through the verifier-only GET route", async () => {
+  const { createArtworkVerification } = await import("../src/artwork-verification.js");
+  const f = await verificationFixture();
+  const status = {
+    finalized: true,
+    unresolved: false,
+    receipt: {
+      status: "FINALIZED",
+      signature: "3".repeat(88),
+      slot: "10",
+      indexed: false,
+    },
+  };
+  const service = createArtworkVerification(
+    f.store,
+    f.authorization,
+    f.readChain,
+    f.chain,
+    f.storage,
+    "localnet",
+    async () => ({ finalized: true, unresolved: false, receipt: null }),
+    async () => status,
+  );
+  const app = createApi(
+    createLogger(() => {}),
+    undefined,
+    [],
+    undefined,
+    f.authorization,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    service,
+  );
+  const path = `/verifier/artworks/${f.snapshot.artwork.kathaId}/verification`;
+  const response = await app.request(path, {
+    headers: { Authorization: "Bearer synthetic" },
+  });
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.json()).toMatchObject({ verification: status });
+  expect(
+    (
+      await app.request(path + "?cluster=devnet", {
+        headers: { Authorization: "Bearer synthetic" },
+      })
+    ).status,
+  ).toBe(400);
+  expect((await app.request(path)).status).toBe(401);
+  await expect(
+    service.prepare("Bearer synthetic", f.snapshot.artwork.kathaId, f.request),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(f.save).not.toHaveBeenCalled();
+});
+it("requires verifier allowlisting for review without requiring admin access", async () => {
+  const { createAuthorization } = await import("../src/authorization.js");
+  const { createArtworkVerification } = await import("../src/artwork-verification.js");
+  const f = await verificationFixture();
+  for (const verifier of [false, true]) {
+    const authorization = createAuthorization(
+      { authenticate: async () => f.session },
+      {
+        cluster: "localnet",
+        adminWallets: [],
+        verifierWallets: verifier ? [f.session.walletAddress] : [],
+      },
+      async () => f.authorities,
+    );
+    const service = createArtworkVerification(
+      f.store,
+      authorization,
+      f.readChain,
+      f.chain,
+      f.storage,
+      "localnet",
+    );
+    f.load.mockClear();
+    if (verifier)
+      expect(
+        (await service.review("Bearer synthetic", f.snapshot.artwork.kathaId)).kathaId,
+      ).toBe(f.snapshot.artwork.kathaId);
+    else {
+      await expect(
+        service.review("Bearer synthetic", f.snapshot.artwork.kathaId),
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(f.load).not.toHaveBeenCalled();
+    }
+  }
+});

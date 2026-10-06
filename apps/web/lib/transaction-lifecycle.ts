@@ -197,6 +197,7 @@ export function createTransactionLifecycle(
       input: unknown,
       expected: Pick<UnsignedOperationResponse, "kind" | "kathaId"> & {
         registration?: RegistrationIdentity;
+        verification?: { authorshipEvidenceHash: string };
       },
     ) {
       if (

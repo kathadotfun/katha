@@ -202,4 +202,7 @@ export {
   type ArtworkMediaStore,
 } from "./artwork-media-store.js";
 
-export { createArtworkRegistrationStatusStore } from "./artwork-registration-status-store.js";
+export {
+  createArtworkRegistrationStatusStore,
+  createArtworkVerificationStatusStore,
+} from "./artwork-registration-status-store.js";

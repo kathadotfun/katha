@@ -215,3 +215,8 @@ export {
   type RegistrationIdentity,
   type ArtworkRegistrationReview,
 } from "./artwork-registration-review.js";
+
+export {
+  artworkVerificationReviewSchema,
+  type ArtworkVerificationReview,
+} from "./artwork-registration-review.js";

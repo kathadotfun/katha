@@ -46,3 +46,8 @@ export const artworkRegistrationReviewSchema = z.strictObject({
 });
 export type RegistrationIdentity = z.infer<typeof registrationIdentitySchema>;
 export type ArtworkRegistrationReview = z.infer<typeof artworkRegistrationReviewSchema>;
+
+export const artworkVerificationReviewSchema = artworkRegistrationReviewSchema.extend({
+  verification: registrationStatusSchema,
+});
+export type ArtworkVerificationReview = z.infer<typeof artworkVerificationReviewSchema>;

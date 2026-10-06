@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { ArtworkVerificationLookup } from "../../components/artwork-verification-lookup";
 import { ArtistOnboardingPanel } from "../../components/artist-onboarding";
 export const metadata: Metadata = {
   title: "Administration — Katha",
@@ -16,6 +17,7 @@ export default function AdminPage() {
       <Link href="/admin/artworks" className="text-link mt-6 inline-block">
         Artwork drafts
       </Link>
+      <ArtworkVerificationLookup />
       <ArtistOnboardingPanel />
     </div>
   );

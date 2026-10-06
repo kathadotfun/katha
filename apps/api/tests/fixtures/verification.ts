@@ -66,6 +66,7 @@ export async function verificationFixture() {
   const snapshot: ArtworkVerificationSnapshot = {
     registered: true,
     verified: false,
+    unresolved: false,
     artwork: {
       id: artworkId,
       kathaId: document.kathaId,
@@ -251,6 +252,7 @@ export async function verificationFixture() {
   );
   const request = {
     idempotencyKey: "synthetic-verification",
+    reviewedEvidenceHash: "e".repeat(64),
     authenticityConfirmed: true as const,
     expectedUpdatedAt: at.toISOString(),
     metadataVersionId: snapshot.metadata!.id,

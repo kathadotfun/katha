@@ -2,7 +2,10 @@ import { and, eq } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { loadArtworkRegistrationSnapshot } from "./artwork-registration-store.js";
 import { verifications } from "./schema/artwork-attestations.js";
-import { blockchainOperations } from "./schema/blockchain-operations.js";
+import {
+  blockchainOperations,
+  transactionReceipts,
+} from "./schema/blockchain-operations.js";
 import { createOperationPreparationStore } from "./operation-preparation-store.js";
 
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -20,6 +23,7 @@ async function snapshot(
       and(
         eq(verifications.artworkId, base.artwork.id),
         eq(verifications.status, "FINALIZED"),
+        eq(verifications.chainCluster, cluster),
       ),
     )
     .limit(1);
@@ -35,7 +39,28 @@ async function snapshot(
       ),
     )
     .limit(1);
-  return { ...base, verified: Boolean(verification || operation) };
+  const receipts = await tx
+    .select({ status: transactionReceipts.status })
+    .from(transactionReceipts)
+    .innerJoin(
+      blockchainOperations,
+      eq(blockchainOperations.id, transactionReceipts.operationId),
+    )
+    .where(
+      and(
+        eq(blockchainOperations.artworkId, base.artwork.id),
+        eq(blockchainOperations.cluster, cluster),
+        eq(transactionReceipts.cluster, cluster),
+        eq(blockchainOperations.kind, "VERIFY_ARTWORK"),
+      ),
+    );
+  return {
+    ...base,
+    verified: Boolean(
+      verification || operation || receipts.some((row) => row.status === "FINALIZED"),
+    ),
+    unresolved: receipts.some((row) => row.status === "UNKNOWN"),
+  };
 }
 export type ArtworkVerificationSnapshot = NonNullable<
   Awaited<ReturnType<typeof snapshot>>
@@ -53,6 +78,7 @@ export function createArtworkVerificationStore(
         return (
           current !== null &&
           !current.verified &&
+          !current.unresolved &&
           current.artwork.publishedAt === null &&
           current.artwork.id === expected.artwork.id &&
           current.artwork.updatedAt.toISOString() ===

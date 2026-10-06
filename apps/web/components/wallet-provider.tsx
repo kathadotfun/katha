@@ -72,6 +72,14 @@ export function WalletProvider({
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
       async (operation, signature, signal) => {
+        if (operation.kind === "VERIFY_ARTWORK") {
+          const review = await auth.readVerification(operation.kathaId, signal);
+          return (
+            review.verification.receipt?.status === "FINALIZED" &&
+            review.verification.receipt.signature === signature &&
+            review.verification.receipt.indexed
+          );
+        }
         if (operation.kind === "REGISTER_ARTWORK") {
           const review = await auth.readRegistration(operation.kathaId, signal);
           return (

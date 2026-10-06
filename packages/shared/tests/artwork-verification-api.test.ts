@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { artworkVerificationRequestSchema } from "../src/artwork-verification-api.js";
 const request = {
+  reviewedEvidenceHash: "e".repeat(64),
   authenticityConfirmed: true,
   idempotencyKey: "register_1",
   expectedUpdatedAt: "2026-10-05T00:00:00.000Z",
@@ -11,6 +12,9 @@ it("accepts bounded verification intent with explicit wallet capabilities", () =
   expect(artworkVerificationRequestSchema.parse(request)).toEqual(request);
 });
 it.each([
+  { ...request, reviewedEvidenceHash: undefined },
+  { ...request, reviewedEvidenceHash: "E".repeat(64) },
+  { ...request, inspectionNotes: "private" },
   { ...request, authenticityConfirmed: false },
   { ...request, authenticityConfirmed: undefined },
   { ...request, metadataHash: "a".repeat(64) },

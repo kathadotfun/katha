@@ -3016,7 +3016,12 @@ it("rechecks verification snapshots under save locks and rolls back raced eligib
         verifiedAt: new Date("2026-10-05T00:00:00.000Z"),
       })
       .where(eq(artists.id, artist.id));
-    const { transactionReceipts } = await import("../src/index.js");
+    const {
+      transactionReceipts,
+      createArtworkVerificationStatusStore,
+      createArtworkRegistrationStatusStore,
+      indexedEvents,
+    } = await import("../src/index.js");
     async function finalize(
       operationId: string,
       cluster: "LOCALNET" | "DEVNET",
@@ -3057,7 +3062,67 @@ it("rechecks verification snapshots under save locks and rolls back raced eligib
     expect((await store.load(artwork.kathaId))?.verified).toBe(false);
     const beforeFinalization = await store.load(artwork.kathaId);
     if (!beforeFinalization) throw new Error("Snapshot missing");
-    await finalize(saved.operationId, "LOCALNET", "C".repeat(64));
+    const status = createArtworkVerificationStatusStore(db, "LOCALNET");
+    expect(await status(artwork.kathaId)).toEqual({
+      finalized: false,
+      unresolved: false,
+      receipt: null,
+    });
+    await db.insert(transactionReceipts).values({
+      operationId: saved.operationId,
+      cluster: "LOCALNET",
+      signature: "V".repeat(64),
+      messageHash: "a".repeat(64),
+    });
+    expect(await status(artwork.kathaId)).toMatchObject({
+      finalized: false,
+      unresolved: true,
+      receipt: { status: "UNKNOWN", indexed: false },
+    });
+    expect(
+      (
+        await store
+          .operations(beforeFinalization)
+          .save(
+            { ...operation, idempotencyKey: "verification-unknown-race" },
+            address,
+            artwork.kathaId,
+            preparation,
+          )
+      ).status,
+    ).toBe("conflict");
+    expect(
+      await createArtworkRegistrationStatusStore(db, "LOCALNET")(artwork.kathaId),
+    ).toEqual({ finalized: false, unresolved: false, receipt: null });
+    await db
+      .update(transactionReceipts)
+      .set({
+        status: "FINALIZED",
+        slot: 10n,
+        chainRecordedAt: new Date(Date.now() - 2000),
+        finalizedAt: new Date(Date.now() - 1000),
+      })
+      .where(eq(transactionReceipts.operationId, saved.operationId));
+    expect(await status(artwork.kathaId)).toMatchObject({
+      finalized: true,
+      unresolved: false,
+      receipt: { status: "FINALIZED", slot: "10", indexed: false },
+    });
+    await db.insert(indexedEvents).values({
+      artworkId: artwork.id,
+      cluster: "LOCALNET",
+      programAddress: address,
+      signature: "V".repeat(64),
+      slot: 10n,
+      eventIndex: 0,
+      kind: "REGISTRY",
+      transactionIndex: 0,
+      outerInstructionIndex: 0,
+      payload: { synthetic: true },
+      chainRecordedAt: new Date(Date.now() - 2000),
+    });
+    expect((await status(artwork.kathaId)).receipt?.indexed).toBe(true);
+
     expect((await store.load(artwork.kathaId))?.verified).toBe(true);
     expect(
       (

@@ -16,6 +16,8 @@ import {
 import { sha256Hex, type UnsignedOperationResponse } from "@katha/shared";
 import {
   getRegisterArtworkInstructionAsync,
+  getVerifyArtworkInstructionAsync,
+  findArtworkPda,
   ArtworkCategory,
 } from "@katha/solana/registry";
 import {
@@ -33,19 +35,30 @@ import type { WalletSessionController } from "../lib/wallet-session.ts";
 import type { WalletState } from "@solana/kit-plugin-wallet";
 import { provenanceFixture } from "./fixtures/provenance.ts";
 
-async function fixture(version: 0 | 1 = 0) {
+async function fixture(
+  version: 0 | 1 = 0,
+  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK" = "REGISTER_ARTWORK",
+) {
   const signer = await generateKeyPairSigner();
   const kathaId = "KATHA-PAUBHA-000001";
   const id = "aaaaaaaa-1111-4111-8111-111111111111";
-  const ix = await getRegisterArtworkInstructionAsync({
-    registrationAuthority: signer,
-    kathaId,
-    artistId: id,
-    creatorWallet: null,
-    category: ArtworkCategory.Paubha,
-    creationYear: 2026,
-    authorshipEvidenceHash: new Uint8Array(32),
-  });
+  const [artwork] = await findArtworkPda({ kathaId });
+  const ix =
+    kind === "VERIFY_ARTWORK"
+      ? await getVerifyArtworkInstructionAsync({
+          artwork,
+          verifierAuthority: signer,
+          expectedAuthorshipEvidenceHash: new Uint8Array(32).fill(0xee),
+        })
+      : await getRegisterArtworkInstructionAsync({
+          registrationAuthority: signer,
+          kathaId,
+          artistId: id,
+          creatorWallet: null,
+          category: ArtworkCategory.Paubha,
+          creationYear: 2026,
+          authorshipEvidenceHash: new Uint8Array(32),
+        });
   const transaction = compileTransaction(
     pipe(
       createTransactionMessage({ version }),
@@ -68,7 +81,7 @@ async function fixture(version: 0 | 1 = 0) {
     operationId: id,
     preparationId: "bbbbbbbb-1111-4111-8111-111111111111",
     kathaId,
-    kind: "REGISTER_ARTWORK",
+    kind,
     cluster: version === 0 ? "localnet" : "devnet",
     status: "PREPARED",
     requestHash: "a".repeat(64),
@@ -124,6 +137,12 @@ async function fixture(version: 0 | 1 = 0) {
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    readVerification: async () => {
+      throw new Error("Unexpected verifier read");
+    },
+    prepareVerification: async () => {
+      throw new Error("Unexpected verifier preparation");
+    },
     readRegistration: async () => {
       throw new Error("unused");
     },
@@ -598,6 +617,43 @@ test("protected registration indexing checks preserve finalized receipts during 
   indexed = true;
   await flow.checkConfirmation();
   assert.equal(flow.getSnapshot().phase, "indexed");
+  assert.equal(f.calls.filter((call) => call === "submit").length, 1);
+  flow.dispose();
+  f.flow.dispose();
+});
+
+test("verification approval signs once and waits for finalized protected indexing", async () => {
+  const f = await fixture(0, "VERIFY_ARTWORK");
+  let indexed = false;
+  const flow = createTransactionLifecycle(
+    f.connection,
+    f.session,
+    f.rpc,
+    async () => {
+      throw new Error("Unpublished artwork");
+    },
+    async (operation, signature) => {
+      assert.equal(operation.kind, "VERIFY_ARTWORK");
+      assert.equal(signature, f.signature);
+      return indexed;
+    },
+  );
+  await flow.load(f.operation, {
+    kind: "VERIFY_ARTWORK",
+    kathaId: f.operation.kathaId,
+    verification: { authorshipEvidenceHash: "e".repeat(64) },
+  });
+  assert.equal(flow.getSnapshot().phase, "review");
+  assert.equal(f.calls.includes("sign"), false);
+  await flow.approveAndSend();
+  assert.equal(flow.getSnapshot().phase, "unknown");
+  f.setStatus("FINALIZED");
+  await flow.checkConfirmation();
+  assert.equal(flow.getSnapshot().phase, "indexing-delay");
+  indexed = true;
+  await flow.checkConfirmation();
+  assert.equal(flow.getSnapshot().phase, "indexed");
+  assert.equal(f.calls.filter((call) => call === "sign").length, 1);
   assert.equal(f.calls.filter((call) => call === "submit").length, 1);
   flow.dispose();
   f.flow.dispose();
