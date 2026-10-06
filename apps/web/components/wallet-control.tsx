@@ -1,5 +1,6 @@
 "use client";
 
+import { TransactionReview } from "./transaction-review";
 import { useState, useSyncExternalStore } from "react";
 import { disconnectedWalletSnapshot } from "../lib/wallet-connection";
 import { signedOutSnapshot } from "../lib/wallet-session";
@@ -176,6 +177,7 @@ export function WalletControl() {
               ))}
             </ul>
           )}
+          <TransactionReview />
           {auth.error && (
             <p role="alert" className="mt-4 text-sm">
               {auth.error}

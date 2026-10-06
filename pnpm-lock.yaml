@@ -230,6 +230,9 @@ importers:
       '@katha/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@katha/solana':
+        specifier: workspace:*
+        version: link:../../packages/solana
       '@solana/kit':
         specifier: 8.4.0
         version: 8.4.0(typescript@6.0.3)

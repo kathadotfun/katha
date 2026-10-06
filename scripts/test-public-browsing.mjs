@@ -1,4 +1,5 @@
 import { walletSignInMessage } from "../packages/shared/dist/index.js";
+import { renderTransactionReviewPhase } from "../apps/web/tests/fixtures/transaction-review.mjs";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { mkdir } from "node:fs/promises";
@@ -478,6 +479,42 @@ export async function runPublicBrowsingJourneys({
         page.getByText("This photograph is unavailable.").first(),
       ).toBeVisible();
       await audit("failed photography");
+      await page.goto(origin);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      for (const phase of [
+        "review",
+        "signing",
+        "unknown",
+        "expired",
+        "failed",
+        "indexing-delay",
+        "indexed",
+      ]) {
+        await page.getByRole("main").evaluate((main, html) => {
+          let target = main.querySelector("#synthetic-transaction-review");
+          if (!target) {
+            target = globalThis.document.createElement("div");
+            target.id = "synthetic-transaction-review";
+            main.append(target);
+          }
+          target.innerHTML = `<section><h2>Wallet operations</h2>${html}</section>`;
+        }, renderTransactionReviewPhase(phase));
+        const panel = page.locator("#synthetic-transaction-review");
+        await expect(
+          panel.getByRole("heading", { name: "Transaction review" }),
+        ).toBeVisible();
+        const approve = panel.getByRole("button", {
+          name: "Approve in wallet and submit",
+        });
+        await expect(approve).toHaveCount(phase === "review" ? 1 : 0);
+        if (phase === "review") {
+          await approve.focus();
+          await expect(approve).toBeFocused();
+        }
+        await audit(`transaction ${phase}`);
+        if (phase === "review")
+          await panel.screenshot({ path: `${artifacts}/transaction-${width}.png` });
+      }
       await context.close();
     }
     globalThis.console.log(

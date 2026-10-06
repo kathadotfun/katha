@@ -96,7 +96,7 @@ The complete public journey includes 57 full-page accessibility scans.
 
 For manual review, approve a sign-in **message** in your own compatible wallet,
 inspect the displayed session/cluster, switch accounts and sign out. This manual
-extension approval is not claimed by automated tests. Transaction signing and
-submission are implemented in the following step.
+extension approval is not claimed by automated tests. Transaction signing and submission use the separate
+[review-and-approval lifecycle](transaction-lifecycle-web.md).
 
 The integration uses the official [Kit wallet plugin message-signing action](https://github.com/anza-xyz/kit-plugins/tree/main/packages/kit-plugin-wallet).

@@ -1,6 +1,10 @@
-import { walletSessionResponseSchema, type WalletSession } from "@katha/shared";
+import {
+  walletSessionResponseSchema,
+  type WalletSession,
+  type UnsignedOperationResponse,
+} from "@katha/shared";
 import type { WalletConnection } from "./wallet-connection.ts";
-import type { WalletSessionApi } from "./wallet-session-api.ts";
+import { WalletSessionApiError, type WalletSessionApi } from "./wallet-session-api.ts";
 
 export type WalletSessionSnapshot = Readonly<{
   status: "signed-out" | "signing-in" | "signed-in";
@@ -70,6 +74,33 @@ export function createWalletSession(
     }
   });
   return {
+    async reconcile(
+      operation: UnsignedOperationResponse,
+      wire: string,
+      signal: AbortSignal,
+    ) {
+      if (
+        disposed ||
+        !token ||
+        !snapshot.session ||
+        Date.parse(snapshot.session.expiresAt) <= now() ||
+        snapshot.session.walletAddress !== operation.feePayer ||
+        snapshot.session.cluster !== operation.cluster
+      )
+        throw new Error("Sign in with the operation wallet.");
+      const version = generation;
+      let result: Awaited<ReturnType<WalletSessionApi["receipt"]>> | undefined;
+      try {
+        result = await api.receipt(operation, wire, token, signal);
+      } catch (error) {
+        if (error instanceof WalletSessionApiError && error.code === "UNAUTHENTICATED")
+          clear();
+      }
+      if (!result) throw new Error("Receipt reconciliation could not complete.");
+      if (disposed || version !== generation || signal.aborted)
+        throw new Error("Wallet session changed.");
+      return result;
+    },
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) {
       listeners.add(listener);

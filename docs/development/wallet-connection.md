@@ -42,7 +42,7 @@ connection state updates.
 `WalletSession` remains the shared authenticated API session contract. Only its
 cluster type is reused here; a connected address is never fabricated into a session.
 Wallet authentication uses a separate [session controller](wallet-sign-in-web.md).
-Transaction lifecycle controls follow separately.
+Transaction controls use the separate [review lifecycle](transaction-lifecycle-web.md).
 
 ## Configuration and use
 
@@ -83,7 +83,8 @@ The boundary checks version support by set membership (`has(0)` / `has(1)`) rath
 than assuming every wallet supports newer transactions. A legacy/read-only account
 can connect, but the panel states when versioned transaction support is absent.
 Actual transaction version selection, simulation and transaction signatures belong
-to the subsequent transaction step. Explicit sign-in uses only message signing.
+to the separate [transaction lifecycle](transaction-lifecycle-web.md). Explicit sign-in
+uses only message signing.
 
 ## Verification
 

@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import type { UnsignedOperationResponse } from "@katha/shared";
 import { walletSignInMessage, validateWalletSignInChallenge } from "@katha/shared";
 import type {
   WalletConnectionSnapshot,
   WalletConnection,
 } from "../lib/wallet-connection.ts";
 import { createWalletSession } from "../lib/wallet-session.ts";
-import { createWalletSessionApi } from "../lib/wallet-session-api.ts";
+import {
+  createWalletSessionApi,
+  WalletSessionApiError,
+} from "../lib/wallet-session-api.ts";
 
 const origin = "http://localhost:3000";
 const first = "11111111111111111111111111111111";
@@ -49,6 +53,9 @@ function fixture() {
   let signCalls = 0;
   const connection: WalletConnection = {
     cluster: "localnet",
+    signPreparedTransaction: async () => {
+      throw new Error("No transactions in session fixture");
+    },
     getSnapshot: () => state,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -80,6 +87,9 @@ function fixture() {
     },
   });
   const api = {
+    receipt: async () => {
+      throw new Error("No receipts in login fixture");
+    },
     challenge: async () => challenge(),
     verify: async () => response(),
     logout: async (value: string) => {
@@ -238,4 +248,22 @@ test("session HTTP uses bounded, noncached, cookieless posts and validates share
       new AbortController().signal,
     ),
   );
+});
+
+test("a rejected receipt session immediately clears authenticated state", async () => {
+  const f = fixture();
+  f.api.receipt = async () => {
+    throw new WalletSessionApiError("UNAUTHENTICATED");
+  };
+  const auth = createWalletSession(f.connection, f.api, origin);
+  await auth.signIn();
+  await assert.rejects(
+    auth.reconcile(
+      { feePayer: first, cluster: "localnet" } as UnsignedOperationResponse,
+      "synthetic",
+      new AbortController().signal,
+    ),
+  );
+  assert.equal(auth.getSnapshot().session, null);
+  auth.dispose();
 });

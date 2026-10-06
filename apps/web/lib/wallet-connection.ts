@@ -3,6 +3,8 @@ import {
   createClient,
   getAddressEncoder,
   getBase64Decoder,
+  getBase64EncodedWireTransaction,
+  isTransactionModifyingSigner,
 } from "@solana/kit";
 import { walletSigner, type WalletNamespace } from "@solana/kit-plugin-wallet";
 import {
@@ -11,6 +13,12 @@ import {
   type WalletChallengeResponse,
   type WalletSession,
 } from "@katha/shared";
+
+import {
+  inspectPreparedTransaction,
+  validateSignedTransaction,
+} from "./prepared-transaction.ts";
+import type { UnsignedOperationResponse } from "@katha/shared";
 
 type Cluster = WalletSession["cluster"];
 export type WalletConnectionSnapshot = Readonly<{
@@ -121,6 +129,51 @@ export function createWalletBoundary(
   }
   return {
     cluster,
+    async signPreparedTransaction(
+      operation: UnsignedOperationResponse,
+      signal: AbortSignal,
+    ) {
+      available();
+      signal.throwIfAborted();
+      const before = read().connected;
+      const signer = source.getState().connected?.signer;
+      if (
+        !before ||
+        !signer ||
+        !isTransactionModifyingSigner(signer) ||
+        !(operation.transactionVersion === 0 ? before.supportsV0 : before.supportsV1)
+      )
+        throw new Error("Wallet cannot sign this transaction version separately.");
+      const prepared = await inspectPreparedTransaction(operation, {
+        wallet: before.address,
+        cluster,
+        kind: operation.kind,
+        kathaId: operation.kathaId,
+      });
+      signal.throwIfAborted();
+      try {
+        const [signed] = await signer.modifyAndSignTransactions(
+          [prepared.transaction],
+          { abortSignal: signal },
+        );
+        signal.throwIfAborted();
+        const after = read().connected;
+        if (
+          disposed ||
+          after?.walletId !== before.walletId ||
+          after.address !== before.address ||
+          !signed
+        )
+          throw new Error("Wallet changed.");
+        const wire = String(getBase64EncodedWireTransaction(signed));
+        await validateSignedTransaction(wire, operation);
+        return wire;
+      } catch {
+        throw new Error(
+          "Transaction signature was not completed or did not match the preparation.",
+        );
+      }
+    },
     async signLoginChallenge(
       challenge: WalletChallengeResponse,
       origin: string,

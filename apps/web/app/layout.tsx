@@ -1,3 +1,4 @@
+import { publicTransactionRpcUrl } from "../lib/transaction-rpc";
 import { publicApiOrigin } from "../lib/public-api";
 import { WalletProvider } from "../components/wallet-provider";
 import { walletClusterSchema } from "@katha/shared";
@@ -24,6 +25,10 @@ export default function RootLayout({
           Skip to content
         </a>
         <WalletProvider
+          rpcUrl={publicTransactionRpcUrl(
+            walletClusterSchema.parse(process.env.KATHA_CLUSTER ?? "localnet"),
+            process.env.KATHA_PUBLIC_SOLANA_RPC_URL,
+          )}
           apiOrigin={publicApiOrigin(
             process.env.KATHA_PUBLIC_API_ORIGIN ?? "http://localhost:3001",
           )}

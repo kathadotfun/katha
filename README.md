@@ -115,7 +115,10 @@ The header now connects Wallet Standard Solana wallets, displays authorized publ
 accounts and handles account changes and disconnection. Connection does not sign in
 or approve transactions. A separate sign-in signs a validated nonce challenge and
 keeps the API session in memory; sign-out and account changes clear it. The wallet
-panel displays the configured Localnet/Devnet test environment. Remaining API behavior and Marketplace
+panel displays the configured Localnet/Devnet test environment. A shared transaction
+review boundary now validates and simulates prepared Registry messages, requests
+explicit wallet approval, records signed attempts and reconciles finalized outcomes
+with separate indexing feedback; feature-specific admin actions follow next. Remaining API behavior and Marketplace
 business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -171,6 +174,7 @@ outside the current scope.
 - [Public browsing and accessibility checks](docs/development/public-browsing-tests.md)
 - [Wallet Standard connection](docs/development/wallet-connection.md)
 - [Wallet sign-in and session handling](docs/development/wallet-sign-in-web.md)
+- [Wallet transaction lifecycle](docs/development/transaction-lifecycle-web.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)
