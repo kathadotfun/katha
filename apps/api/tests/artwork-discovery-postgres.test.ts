@@ -96,6 +96,21 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     undefined,
     createArtworkDiscovery(store),
     createArtworkDetails(createPublicArtworkDetailStore(database.db, "LOCALNET")),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    createNfcResolution(
+      createNfcResolutionStore(database.db, "LOCALNET"),
+      "https://katha.fun",
+    ),
   );
   const hash = (document: string) =>
     createHash("sha256").update(document).digest("hex");
@@ -973,6 +988,85 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     });
     expect(gapHistory.indexing.status).toBe("GAP_DETECTED");
     expect(gapHistory.items).toHaveLength(7);
+    // Synthetic finalized read-model changes exercise HTTP identity stability,
+    // not a real Core transfer, sale, metadata revision or physical delivery.
+    const taggedWork = await fixture();
+    const stableId = taggedWork.kathaId;
+    const stableUrl = `https://katha.fun/art/${stableId}`;
+    const lifecycleTag = randomUUID();
+    expect((await tags.assign(stableId, lifecycleTag, tagActor.id)).status).toBe(
+      "assigned",
+    );
+    const originalBinding = await tags.get(lifecycleTag);
+    const originalDetail = publicArtworkDetailSchema.parse(
+      await (await app.request(`/artworks/${stableId}`)).json(),
+    );
+    async function redirect(tagId: string) {
+      const response = await app.request(`/nfc/${tagId}`);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe(stableUrl);
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(await response.text()).not.toContain("PRIVATE");
+    }
+    await redirect(lifecycleTag);
+    await database.db
+      .$client`UPDATE artworks SET title='Synthetic revised title', updated_at=now() WHERE id=${taggedWork.id}`;
+    await redirect(lifecycleTag);
+    const renamed = publicArtworkDetailSchema.parse(
+      await (await app.request(`/artworks/${stableId}`)).json(),
+    );
+    expect(renamed.title).toBe("Synthetic revised title");
+    expect(renamed.kathaId).toBe(stableId);
+    for (const [index, collector] of [temporaryWallet(), temporaryWallet()].entries()) {
+      await database.db.$client.begin(async (transactionSql) => {
+        const at = new Date().toISOString();
+        const [event] = await transactionSql`
+          INSERT INTO indexed_events (cluster, program_address, signature, slot,
+            transaction_index, outer_instruction_index, kind, artwork_id,
+            asset_address, payload, chain_recorded_at, indexed_at)
+          VALUES ('LOCALNET', ${wallet.address}, ${"8".repeat(88)}, ${index + 2},
+            0, ${index}, 'OWNERSHIP', ${taggedWork.id},
+            ${originalDetail.chain.coreAssetAddress},
+            ${JSON.stringify({ ownerWallet: collector.address, privateEvidence: "PRIVATE TRANSFER FIXTURE" })}::jsonb,
+            ${at}, ${at}) RETURNING id`;
+        if (!event || typeof event.id !== "string")
+          throw new Error("Missing synthetic owner event");
+        await transactionSql`UPDATE artwork_ownership SET owner_wallet=${collector.address}, source_event_id=${event.id} WHERE artwork_id=${taggedWork.id} AND cluster='LOCALNET'`;
+      });
+      await redirect(lifecycleTag);
+      const changed = publicArtworkDetailSchema.parse(
+        await (await app.request(`/artworks/${stableId}`)).json(),
+      );
+      expect(changed.ownership.ownerWallet).toBe(collector.address);
+      expect(changed.artist).toEqual(originalDetail.artist);
+      expect(changed.creatorWallet).toBe(originalDetail.creatorWallet);
+      expect(changed.custody).toEqual(originalDetail.custody);
+      expect(changed.verification).toEqual(originalDetail.verification);
+      expect(changed.metadata).toEqual(originalDetail.metadata);
+      expect(await tags.get(lifecycleTag)).toEqual(originalBinding);
+    }
+    const retiredBinding = await tags.retire(lifecycleTag, tagActor.id);
+    expect(await tags.retire(lifecycleTag, tagActor.id)).toEqual(retiredBinding);
+    async function retiredResponse() {
+      const response = await app.request(`/nfc/${lifecycleTag}`);
+      expect(response.status).toBe(410);
+      expect(response.headers.get("Location")).toBeNull();
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      const body = await response.text();
+      expect(JSON.parse(body).error.code).toBe("NFC_TAG_RETIRED");
+      expect(body).not.toContain(stableId);
+    }
+    await retiredResponse();
+    expect(await tags.assign(stableId, lifecycleTag, tagActor.id)).toEqual({
+      status: "conflict",
+    });
+    const nextTag = randomUUID();
+    expect((await tags.assign(stableId, nextTag, tagActor.id)).status).toBe("assigned");
+    await redirect(nextTag);
+    await retiredResponse();
+    expect(await tags.get(lifecycleTag)).toEqual(retiredBinding);
+    expect((await app.request(`/artworks/${stableId}`)).status).toBe(200);
+    expect((await app.request(`/nfc/${randomUUID()}`)).status).toBe(404);
     expect(logs.join("")).not.toContain("PRIVATE");
   } finally {
     await rm(storageDirectory, { recursive: true, force: true });

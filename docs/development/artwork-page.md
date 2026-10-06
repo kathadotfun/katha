@@ -56,8 +56,8 @@ tap does not independently prove authenticity, ownership, custody or delivery.
 The page makes no claim that a tag is attached, secure or currently active. Unknown
 or retired resolution is also not a verdict about the artwork's authenticity.
 Manual physical inspection remains necessary. See [NFC resolution](nfc-administration.md)
-for the public resolver's 302/404/410 behavior; physical tag writing is documented
-separately later.
+for the public resolver's 302/404/410 behavior and the
+[tag writing guide](nfc-tag-writing.md) for the manual hardware workflow.
 
 Render tests cover the identity, exact permanent link and existing reference anchors,
 accurate NFC limits, absent dimensions/photos and separation from the digital owner.

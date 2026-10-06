@@ -4,7 +4,8 @@ A tag's public identifier is a canonical lowercase UUID, separate from a physica
 chip's hardware UID. It references one permanent Katha artwork identity. Assignment
 is an administrative record, not an authenticity, ownership or custody claim.
 Basic NFC can be copied; the tag is a discovery bridge. Public tag redirects are
-read-only. Physical tag-writing instructions follow separately.
+read-only. See [tag writing and local/LAN demonstration](nfc-tag-writing.md) for
+the manual hardware workflow and lifecycle acceptance checklist.
 
 ## Administrative routes
 

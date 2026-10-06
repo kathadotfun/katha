@@ -107,7 +107,8 @@ recovery from unavailable data. Authorized NFC administration now assigns unique
 public tag references, preserves their permanent artwork binding and supports
 terminal retirement. Public NFC resolution now redirects active tags to permanent
 artwork pages, hides unpublished bindings and rejects retired tags; physical tag
-writing remains planned. The artwork page now explains physical identity, guides
+writing and local/LAN setup are documented, with tested resolution stability through
+synthetic title and owner changes, retirement and replacement. The artwork page now explains physical identity, guides
 comparison with its documented features and inspections, and states that basic NFC
 can be cloned and does not independently prove authenticity.
 Remaining API behavior and Marketplace
@@ -165,6 +166,7 @@ outside the current scope.
 - [Cultural homepage and featured artworks](docs/development/homepage.md)
 - [Public browsing and accessibility checks](docs/development/public-browsing-tests.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
+- [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)
 - [Canonical artwork page, provenance and metadata integrity](docs/development/artwork-page.md)
 - [Public provenance and condition timelines](docs/development/artwork-provenance-api.md)
