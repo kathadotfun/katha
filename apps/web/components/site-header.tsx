@@ -1,3 +1,4 @@
+import { WalletControl } from "./wallet-control";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -38,6 +39,7 @@ export function SiteHeader() {
             </li>
           </ul>
         </nav>
+        <WalletControl />
       </div>
     </header>
   );

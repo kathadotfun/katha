@@ -1,3 +1,5 @@
+import { WalletProvider } from "../components/wallet-provider";
+import { walletClusterSchema } from "@katha/shared";
 import { SiteHeader } from "../components/site-header";
 import { SiteFooter } from "../components/site-footer";
 import type { Metadata } from "next";
@@ -20,7 +22,11 @@ export default function RootLayout({
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>
-        <SiteHeader />
+        <WalletProvider
+          cluster={walletClusterSchema.parse(process.env.KATHA_CLUSTER ?? "localnet")}
+        >
+          <SiteHeader />
+        </WalletProvider>
         <main id="main-content" tabIndex={-1} className="min-w-0">
           {children}
         </main>

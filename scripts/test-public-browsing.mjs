@@ -65,6 +65,134 @@ export async function runPublicBrowsingJourneys({
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(
         "Real World Assets, rooted in Nepali culture.",
       );
+      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      const walletPanel = page.locator("#wallet-connection-panel");
+      await expect(walletPanel).toContainText("No compatible Solana wallet found");
+      await audit("wallet unavailable");
+      // Register a synthetic Wallet Standard wallet after discovery is running.
+      // No extension, private key, signing or external network is involved.
+      await page.evaluate(() => {
+        const listeners = new Set();
+        const accounts = [
+          {
+            address: "11111111111111111111111111111111",
+            publicKey: new Uint8Array(32),
+            chains: ["solana:localnet"],
+            features: ["solana:signMessage", "solana:signTransaction"],
+          },
+          {
+            address: "11111111111111111111111111111112",
+            publicKey: Uint8Array.from([...new Array(31).fill(0), 1]),
+            chains: ["solana:localnet"],
+            features: ["solana:signMessage", "solana:signTransaction"],
+          },
+        ];
+        let connected = false;
+        let reject = true;
+        let signCalls = 0;
+        let unregister;
+        const wallet = {
+          version: "1.0.0",
+          name: "Synthetic test wallet",
+          icon: "data:image/png;base64,",
+          chains: ["solana:localnet"],
+          get accounts() {
+            return connected ? accounts : [];
+          },
+          features: {
+            "standard:connect": {
+              version: "1.0.0",
+              async connect() {
+                if (reject) {
+                  reject = false;
+                  throw new Error("PRIVATE_WALLET_ERROR");
+                }
+                connected = true;
+                for (const listener of listeners) listener({ accounts });
+                return { accounts };
+              },
+            },
+            "standard:disconnect": {
+              version: "1.0.0",
+              async disconnect() {
+                connected = false;
+                for (const listener of listeners) listener({ accounts: [] });
+              },
+            },
+            "standard:events": {
+              version: "1.0.0",
+              on(event, listener) {
+                if (event === "change") listeners.add(listener);
+                return () => listeners.delete(listener);
+              },
+            },
+            "solana:signMessage": {
+              version: "1.0.0",
+              async signMessage() {
+                signCalls++;
+                throw new Error("No signing in connection tests");
+              },
+            },
+            "solana:signTransaction": {
+              version: "1.0.0",
+              supportedTransactionVersions: [0, 1],
+              async signTransaction() {
+                signCalls++;
+                throw new Error("No signing in connection tests");
+              },
+            },
+          },
+        };
+        globalThis.window.dispatchEvent(
+          new globalThis.CustomEvent("wallet-standard:register-wallet", {
+            detail: (api) => {
+              unregister = api.register(wallet);
+            },
+          }),
+        );
+        globalThis.__kathaWalletTest = {
+          unregister: () => unregister(),
+          signCalls: () => signCalls,
+        };
+      });
+      await walletPanel
+        .getByRole("button", { name: "Connect Synthetic test wallet" })
+        .click();
+      await expect(walletPanel.getByRole("alert")).toContainText(
+        "request was not completed",
+      );
+      await expect(walletPanel).not.toContainText("PRIVATE_WALLET_ERROR");
+      await walletPanel
+        .getByRole("button", { name: "Connect Synthetic test wallet" })
+        .click();
+      await expect(walletPanel).toContainText("11111111111111111111111111111111");
+      await walletPanel
+        .getByLabel("Wallet account")
+        .selectOption("11111111111111111111111111111112");
+      await expect(walletPanel.getByLabel("Wallet account")).toHaveValue(
+        "11111111111111111111111111111112",
+      );
+      await audit("wallet connected");
+      await walletPanel.screenshot({ path: `${artifacts}/wallet-${width}.png` });
+      await walletPanel.getByRole("button", { name: "Disconnect wallet" }).click();
+      await expect(
+        walletPanel.getByRole("button", { name: "Connect Synthetic test wallet" }),
+      ).toBeVisible();
+      await walletPanel
+        .getByRole("button", { name: "Connect Synthetic test wallet" })
+        .click();
+      await page.evaluate(() => globalThis.__kathaWalletTest.unregister());
+      await expect(walletPanel).toContainText("No compatible Solana wallet found");
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.signCalls()),
+        0,
+      );
+      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      // Restart keyboard traversal from a fresh document after wallet controls.
+      await page.reload();
+      await expect(
+        page.getByRole("button", { name: "Connect wallet", exact: true }),
+      ).toBeVisible();
       await audit("home");
       await page.screenshot({ path: `${artifacts}/home-${width}.png`, fullPage: true });
 
@@ -228,7 +356,9 @@ export async function runPublicBrowsingJourneys({
       ]) {
         setHomeMode(mode);
         await page.goto(origin);
-        await expect(page.getByText(message, { exact: false })).toBeVisible();
+        await expect(
+          page.getByRole("main").getByText(message, { exact: false }),
+        ).toBeVisible();
         await audit(`home ${mode}`);
       }
       setHomeMode("READY");
