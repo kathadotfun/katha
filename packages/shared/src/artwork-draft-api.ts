@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { artworkCategorySchema, kathaIdSchema } from "./artwork-identity.js";
+import { paginatedResponseSchema, paginationQuerySchema } from "./http.js";
 import { artistIdParamsSchema } from "./artist-api.js";
 import {
   artworkDimensionsSchema,
@@ -90,3 +91,32 @@ export const artworkDraftUpdateRequestSchema = z
     },
   );
 export type ArtworkDraftUpdateRequest = z.infer<typeof artworkDraftUpdateRequestSchema>;
+
+export const artworkDraftListQuerySchema = paginationQuerySchema;
+export const artworkDraftListItemSchema = z
+  .strictObject({
+    id: z.uuid(),
+    kathaId: kathaIdSchema,
+    category: artworkCategorySchema,
+    title: draftFields.title,
+    creationYear: draftFields.creationYear,
+    artist: z.strictObject({
+      id: artistIdParamsSchema.shape.artistId,
+      displayName: z.string().trim().min(1).max(160),
+      verificationStatus: z.enum(["UNVERIFIED", "VERIFIED"]),
+    }),
+    workflowStatus: z.enum(["DOCUMENTING", "LIFECYCLE_STARTED"]),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+  })
+  .refine((item) => item.kathaId.startsWith(`KATHA-${item.category}-`), {
+    path: ["kathaId"],
+    error: "Category must match permanent ID",
+  });
+export const artworkDraftListResponseSchema = paginatedResponseSchema(
+  artworkDraftListItemSchema,
+).refine(
+  ({ items }) => new Set(items.map((item) => item.kathaId)).size === items.length,
+  { error: "Duplicate artwork identities" },
+);
+export type ArtworkDraftListResponse = z.infer<typeof artworkDraftListResponseSchema>;

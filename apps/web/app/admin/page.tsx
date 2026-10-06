@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { ArtistOnboardingPanel } from "../../components/artist-onboarding";
 export const metadata: Metadata = {
@@ -12,6 +13,9 @@ export default function AdminPage() {
       <p className="mt-5 max-w-reading text-muted">
         Onboard artists and record manual profile verification for Nepal’s cultural art.
       </p>
+      <Link href="/admin/artworks" className="text-link mt-6 inline-block">
+        Artwork drafts
+      </Link>
       <ArtistOnboardingPanel />
     </div>
   );

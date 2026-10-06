@@ -1,6 +1,9 @@
 import { artworkMetadataVersions, blockchainOperations } from "@katha/db";
 import { createArtworkDraftStore } from "@katha/db";
-import { artworkDraftResponseSchema } from "@katha/shared";
+import {
+  artworkDraftListResponseSchema,
+  artworkDraftResponseSchema,
+} from "@katha/shared";
 import { createArtworkDrafts } from "../src/artwork-drafts.js";
 import { artworks } from "@katha/db";
 import { paginatedResponseSchema, publicArtistSummarySchema } from "@katha/shared";
@@ -953,6 +956,95 @@ it("creates and edits private drafts with signed admin authorization, retry roll
         where: (row, { eq }) => eq(row.creationRequestId, exhaustedId),
       }),
     ).toBeUndefined();
+
+    // Equal creation times exercise the UUID tie-breaker without mutating historical identity.
+    const ties = await database.db
+      .insert(artworks)
+      .values([
+        {
+          artistId: artist.id,
+          category: "MANDALA",
+          title: "Synthetic older A",
+          creationYear: 2026,
+          createdAt: new Date("2020-01-01T00:00:00Z"),
+        },
+        {
+          artistId: artist.id,
+          category: "MANDALA",
+          title: "Synthetic older B",
+          creationYear: 2026,
+          createdAt: new Date("2020-01-01T00:00:00Z"),
+        },
+        {
+          artistId: artist.id,
+          category: "MANDALA",
+          title: "Synthetic published excluded",
+          creationYear: 2026,
+          createdAt: new Date("2020-01-01T00:00:00Z"),
+          publishedAt: new Date(),
+        },
+      ])
+      .returning();
+    const list = await app.request("/admin/artworks?limit=100&offset=0", {
+      headers: { Authorization: `Bearer ${session.token}` },
+    });
+    expect(list.status).toBe(200);
+    const overview = artworkDraftListResponseSchema.parse(await list.json());
+    expect(
+      overview.items.some((row) => row.title === "Synthetic published excluded"),
+    ).toBe(false);
+    expect(overview.items.find((row) => row.id === result.id)?.workflowStatus).toBe(
+      "LIFECYCLE_STARTED",
+    );
+    expect(overview.items.find((row) => row.id === winner.id)?.workflowStatus).toBe(
+      "LIFECYCLE_STARTED",
+    );
+    expect(
+      overview.items
+        .filter((row) => ties.slice(0, 2).some((tie) => row.id === tie.id))
+        .map((row) => row.id),
+    ).toEqual(
+      ties
+        .slice(0, 2)
+        .map((tie) => tie.id)
+        .sort()
+        .reverse(),
+    );
+    expect(overview.items.find((row) => row.id === ties[0]!.id)?.workflowStatus).toBe(
+      "DOCUMENTING",
+    );
+    expect(
+      overview.items.every(
+        (row) =>
+          row.artist.verificationStatus === "VERIFIED" ||
+          row.artist.id === walletArtist.id,
+      ),
+    ).toBe(true);
+    const one = artworkDraftListResponseSchema.parse(
+      await (
+        await app.request("/admin/artworks?limit=1", {
+          headers: { Authorization: `Bearer ${session.token}` },
+        })
+      ).json(),
+    );
+    const two = artworkDraftListResponseSchema.parse(
+      await (
+        await app.request("/admin/artworks?limit=1&offset=1", {
+          headers: { Authorization: `Bearer ${session.token}` },
+        })
+      ).json(),
+    );
+    expect(one.pagination.hasMore).toBe(true);
+    expect(two.items[0]?.id).toBe(overview.items[1]?.id);
+    expect(one.items[0]?.id).not.toBe(two.items[0]?.id);
+    expect((await app.request("/admin/artworks")).status).toBe(401);
+    expect(
+      (
+        await app.request("/admin/artworks?offset=100001", {
+          headers: { Authorization: `Bearer ${session.token}` },
+        })
+      ).status,
+    ).toBe(400);
     await sessions.logout(`Bearer ${session.token}`);
     expect(
       (
@@ -961,6 +1053,13 @@ it("creates and edits private drafts with signed admin authorization, retry roll
           { ...draft, creationRequestId: randomUUID() },
           session.token,
         )
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await app.request("/admin/artworks", {
+          headers: { Authorization: `Bearer ${session.token}` },
+        })
       ).status,
     ).toBe(401);
     expect(chainRead).not.toHaveBeenCalled();

@@ -2,6 +2,7 @@ import {
   walletSessionResponseSchema,
   type WalletSession,
   type ArtistCreateRequest,
+  type Pagination,
   type UnsignedOperationResponse,
 } from "@katha/shared";
 import type { WalletConnection } from "./wallet-connection.ts";
@@ -109,6 +110,9 @@ export function createWalletSession(
     return result;
   }
   return {
+    listArtworkDrafts(page: Pagination, signal: AbortSignal) {
+      return authorized((value) => api.listArtworkDrafts(page, value, signal), signal);
+    },
     async permissions(signal: AbortSignal) {
       const result = await authorized(
         (value) => api.permissions(value, signal),

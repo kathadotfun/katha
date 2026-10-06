@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import type { ArtworkDraftStore, ArtworkRecord } from "@katha/db";
-import { artworkDraftResponseSchema, type WalletSession } from "@katha/shared";
+import {
+  artworkDraftListResponseSchema,
+  artworkDraftResponseSchema,
+  type WalletSession,
+} from "@katha/shared";
 import { createApi } from "../src/app.js";
 import { createArtworkDrafts } from "../src/artwork-drafts.js";
 import { createAuthorization } from "../src/authorization.js";
@@ -44,6 +48,21 @@ function fixture() {
     payoutWallet: "PRIVATE-PAYOUT",
   });
   const store: ArtworkDraftStore = {
+    list: vi.fn<ArtworkDraftStore["list"]>(async () => [
+      {
+        id: record.id,
+        kathaId: record.kathaId,
+        category: record.category,
+        title: record.title,
+        creationYear: record.creationYear,
+        artistId: record.artistId,
+        artistName: "Synthetic artist",
+        artistVerificationStatus: "UNVERIFIED",
+        lifecycleStarted: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]),
     update: vi.fn<ArtworkDraftStore["update"]>(async () => ({
       status: "updated",
       record,
@@ -364,4 +383,52 @@ it("redacts edit storage failures", async () => {
   expect(response.status).toBe(500);
   expect(await response.text()).not.toContain("PRIVATE");
   expect(f.logs.join("")).not.toContain("PRIVATE");
+});
+
+it("lists safe draft summaries only after admin authorization with strict pagination", async () => {
+  const f = fixture();
+  for (const [token, status] of [
+    [undefined, 401],
+    ["outsider", 403],
+    ["verifier", 403],
+    ["admin", 200],
+  ] as const) {
+    const result = await f.app.request("/admin/artworks?limit=1&offset=0", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    expect(result.status).toBe(status);
+    expect(result.headers.get("Cache-Control")).toBe("no-store");
+    const body = await result.json();
+    expect(JSON.stringify(body)).not.toContain("PRIVATE");
+    if (status === 200) {
+      const page = artworkDraftListResponseSchema.parse(body);
+      expect(page.items[0]?.workflowStatus).toBe("DOCUMENTING");
+      expect(page.items[0]?.artist.verificationStatus).toBe("UNVERIFIED");
+      expect(page.pagination).toEqual({ limit: 1, offset: 0, hasMore: false });
+    }
+  }
+  expect(f.store.list).toHaveBeenCalledTimes(1);
+  expect(f.store.list).toHaveBeenCalledWith({ limit: 1, offset: 0 });
+  for (const query of [
+    "limit=0",
+    "offset=-1",
+    "limit=101",
+    "offset=100001",
+    "limit=1&limit=2",
+    "wallet=admin",
+  ])
+    expect(
+      (
+        await f.app.request(`/admin/artworks?${query}`, {
+          headers: { Authorization: "Bearer admin" },
+        })
+      ).status,
+    ).toBe(400);
+  vi.mocked(f.store.list).mockRejectedValueOnce(new Error("PRIVATE_DRIVER_SENTINEL"));
+  const failed = await f.app.request("/admin/artworks", {
+    headers: { Authorization: "Bearer admin" },
+  });
+  expect(failed.status).toBe(500);
+  expect(await failed.text()).not.toContain("PRIVATE_DRIVER_SENTINEL");
+  expect(f.chain).not.toHaveBeenCalled();
 });

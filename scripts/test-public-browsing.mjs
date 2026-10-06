@@ -81,6 +81,7 @@ export async function runPublicBrowsingJourneys({
       let createCalls = 0;
       let approvalCalls = 0;
       let savedArtist = null;
+      let draftMode = "READY";
       let rejectCreation = true;
       const adminHeaders = {
         "Access-Control-Allow-Origin": origin,
@@ -93,6 +94,54 @@ export async function runPublicBrowsingJourneys({
         walletAddress: "11111111111111111111111111111112",
         cluster: "localnet",
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      });
+      await context.route(`${apiOrigin}/admin/artworks?**`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        if (draftMode === "UNAVAILABLE" || draftMode === "DENIED")
+          return route.fulfill({
+            status: draftMode === "DENIED" ? 403 : 503,
+            headers: adminHeaders,
+            json: { error: "PRIVATE_DRAFT_SENTINEL" },
+          });
+        const query = new URL(route.request().url()).searchParams;
+        const offset = Number(query.get("offset"));
+        assert.equal(query.get("limit"), "20");
+        const items = Array.from(
+          { length: draftMode === "EMPTY" ? 0 : offset ? 1 : 20 },
+          (_, i) => ({
+            id: `dddddddd-1111-4111-8111-${String(offset + i + 1).padStart(12, "0")}`,
+            kathaId: `KATHA-PAUBHA-${String(offset + i + 1).padStart(6, "0")}`,
+            category: "PAUBHA",
+            title: offset
+              ? "Synthetic second-page draft"
+              : `Synthetic unpublished work ${i + 1}`,
+            creationYear: 2026,
+            artist: {
+              id: "cccccccc-1111-4111-8111-111111111111",
+              displayName: "Synthetic Nepali artist",
+              verificationStatus: i % 2 ? "VERIFIED" : "UNVERIFIED",
+            },
+            workflowStatus: i % 2 ? "LIFECYCLE_STARTED" : "DOCUMENTING",
+            createdAt: "2026-10-06T00:00:00Z",
+            updatedAt: "2026-10-06T00:00:00Z",
+          }),
+        );
+        return route.fulfill({
+          headers: adminHeaders,
+          json: {
+            items,
+            pagination: {
+              limit: 20,
+              offset,
+              hasMore: draftMode === "READY" && offset === 0,
+            },
+          },
+        });
       });
       await context.route(`${apiOrigin}/admin/artists`, async (route) => {
         if (route.request().method() === "OPTIONS")
@@ -408,6 +457,50 @@ export async function runPublicBrowsingJourneys({
         fullPage: true,
       });
 
+      await adminMain
+        .getByRole("link", { name: "Artwork drafts", exact: true })
+        .click();
+      await expect(adminMain).toContainText("Showing 1–20 unpublished artworks");
+      await expect(adminMain).toContainText("Artist verification pending");
+      await expect(adminMain).toContainText("Lifecycle started");
+      await expect(
+        adminMain.getByRole("button", { name: "Previous draft page" }),
+      ).toBeDisabled();
+      await audit("draft list ready");
+      await adminMain.getByRole("button", { name: "Next draft page" }).click();
+      await expect(adminMain).toContainText("Showing 21–21 unpublished artworks");
+      await expect(adminMain).toContainText("Synthetic second-page draft");
+      await expect(
+        adminMain.getByRole("button", { name: "Next draft page" }),
+      ).toBeDisabled();
+      await audit("draft list next page");
+      await page.evaluate(() => globalThis.scrollTo(0, 0));
+      await page.screenshot({
+        path: `${artifacts}/draft-list-${width}.png`,
+        fullPage: true,
+      });
+      await adminMain.getByRole("button", { name: "Previous draft page" }).click();
+      await expect(adminMain).toContainText("Showing 1–20 unpublished artworks");
+      draftMode = "UNAVAILABLE";
+      await adminMain.getByRole("button", { name: "Refresh drafts" }).click();
+      await expect(adminMain.getByRole("alert")).toContainText("could not be loaded");
+      await expect(adminMain).not.toContainText("Synthetic unpublished work");
+      await expect(adminMain).not.toContainText("PRIVATE_DRAFT_SENTINEL");
+      await audit("draft list unavailable");
+      draftMode = "EMPTY";
+      await adminMain.getByRole("button", { name: "Try loading drafts again" }).click();
+      await expect(adminMain).toContainText("No unpublished artworks on this page");
+      await audit("draft list empty");
+      draftMode = "DENIED";
+      await adminMain.getByRole("button", { name: "Refresh drafts" }).click();
+      await expect(adminMain.getByRole("alert")).toContainText(
+        "Access is no longer available",
+      );
+      await audit("draft list permission revoked");
+      await adminMain
+        .getByRole("link", { name: "Artist administration", exact: true })
+        .click();
+      await expect(adminMain).toContainText("Create an artist profile");
       await walletPanel.getByRole("button", { name: "Sign out", exact: true }).click();
       await expect(walletPanel.getByRole("status")).toHaveText("Not signed in");
       await expect.poll(() => logoutCalls).toBe(1);

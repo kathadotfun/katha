@@ -5,6 +5,9 @@ wallet session and the configured admin role. Artist profiles may still be
 unverified, and creator and payout wallets may be absent during documentation.
 Creation does not authenticate, register, mint, publish or offer the artwork for sale.
 
+Authorized administrators can also [browse unpublished artwork summaries](artwork-draft-list-web.md)
+through `GET /admin/artworks`.
+
 ## Request
 
 Send `Content-Type: application/json` and `Authorization: Bearer <session-token>`.

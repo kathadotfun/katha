@@ -1,6 +1,8 @@
 import { artworkDraftUpdateRequestSchema } from "../src/artwork-draft-api.js";
 import { expect, it } from "vitest";
 import {
+  artworkDraftListResponseSchema,
+  artworkDraftListQuerySchema,
   artworkDraftCreateRequestSchema,
   artworkDraftResponseSchema,
 } from "../src/artwork-draft-api.js";
@@ -88,4 +90,40 @@ it.each([
   { expectedUpdatedAt: "2026-10-05T00:00:00.123Z", creationYear: 2025 },
 ])("rejects empty, unversioned or identity-changing edits %j", (body) => {
   expect(artworkDraftUpdateRequestSchema.safeParse(body).success).toBe(false);
+});
+
+it("bounds draft-list pagination and rejects privileged fields, duplicated or mismatched identities", () => {
+  expect(artworkDraftListQuerySchema.parse({})).toEqual({ limit: 20, offset: 0 });
+  for (const query of [
+    { limit: "101" },
+    { offset: "100001" },
+    { artistId: input.artistId },
+  ])
+    expect(artworkDraftListQuerySchema.safeParse(query).success).toBe(false);
+  const item = {
+    id: response.id,
+    kathaId: response.kathaId,
+    category: input.category,
+    title: input.title,
+    creationYear: input.creationYear,
+    artist: {
+      id: input.artistId,
+      displayName: "Synthetic artist",
+      verificationStatus: "UNVERIFIED",
+    },
+    workflowStatus: "DOCUMENTING",
+    createdAt: response.createdAt,
+    updatedAt: response.updatedAt,
+  };
+  const page = { items: [item], pagination: { limit: 20, offset: 0, hasMore: false } };
+  expect(artworkDraftListResponseSchema.safeParse(page).success).toBe(true);
+  for (const items of [
+    [item, item],
+    [{ ...item, category: "THANGKA" }],
+    [{ ...item, privateEvidence: "private" }],
+    [{ ...item, workflowStatus: "MINTED" }],
+  ])
+    expect(artworkDraftListResponseSchema.safeParse({ ...page, items }).success).toBe(
+      false,
+    );
 });

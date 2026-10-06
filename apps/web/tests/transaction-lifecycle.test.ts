@@ -124,6 +124,9 @@ async function fixture(version: 0 | 1 = 0) {
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    listArtworkDrafts: async () => {
+      throw new Error("Unused fixture method");
+    },
     permissions: async () => {
       throw new Error("Unused fixture method");
     },

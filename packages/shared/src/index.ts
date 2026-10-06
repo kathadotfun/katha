@@ -183,3 +183,10 @@ export * from "./artwork-provenance-api.js";
 export * from "./nfc-api.js";
 
 export { walletPermissionsSchema, type WalletPermissions } from "./wallet-session.js";
+
+export {
+  artworkDraftListQuerySchema,
+  artworkDraftListItemSchema,
+  artworkDraftListResponseSchema,
+  type ArtworkDraftListResponse,
+} from "./artwork-draft-api.js";

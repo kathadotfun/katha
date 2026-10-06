@@ -67,7 +67,7 @@ restricted CORS, request-size limits, pagination validation, and signed wallet
 challenges with replay-protected bearer sessions, server-configured admin/verifier
 guards, finalized Registry authority checks, and authorized artist creation and
 manual profile verification, public verified-artist queries with safe field projections,
-and admin artwork draft creation and editing with retry-safe permanent IDs,
+and admin artwork draft creation, editing and protected paginated listing with retry-safe permanent IDs,
 protected attribution, optimistic concurrency checks, and public artwork discovery
 with category filtering and a publication gate, plus public artwork details with
 finalized attestation summaries and explicit indexed ownership/freshness. A local
@@ -176,6 +176,7 @@ outside the current scope.
 - [Wallet sign-in and session handling](docs/development/wallet-sign-in-web.md)
 - [Wallet transaction lifecycle](docs/development/transaction-lifecycle-web.md)
 - [Artist onboarding administration](docs/development/artist-onboarding-web.md)
+- [Artwork draft administration](docs/development/artwork-draft-list-web.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)

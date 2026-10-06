@@ -6,7 +6,7 @@ import {
 import { custodyEvents } from "./schema/custody-fulfillment.js";
 import { blockchainOperations } from "./schema/blockchain-operations.js";
 import { artworkOwnership, indexedEvents } from "./schema/blockchain-read-models.js";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, desc, isNull } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { artists } from "./schema/artists.js";
 import {
@@ -56,9 +56,44 @@ type EditableDraft = Pick<
 type DraftChanges = { [K in keyof EditableDraft]?: EditableDraft[K] | undefined };
 type UpdateResult =
   { status: "updated"; record: ArtworkRecord } | { status: "not_found" | "conflict" };
+// The draft list and editor use the same conservative workflow boundary. Even
+// a prepared/failed operation freezes basic edits; this is not chain success.
+function lifecycleStarted(artworkId: string | typeof artworks.id) {
+  return sql<boolean>`
+    EXISTS (SELECT 1 FROM ${artworkMetadataVersions} WHERE ${artworkMetadataVersions.artworkId} = ${artworkId}) OR
+    EXISTS (SELECT 1 FROM ${verifications} WHERE ${verifications.artworkId} = ${artworkId}) OR
+    EXISTS (SELECT 1 FROM ${conditionReports} WHERE ${conditionReports.artworkId} = ${artworkId}) OR
+    EXISTS (SELECT 1 FROM ${custodyEvents} WHERE ${custodyEvents.artworkId} = ${artworkId}) OR
+    EXISTS (SELECT 1 FROM ${blockchainOperations} WHERE ${blockchainOperations.artworkId} = ${artworkId}) OR
+    EXISTS (SELECT 1 FROM ${artworkOwnership} WHERE ${artworkOwnership.artworkId} = ${artworkId}) OR
+    EXISTS (SELECT 1 FROM ${indexedEvents} WHERE ${indexedEvents.artworkId} = ${artworkId})
+  `;
+}
 class DuplicateDraft extends Error {}
 export function createArtworkDraftStore(db: Database) {
   return {
+    async list(page: { limit: number; offset: number }) {
+      return db
+        .select({
+          id: artworks.id,
+          kathaId: artworks.kathaId,
+          title: artworks.title,
+          category: artworks.category,
+          creationYear: artworks.creationYear,
+          artistId: artists.id,
+          artistName: artists.displayName,
+          artistVerificationStatus: artists.verificationStatus,
+          lifecycleStarted: lifecycleStarted(artworks.id),
+          createdAt: artworks.createdAt,
+          updatedAt: artworks.updatedAt,
+        })
+        .from(artworks)
+        .innerJoin(artists, eq(artists.id, artworks.artistId))
+        .where(isNull(artworks.publishedAt))
+        .orderBy(desc(artworks.createdAt), desc(artworks.id))
+        .limit(page.limit + 1)
+        .offset(page.offset);
+    },
     async update(
       kathaId: string,
       expectedUpdatedAt: string,
@@ -82,15 +117,7 @@ export function createArtworkDraftStore(db: Database) {
           return { status: "conflict" };
         const [state] = await tx
           .select({
-            frozen: sql<boolean>`
-          EXISTS (SELECT 1 FROM ${artworkMetadataVersions} WHERE ${artworkMetadataVersions.artworkId} = ${record.id}) OR
-          EXISTS (SELECT 1 FROM ${verifications} WHERE ${verifications.artworkId} = ${record.id}) OR
-          EXISTS (SELECT 1 FROM ${conditionReports} WHERE ${conditionReports.artworkId} = ${record.id}) OR
-          EXISTS (SELECT 1 FROM ${custodyEvents} WHERE ${custodyEvents.artworkId} = ${record.id}) OR
-          EXISTS (SELECT 1 FROM ${blockchainOperations} WHERE ${blockchainOperations.artworkId} = ${record.id}) OR
-          EXISTS (SELECT 1 FROM ${artworkOwnership} WHERE ${artworkOwnership.artworkId} = ${record.id}) OR
-          EXISTS (SELECT 1 FROM ${indexedEvents} WHERE ${indexedEvents.artworkId} = ${record.id})
-        `,
+            frozen: lifecycleStarted(record.id),
           })
           .from(artworks)
           .where(eq(artworks.id, record.id));

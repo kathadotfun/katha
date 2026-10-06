@@ -1,4 +1,7 @@
 import {
+  artworkDraftListQuerySchema,
+  artworkDraftListResponseSchema,
+  type Pagination,
   walletPermissionsSchema,
   artistCreateRequestSchema,
   artistIdParamsSchema,
@@ -87,6 +90,27 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async listArtworkDrafts(page: Pagination, token: string, signal: AbortSignal) {
+      const checked = artworkDraftListQuerySchema.parse({
+        limit: String(page.limit),
+        offset: String(page.offset),
+      });
+      const result = artworkDraftListResponseSchema.parse(
+        await request(
+          `/admin/artworks?${new URLSearchParams({ limit: String(checked.limit), offset: String(checked.offset) })}`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (
+        result.pagination.limit !== checked.limit ||
+        result.pagination.offset !== checked.offset
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async permissions(token: string, signal: AbortSignal) {
       return walletPermissionsSchema.parse(
         await request("/auth/permissions", undefined, token, signal, "GET"),

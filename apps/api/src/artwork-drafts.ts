@@ -1,5 +1,7 @@
 import type { ArtworkRecord, ArtworkDraftStore } from "@katha/db";
 import {
+  artworkDraftListResponseSchema,
+  type Pagination,
   artworkDraftCreateRequestSchema,
   artworkDraftResponseSchema,
   artworkDraftParamsSchema,
@@ -42,6 +44,27 @@ function response(record: ArtworkRecord) {
 
 export function createArtworkDrafts(store: ArtworkDraftStore) {
   return {
+    async list(page: Pagination) {
+      const rows = await store.list(page);
+      return artworkDraftListResponseSchema.parse({
+        items: rows.slice(0, page.limit).map((row) => ({
+          id: row.id,
+          kathaId: row.kathaId,
+          category: row.category,
+          title: row.title,
+          creationYear: row.creationYear,
+          artist: {
+            id: row.artistId,
+            displayName: row.artistName,
+            verificationStatus: row.artistVerificationStatus,
+          },
+          workflowStatus: row.lifecycleStarted ? "LIFECYCLE_STARTED" : "DOCUMENTING",
+          createdAt: row.createdAt.toISOString(),
+          updatedAt: row.updatedAt.toISOString(),
+        })),
+        pagination: { ...page, hasMore: rows.length > page.limit },
+      });
+    },
     async update(kathaId: string, input: unknown) {
       const path = artworkDraftParamsSchema.safeParse({ kathaId });
       const parsed = artworkDraftUpdateRequestSchema.safeParse(input);

@@ -46,6 +46,7 @@ import type { ArtworkDiscoveryBoundary } from "./artwork-discovery.js";
 import { artworkDiscoveryQuerySchema } from "@katha/shared";
 import type { ArtworkDraftsBoundary } from "./artwork-drafts.js";
 import {
+  artworkDraftListQuerySchema,
   artworkDraftCreateRequestSchema,
   artworkDraftParamsSchema,
   artworkDraftUpdateRequestSchema,
@@ -234,6 +235,9 @@ export function createApi(
     );
   }
   if (artworkDrafts) {
+    app.get("/admin/artworks", async (c) =>
+      c.json(await artworkDrafts.list(parseQuery(c, artworkDraftListQuerySchema))),
+    );
     app.patch("/admin/artworks/:kathaId", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       return c.json(
