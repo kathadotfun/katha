@@ -34,8 +34,7 @@ fixed 403. Protected responses use `Cache-Control: no-store`. Missing authorizat
 wiring also denies access. Health and wallet sign-in remain available without roles.
 
 Both namespaces are reserved by middleware before future write handlers. The [artist management API](artist-management-api.md) now uses these guards for
-creation and manual approval. Artwork write endpoints, role-management endpoints
-and frontend administration remain planned. Future handlers must stay behind these guards and use
+creation and manual approval. Role-management endpoints and further artwork administration remain planned. The [artist onboarding page](artist-onboarding-web.md) uses the current session permissions and protected artist routes. Future handlers must stay behind these guards and use
 strict request schemas rather than accepting role or actor claims.
 
 ## Registry authority checks
@@ -79,8 +78,7 @@ override or request-supplied endpoint is accepted.
 
 Role lists and RPC settings stay outside the three-field public configuration
 allowlist. `NEXT_PUBLIC_` aliases containing ADMIN, VERIFIER or RPC are rejected,
-along with existing secret-marker aliases. There is no permission discovery or
-public authority-list endpoint in this step.
+along with existing secret-marker aliases. `GET /auth/permissions` now reports only the authenticated wallet’s current admin/verifier booleans and public session, with no-store caching. It exposes no authority list and grants no permission. See [artist onboarding](artist-onboarding-web.md).
 
 ## Verification
 

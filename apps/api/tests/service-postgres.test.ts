@@ -357,6 +357,28 @@ it("creates and manually verifies artists through real signed sessions with race
     expect(created.creatorWallet).toBeNull();
     expect(created.payoutWallet).toBeNull();
     expect(created.verificationStatus).toBe("UNVERIFIED");
+    const review = await app.request(`/verifier/artists/${created.id}`, {
+      headers: { Authorization: `Bearer ${verifierTokenA}` },
+    });
+    expect(review.status).toBe(200);
+    expect(artistResponseSchema.parse(await review.json())).toEqual(created);
+    expect(
+      (
+        await app.request(`/verifier/artists/${created.id}`, {
+          headers: { Authorization: `Bearer ${outsiderToken}` },
+        })
+      ).status,
+    ).toBe(403);
+    const permission = await app.request("/auth/permissions", {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    });
+    expect(permission.status).toBe(200);
+    expect(await permission.json()).toMatchObject({
+      admin: true,
+      verifier: false,
+      session: { walletAddress: admin.address },
+    });
+
     const path = `/verifier/artists/${created.id}/verification`;
     for (const token of [adminToken, outsiderToken])
       expect((await post(path, { confirmed: true }, token)).status).toBe(403);

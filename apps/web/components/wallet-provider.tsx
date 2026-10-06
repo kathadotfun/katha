@@ -1,27 +1,50 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { WalletSession } from "@katha/shared";
 import {
   createBrowserWalletConnection,
   type WalletConnection,
 } from "../lib/wallet-connection";
-
 import {
   createWalletSession,
   type WalletSessionController,
 } from "../lib/wallet-session";
 import { createWalletSessionApi } from "../lib/wallet-session-api";
-
 import {
   createTransactionLifecycle,
   type TransactionLifecycle,
 } from "../lib/transaction-lifecycle";
 import { createTransactionRpc } from "../lib/transaction-rpc";
 import { createPublicApi } from "../lib/public-api";
-const TransactionContext = createContext<TransactionLifecycle | null>(null);
-const SessionContext = createContext<WalletSessionController | null>(null);
-const WalletContext = createContext<WalletConnection | null>(null);
+
+type Runtime = Readonly<{
+  connection: WalletConnection | null;
+  session: WalletSessionController | null;
+  transactions: TransactionLifecycle | null;
+}>;
+const emptyRuntime: Runtime = { connection: null, session: null, transactions: null };
+let runtime = emptyRuntime;
+const listeners = new Set<() => void>();
+function publish(value: Runtime) {
+  runtime = value;
+  for (const listener of listeners) listener();
+}
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+const getSnapshot = () => runtime;
+const getServerSnapshot = () => emptyRuntime;
+function useRuntime() {
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
+// The persistent header owns one browser runtime. Sibling admin views subscribe
+// without putting streamed server pages inside a rerendering client provider.
+// Server renders always see the empty snapshot; no bearer token is exposed here.
 export function WalletProvider({
   children,
   cluster,
@@ -35,9 +58,6 @@ export function WalletProvider({
   appOrigin: string;
   rpcUrl: string;
 }) {
-  const [connection, setConnection] = useState<WalletConnection | null>(null);
-  const [session, setSession] = useState<WalletSessionController | null>(null);
-  const [transactions, setTransactions] = useState<TransactionLifecycle | null>(null);
   useEffect(() => {
     const current = createBrowserWalletConnection(cluster);
     const auth = createWalletSession(
@@ -52,31 +72,22 @@ export function WalletProvider({
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
     );
-    setTransactions(flow);
-    setConnection(current.boundary);
-    setSession(auth);
+    publish({ connection: current.boundary, session: auth, transactions: flow });
     return () => {
+      if (runtime.connection === current.boundary) publish(emptyRuntime);
       flow.dispose();
       auth.dispose();
       current.dispose();
     };
   }, [cluster, apiOrigin, appOrigin, rpcUrl]);
-  return (
-    <WalletContext value={connection}>
-      <SessionContext value={session}>
-        <TransactionContext value={transactions}>{children}</TransactionContext>
-      </SessionContext>
-    </WalletContext>
-  );
+  return <>{children}</>;
 }
 export function useWalletConnection() {
-  return useContext(WalletContext);
+  return useRuntime().connection;
 }
-
 export function useWalletSession() {
-  return useContext(SessionContext);
+  return useRuntime().session;
 }
-
 export function useTransactionLifecycle() {
-  return useContext(TransactionContext);
+  return useRuntime().transactions;
 }

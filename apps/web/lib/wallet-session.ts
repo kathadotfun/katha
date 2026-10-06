@@ -1,6 +1,7 @@
 import {
   walletSessionResponseSchema,
   type WalletSession,
+  type ArtistCreateRequest,
   type UnsignedOperationResponse,
 } from "@katha/shared";
 import type { WalletConnection } from "./wallet-connection.ts";
@@ -73,7 +74,74 @@ export function createWalletSession(
       clear();
     }
   });
+  async function authorized<T>(
+    request: (value: string) => Promise<T>,
+    signal: AbortSignal,
+  ): Promise<T> {
+    if (
+      disposed ||
+      !token ||
+      !snapshot.session ||
+      Date.parse(snapshot.session.expiresAt) <= now() ||
+      signal.aborted
+    )
+      throw new WalletSessionApiError("UNAUTHENTICATED");
+    const version = generation;
+    let result: T | undefined;
+    let failure: WalletSessionApiError["code"] = "UNAVAILABLE";
+    try {
+      result = await request(token);
+    } catch (error) {
+      if (error instanceof WalletSessionApiError) {
+        failure = error.code;
+        if (error.code === "UNAUTHENTICATED" && version === generation) clear();
+      }
+    }
+    if (
+      disposed ||
+      version !== generation ||
+      signal.aborted ||
+      !snapshot.session ||
+      Date.parse(snapshot.session.expiresAt) <= now()
+    )
+      throw new WalletSessionApiError("UNAUTHENTICATED");
+    if (result === undefined) throw new WalletSessionApiError(failure);
+    return result;
+  }
   return {
+    async permissions(signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.permissions(value, signal),
+        signal,
+      );
+      if (
+        result.session.walletAddress !== snapshot.session?.walletAddress ||
+        result.session.walletId !== snapshot.session?.walletId ||
+        result.session.cluster !== snapshot.session?.cluster ||
+        Date.parse(result.session.expiresAt) <= now()
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    createArtist(input: ArtistCreateRequest, signal: AbortSignal) {
+      return authorized((value) => api.createArtist(input, value, signal), signal);
+    },
+    readArtist(artistId: string, signal: AbortSignal) {
+      return authorized((value) => api.readArtist(artistId, value, signal), signal);
+    },
+    async verifyArtist(
+      artistId: string,
+      input: { confirmed: true },
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.verifyArtist(artistId, input, value, signal),
+        signal,
+      );
+      if (result.verifiedByWallet !== snapshot.session?.walletAddress)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async reconcile(
       operation: UnsignedOperationResponse,
       wire: string,

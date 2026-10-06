@@ -22,6 +22,10 @@ type ArtistVerificationResult =
 
 export function createArtistStore(db: Database) {
   return {
+    async read(id: string) {
+      const [record] = await db.select().from(artists).where(eq(artists.id, id));
+      return record;
+    },
     async create(input: ArtistCreation) {
       // Explicit columns prevent callers from assigning identity or verification fields.
       const [record] = await db

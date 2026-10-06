@@ -37,7 +37,9 @@ presented as connected. Account changes, disconnection and wallet unregistration
 update the snapshot. Registry listeners are removed and the Kit client disposed
 when the provider unmounts or its configured cluster changes. The provider wraps
 only the persistent header; server-rendered page streams remain outside its
-connection state updates.
+connection state updates. One browser runtime store lets the sibling admin screen
+subscribe to the same connection/session. Server snapshots stay empty and teardown
+clears the runtime; no token is exposed to subscribers.
 
 `WalletSession` remains the shared authenticated API session contract. Only its
 cluster type is reused here; a connected address is never fabricated into a session.

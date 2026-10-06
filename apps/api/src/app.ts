@@ -59,7 +59,11 @@ import {
   artistVerificationRequestSchema,
 } from "@katha/shared";
 import type { WalletSession } from "@katha/shared";
-import { walletChallengeRequestSchema, walletVerifyRequestSchema } from "@katha/shared";
+import {
+  walletPermissionsSchema,
+  walletChallengeRequestSchema,
+  walletVerifyRequestSchema,
+} from "@katha/shared";
 import type { PublicArtistsBoundary } from "./public-artists.js";
 import { paginationQuerySchema, artistSlugParamsSchema } from "@katha/shared";
 import { parseJson, parseQuery, parseParams } from "./http.js";
@@ -192,7 +196,20 @@ export function createApi(
       return c.body(null, 204);
     });
   }
+  app.get("/auth/permissions", async (c) => {
+    c.header("Cache-Control", "no-store");
+    if (!authorization) throw new DomainError("UNAUTHENTICATED");
+    return c.json(
+      walletPermissionsSchema.parse(
+        await authorization.permissions(c.req.header("Authorization")),
+      ),
+    );
+  });
   if (artists) {
+    app.get("/verifier/artists/:artistId", async (c) => {
+      const params = parseParams(c, artistIdParamsSchema);
+      return c.json(await artists.read(params.artistId));
+    });
     app.post("/admin/artists", async (c) =>
       c.json(await artists.create(await parseJson(c, artistCreateRequestSchema)), 201),
     );

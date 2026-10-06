@@ -85,3 +85,11 @@ export function validateWalletSignInChallenge(
     throw new Error("Invalid wallet sign-in challenge.");
   return challenge;
 }
+
+// Only the authenticated wallet's current application permissions are exposed.
+export const walletPermissionsSchema = z.strictObject({
+  session: walletSessionSchema,
+  admin: z.boolean(),
+  verifier: z.boolean(),
+});
+export type WalletPermissions = z.infer<typeof walletPermissionsSchema>;

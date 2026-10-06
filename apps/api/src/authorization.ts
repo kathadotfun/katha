@@ -29,6 +29,15 @@ export function createAuthorization(
   }
   return {
     requireRole,
+    async permissions(authorization: string | undefined) {
+      const session = await sessions.authenticate(authorization);
+      if (session.cluster !== config.cluster) throw new DomainError("FORBIDDEN");
+      return {
+        session,
+        admin: wallets.admin.has(session.walletAddress),
+        verifier: wallets.verifier.has(session.walletAddress),
+      };
+    },
     async requireRegistryAuthority(
       authorization: string | undefined,
       role: RegistryAuthorityRole,

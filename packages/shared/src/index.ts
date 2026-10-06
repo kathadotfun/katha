@@ -181,3 +181,5 @@ export * from "./operation-receipt-api.js";
 export * from "./artwork-provenance-api.js";
 
 export * from "./nfc-api.js";
+
+export { walletPermissionsSchema, type WalletPermissions } from "./wallet-session.js";

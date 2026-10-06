@@ -35,6 +35,7 @@ function fixture() {
   };
   Object.assign(record, { privateEvidence: "SYNTHETIC_PRIVATE_EVIDENCE" });
   const store: ArtistStore = {
+    read: vi.fn<ArtistStore["read"]>(async () => record),
     create: vi.fn<ArtistStore["create"]>(async () => record),
     verify: vi.fn<ArtistStore["verify"]>(async (_id, wallet) => ({
       status: "verified",
@@ -222,4 +223,37 @@ it("redacts unexpected database errors and guards real endpoints when wiring is 
       })
     ).status,
   ).toBe(401);
+});
+
+it("protects unverified profile review and omits private fields", async () => {
+  const f = fixture();
+  for (const [token, status] of [
+    [undefined, 401],
+    ["admin", 403],
+    ["stranger", 403],
+    ["verifier", 200],
+  ] as const) {
+    const res = await f.app.request(`/verifier/artists/${f.record.id}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    expect(res.status).toBe(status);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.text()).not.toContain("SYNTHETIC_PRIVATE_EVIDENCE");
+  }
+  expect(f.store.read).toHaveBeenCalledTimes(1);
+  vi.mocked(f.store.read).mockResolvedValueOnce(undefined);
+  expect(
+    (
+      await f.app.request(`/verifier/artists/${f.record.id}`, {
+        headers: { Authorization: "Bearer verifier" },
+      })
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await f.app.request("/verifier/artists/wrong", {
+        headers: { Authorization: "Bearer verifier" },
+      })
+    ).status,
+  ).toBe(400);
 });

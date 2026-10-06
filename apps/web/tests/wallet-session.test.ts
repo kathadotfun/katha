@@ -10,6 +10,7 @@ import { createWalletSession } from "../lib/wallet-session.ts";
 import {
   createWalletSessionApi,
   WalletSessionApiError,
+  type WalletSessionApi,
 } from "../lib/wallet-session-api.ts";
 
 const origin = "http://localhost:3000";
@@ -86,7 +87,19 @@ function fixture() {
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     },
   });
-  const api = {
+  const api: WalletSessionApi = {
+    permissions: async () => {
+      throw new Error("Unused fixture method");
+    },
+    createArtist: async () => {
+      throw new Error("Unused fixture method");
+    },
+    readArtist: async () => {
+      throw new Error("Unused fixture method");
+    },
+    verifyArtist: async () => {
+      throw new Error("Unused fixture method");
+    },
     receipt: async () => {
       throw new Error("No receipts in login fixture");
     },
@@ -265,5 +278,37 @@ test("a rejected receipt session immediately clears authenticated state", async 
     ),
   );
   assert.equal(auth.getSnapshot().session, null);
+  auth.dispose();
+});
+
+test("admin requests keep bearer private, reject stale responses and clear revoked sessions", async () => {
+  const f = fixture();
+  f.api.permissions = async (value) => {
+    assert.equal(value, token);
+    return { session: f.response().session, admin: true, verifier: false };
+  };
+  const auth = createWalletSession(f.connection, f.api, origin);
+  await auth.signIn();
+  const signal = new AbortController().signal;
+  assert.equal((await auth.permissions(signal)).admin, true);
+  let resolve!: (value: Awaited<ReturnType<WalletSessionApi["permissions"]>>) => void;
+  f.api.permissions = () =>
+    new Promise((done) => {
+      resolve = done;
+    });
+  const pending = auth.permissions(signal);
+  const rejection = assert.rejects(pending);
+  f.emit({ connected: { ...f.connection.getSnapshot().connected!, address: second } });
+  resolve({ session: f.response().session, admin: true, verifier: true });
+  await rejection;
+  assert.equal(auth.getSnapshot().session, null);
+  f.emit({ connected: { ...f.connection.getSnapshot().connected!, address: first } });
+  await auth.signIn();
+  f.api.permissions = async () => {
+    throw new WalletSessionApiError("UNAUTHENTICATED");
+  };
+  await assert.rejects(auth.permissions(signal));
+  assert.equal(auth.getSnapshot().session, null);
+  assert.ok(!JSON.stringify(auth.getSnapshot()).includes(token));
   auth.dispose();
 });

@@ -8,6 +8,7 @@ verification separately. Profiles do not require a creator or payout wallet.
 
 | Endpoint                                        | Required role       | Success                      |
 | ----------------------------------------------- | ------------------- | ---------------------------- |
+| `GET /verifier/artists/:artistId`               | configured verifier | 200 saved artist response    |
 | `POST /admin/artists`                           | configured admin    | 201 artist response          |
 | `POST /verifier/artists/:artistId/verification` | configured verifier | 200 verified artist response |
 
@@ -63,6 +64,15 @@ and database creation/update times, and returns the saved record through an expl
 response projection. Request-supplied UUID, verification state, verifier, timestamps,
 roles or extra fields are rejected. Duplicate slug creation returns 409, including
 concurrent attempts; an existing profile is never updated by a duplicate request.
+
+## Saved-profile review
+
+`GET /verifier/artists/:artistId` returns the same explicit artist projection for
+an authorized verifier, including unverified profiles. UUID validation and 400/404
+errors match manual approval. It cannot bypass the public verified-profile gate;
+missing/expired sessions receive 401 and other roles receive 403. Responses are
+no-store and omit internal/private fields. The [admin page](artist-onboarding-web.md)
+uses this read to inspect saved content before explicit manual confirmation.
 
 ## Manual approval
 

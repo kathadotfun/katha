@@ -118,7 +118,7 @@ keeps the API session in memory; sign-out and account changes clear it. The wall
 panel displays the configured Localnet/Devnet test environment. A shared transaction
 review boundary now validates and simulates prepared Registry messages, requests
 explicit wallet approval, records signed attempts and reconciles finalized outcomes
-with separate indexing feedback; feature-specific admin actions follow next. Remaining API behavior and Marketplace
+with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork administration follows in later steps. Remaining API behavior and Marketplace
 business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -175,6 +175,7 @@ outside the current scope.
 - [Wallet Standard connection](docs/development/wallet-connection.md)
 - [Wallet sign-in and session handling](docs/development/wallet-sign-in-web.md)
 - [Wallet transaction lifecycle](docs/development/transaction-lifecycle-web.md)
+- [Artist onboarding administration](docs/development/artist-onboarding-web.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)

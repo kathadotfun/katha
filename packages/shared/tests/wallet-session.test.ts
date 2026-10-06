@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  walletPermissionsSchema,
   walletChallengeRequestSchema,
   walletVerifyRequestSchema,
   walletSessionResponseSchema,
@@ -47,6 +48,41 @@ it("keeps session responses strict and does not expose persistent token hashes o
     walletSessionResponseSchema.safeParse({
       ...value,
       session: { ...value.session, role: "admin" },
+    }).success,
+  ).toBe(false);
+});
+
+it("permission discovery strictly describes one authenticated wallet and independent roles", () => {
+  const session = {
+    walletId: "aaaaaaaa-1111-4111-8111-111111111111",
+    walletAddress: "1".repeat(32),
+    cluster: "localnet",
+    expiresAt: "2026-10-06T00:00:00Z",
+  };
+  for (const admin of [false, true])
+    for (const verifier of [false, true])
+      expect(walletPermissionsSchema.parse({ session, admin, verifier })).toEqual({
+        session,
+        admin,
+        verifier,
+      });
+  expect(
+    walletPermissionsSchema.safeParse({ session, admin: "true", verifier: false })
+      .success,
+  ).toBe(false);
+  expect(
+    walletPermissionsSchema.safeParse({
+      session,
+      admin: true,
+      verifier: false,
+      adminWallets: [],
+    }).success,
+  ).toBe(false);
+  expect(
+    walletPermissionsSchema.safeParse({
+      session: { ...session, token: "private" },
+      admin: true,
+      verifier: false,
     }).success,
   ).toBe(false);
 });

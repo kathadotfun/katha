@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { TransactionReview } from "./transaction-review";
 import { useState, useSyncExternalStore } from "react";
 import { disconnectedWalletSnapshot } from "../lib/wallet-connection";
@@ -114,6 +115,11 @@ export function WalletControl() {
                     ? "Waiting for sign-in approval…"
                     : "Not signed in"}
               </p>
+              {auth.session && (
+                <Link href="/admin" className="text-link mt-4 block">
+                  Administration
+                </Link>
+              )}
               {auth.session && (
                 <p className="mt-2 text-sm">
                   Session expires {new Date(auth.session.expiresAt).toISOString()}

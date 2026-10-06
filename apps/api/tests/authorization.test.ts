@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
-import type { WalletSession } from "@katha/shared";
+import { walletPermissionsSchema, type WalletSession } from "@katha/shared";
 import type { RegistryAuthorities } from "@katha/solana";
 import { createAuthorization } from "../src/authorization.js";
 import { DomainError } from "../src/errors.js";
@@ -145,6 +145,19 @@ it.each([
 it("rechecks sessions and rejects revoked, expired or wrong-cluster sessions", async () => {
   const f = fixture();
   await f.authorization.requireRole("Bearer admin", "admin");
+  f.authenticate.mockResolvedValueOnce({
+    walletId: randomUUID(),
+    walletAddress: f.admin,
+    cluster: "devnet",
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+  });
+  expect(
+    (
+      await f.app.request("/auth/permissions?admin=true", {
+        headers: { Authorization: "Bearer admin" },
+      })
+    ).status,
+  ).toBe(403);
   f.identities.delete("Bearer admin");
   await expect(
     f.authorization.requireRole("Bearer admin", "admin"),
@@ -235,4 +248,35 @@ it("allows a wallet with both explicitly assigned roles", async () => {
   expect((await guard.requireRole("Bearer admin", "verifier")).walletAddress).toBe(
     f.admin,
   );
+});
+
+it("discovers only current authenticated permissions without authority lists or chain reads", async () => {
+  const f = fixture();
+  for (const [token, admin, verifier] of [
+    ["admin", true, false],
+    ["verifier", false, true],
+    ["outsider", false, false],
+  ] as const) {
+    const res = await f.app.request("/auth/permissions", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    const body = walletPermissionsSchema.parse(await res.json());
+    expect(Object.keys(body).sort()).toEqual(["admin", "session", "verifier"]);
+    expect(body.admin).toBe(admin);
+    expect(body.verifier).toBe(verifier);
+    expect(body.session.walletAddress).toBe(f.identities.get(`Bearer ${token}`));
+  }
+  f.identities.delete("Bearer admin");
+  expect(
+    (
+      await f.app.request("/auth/permissions", {
+        headers: { Authorization: "Bearer admin" },
+      })
+    ).status,
+  ).toBe(401);
+  expect((await f.app.request("/auth/permissions")).status).toBe(401);
+  expect((await createApi().request("/auth/permissions")).status).toBe(401);
+  expect(f.readAuthorities).not.toHaveBeenCalled();
 });

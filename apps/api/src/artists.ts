@@ -31,6 +31,13 @@ function response(record: ArtistRecord) {
 }
 export function createArtists(store: ArtistStore) {
   return {
+    async read(artistId: string) {
+      const params = artistIdParamsSchema.safeParse({ artistId });
+      if (!params.success) throw new DomainError("INVALID_REQUEST");
+      const record = await store.read(params.data.artistId);
+      if (!record) throw new DomainError("NOT_FOUND");
+      return response(record);
+    },
     async create(input: unknown) {
       const parsed = artistCreateRequestSchema.safeParse(input);
       if (!parsed.success) throw new DomainError("INVALID_REQUEST");

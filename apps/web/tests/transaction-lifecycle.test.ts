@@ -124,6 +124,18 @@ async function fixture(version: 0 | 1 = 0) {
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    permissions: async () => {
+      throw new Error("Unused fixture method");
+    },
+    createArtist: async () => {
+      throw new Error("Unused fixture method");
+    },
+    readArtist: async () => {
+      throw new Error("Unused fixture method");
+    },
+    verifyArtist: async () => {
+      throw new Error("Unused fixture method");
+    },
     getSnapshot: () => ({ status: "signed-in", session: auth, error: null }),
     subscribe: (fn) => {
       sessionListeners.add(fn);

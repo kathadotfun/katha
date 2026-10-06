@@ -1,4 +1,10 @@
 import {
+  walletPermissionsSchema,
+  artistCreateRequestSchema,
+  artistIdParamsSchema,
+  artistVerificationRequestSchema,
+  artistResponseSchema,
+  type ArtistCreateRequest,
   operationReceiptRequestSchema,
   operationReceiptResponseSchema,
   unsignedOperationResponseSchema,
@@ -13,8 +19,22 @@ import {
 import { publicApiOrigin } from "./public-api.ts";
 
 export class WalletSessionApiError extends Error {
-  readonly code: "UNAUTHENTICATED" | "UNAVAILABLE";
-  constructor(code: "UNAUTHENTICATED" | "UNAVAILABLE") {
+  readonly code:
+    | "UNAUTHENTICATED"
+    | "FORBIDDEN"
+    | "CONFLICT"
+    | "NOT_FOUND"
+    | "INVALID_REQUEST"
+    | "UNAVAILABLE";
+  constructor(
+    code:
+      | "UNAUTHENTICATED"
+      | "FORBIDDEN"
+      | "CONFLICT"
+      | "NOT_FOUND"
+      | "INVALID_REQUEST"
+      | "UNAVAILABLE",
+  ) {
     super("Wallet session request failed.");
     this.code = code;
   }
@@ -30,9 +50,10 @@ export function createWalletSessionApi(
     body: unknown,
     token?: string,
     signal?: AbortSignal,
+    method: "POST" | "GET" = "POST",
   ) {
     const response = await send(new URL(path, base), {
-      method: "POST",
+      method,
       credentials: "omit",
       cache: "no-store",
       redirect: "error",
@@ -50,6 +71,14 @@ export function createWalletSessionApi(
     if (path === "/auth/logout" && (response.status === 204 || response.status === 401))
       return null;
     if (response.status === 401) throw new WalletSessionApiError("UNAUTHENTICATED");
+    const codes = {
+      400: "INVALID_REQUEST",
+      403: "FORBIDDEN",
+      404: "NOT_FOUND",
+      409: "CONFLICT",
+    } as const;
+    const code = codes[response.status as keyof typeof codes];
+    if (code) throw new WalletSessionApiError(code);
     if (
       !response.ok ||
       response.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json"
@@ -58,6 +87,51 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async permissions(token: string, signal: AbortSignal) {
+      return walletPermissionsSchema.parse(
+        await request("/auth/permissions", undefined, token, signal, "GET"),
+      );
+    },
+    async createArtist(input: ArtistCreateRequest, token: string, signal: AbortSignal) {
+      const result = artistResponseSchema.parse(
+        await request(
+          "/admin/artists",
+          artistCreateRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (result.verificationStatus !== "UNVERIFIED" || result.slug !== input.slug)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async readArtist(artistId: string, token: string, signal: AbortSignal) {
+      const { artistId: id } = artistIdParamsSchema.parse({ artistId });
+      const result = artistResponseSchema.parse(
+        await request(`/verifier/artists/${id}`, undefined, token, signal, "GET"),
+      );
+      if (result.id !== id) throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async verifyArtist(
+      artistId: string,
+      input: { confirmed: true },
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const { artistId: id } = artistIdParamsSchema.parse({ artistId });
+      const result = artistResponseSchema.parse(
+        await request(
+          `/verifier/artists/${id}/verification`,
+          artistVerificationRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (result.id !== id || result.verificationStatus !== "VERIFIED")
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async receipt(
       operation: UnsignedOperationResponse,
       transactionBase64: string,

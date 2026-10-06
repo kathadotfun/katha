@@ -100,3 +100,6 @@ extension approval is not claimed by automated tests. Transaction signing and su
 [review-and-approval lifecycle](transaction-lifecycle-web.md).
 
 The integration uses the official [Kit wallet plugin message-signing action](https://github.com/anza-xyz/kit-plugins/tree/main/packages/kit-plugin-wallet).
+
+The [artist administration screen](artist-onboarding-web.md) uses constrained
+authenticated session methods; bearer tokens remain inside the session closure.
