@@ -22,3 +22,5 @@ export const nfcTagResponseSchema = z
         Date.parse(value.retiredAt) >= Date.parse(value.assignedAt),
   );
 export type NfcTagResponse = z.infer<typeof nfcTagResponseSchema>;
+
+export const nfcResolutionQuerySchema = z.strictObject({});

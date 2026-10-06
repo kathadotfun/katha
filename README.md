@@ -105,7 +105,9 @@ empty/unavailable states. A reproducible Chromium suite now checks public
 navigation, keyboard focus, responsive wrapping, automated accessibility and
 recovery from unavailable data. Authorized NFC administration now assigns unique
 public tag references, preserves their permanent artwork binding and supports
-terminal retirement; public resolution and tag writing remain planned.
+terminal retirement. Public NFC resolution now redirects active tags to permanent
+artwork pages, hides unpublished bindings and rejects retired tags; physical tag
+writing remains planned.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 

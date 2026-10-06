@@ -3,8 +3,8 @@
 A tag's public identifier is a canonical lowercase UUID, separate from a physical
 chip's hardware UID. It references one permanent Katha artwork identity. Assignment
 is an administrative record, not an authenticity, ownership or custody claim.
-Basic NFC can be copied; the tag is a discovery bridge. Public tag redirects and
-physical tag-writing instructions are implemented in later steps.
+Basic NFC can be copied; the tag is a discovery bridge. Public tag redirects are
+read-only. Physical tag-writing instructions follow separately.
 
 ## Administrative routes
 
@@ -32,8 +32,48 @@ Request logs omit tag identifiers and request bodies.
 
 Administration can assign a tag to an existing draft before publication; this
 neither publishes that draft nor exposes it through the public catalogue. There is
-no tag-resolution route or frontend administration form in this step. Tag records
+no frontend administration form yet. Tag records
 are not written to Solana, and no wallet transaction is prepared or signed.
+
+## Public resolution
+
+`GET /nfc/:tagId` requires no wallet session. `HEAD` has the same status and headers
+without a response body. Its shared path schema accepts only canonical lowercase
+UUIDs; the strict empty query contract rejects `url`, `next`, `origin` and all other
+query fields. No caller-supplied redirect destination is accepted.
+
+| Result                                               | HTTP behavior                                         |
+| ---------------------------------------------------- | ----------------------------------------------------- |
+| Active tag bound to an eligible public artwork       | 302 `Location: <app-origin>/art/<permanent-katha-id>` |
+| Unknown tag or binding that is not publicly eligible | 404 `NOT_FOUND`                                       |
+| Retired tag bound to an eligible public artwork      | 410 `NFC_TAG_RETIRED`, no artwork ID or redirect      |
+| Invalid identifier/query                             | 400 `INVALID_REQUEST`                                 |
+| Storage failure or corrupt identity                  | Sanitized 500 `INTERNAL_ERROR`, no redirect           |
+
+All resolver responses have `Cache-Control: no-store`, including failures. A
+**temporary** redirect lets later scans observe retirement or publication changes.
+Previously opened artwork pages remain independent public records; retirement does
+not withdraw an artwork or prove anything about its physical condition.
+
+The destination origin comes from validated `KATHA_PUBLIC_APP_ORIGIN` at API startup.
+Use `http://localhost:3000` for local development, or your web service's reachable
+LAN origin for a phone demonstration. The owned canonical public origin is
+`https://katha.fun`; selecting it does not deploy or host the application. The
+resolver lives at the configured API origin (default `http://localhost:3001`). For
+example, an API request to
+`http://localhost:3001/nfc/aaaaaaaa-1111-4111-8111-111111111111` can redirect to
+`http://localhost:3000/art/KATHA-PAUBHA-000001` when that synthetic binding exists
+and is publicly eligible. Host/forwarded headers, stored document URIs, titles,
+slugs and query parameters cannot change the destination.
+
+Public resolution uses one database selection with the same publication predicate
+as discovery and artwork detail: explicit non-future publication, authorship
+commitment, verified artist, finalized verification and metadata, finalized initial
+inspection and indexed ownership on the configured cluster. Draft, unverified,
+unminted and wrong-cluster bindings return the same 404 as an unknown tag. Retired
+private bindings also return 404. Only the tag ID, permanent artwork ID and retirement
+time enter the internal public selection; administrative actors and private evidence
+never enter it. These reads do not change custody, ownership or attribution.
 
 ## Persistence and replacement
 
@@ -85,7 +125,11 @@ records and sanitized failures. PostgreSQL tests apply the fresh migration twice
 exercise competing tags for one artwork and one identifier across two artworks,
 verify simultaneous identical retries, and reject remapping, mutation, deletion,
 reactivation, invalid relationships and pre-retired insertions. Retired history and
-new replacement tags remain bound to the permanent artwork.
+new replacement tags remain bound to the permanent artwork. Resolver tests cover
+anonymous redirects, local/LAN/public origins, forged headers, arbitrary query
+parameters, malformed/corrupt records, missing/retired tags, redacted errors and
+HEAD/write-method behavior. Disposable PostgreSQL tests verify every publication
+prerequisite, cluster isolation, retirement and replacement with real tag bindings.
 
 Test identities and records are synthetic. This step does not write a physical
 NFC tag, establish a hosted domain redirect, or claim physical authenticity.

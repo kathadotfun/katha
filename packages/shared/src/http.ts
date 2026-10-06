@@ -5,6 +5,7 @@ export const apiErrors = {
   UNAUTHENTICATED: { status: 401, message: "Sign in to continue." },
   FORBIDDEN: { status: 403, message: "This action is not permitted." },
   NOT_FOUND: { status: 404, message: "The requested resource was not found." },
+  NFC_TAG_RETIRED: { status: 410, message: "This NFC tag has been retired." },
   CONFLICT: { status: 409, message: "The request conflicts with the current state." },
   PAYLOAD_TOO_LARGE: { status: 413, message: "The request body is too large." },
   UNSUPPORTED_MEDIA_TYPE: {
@@ -19,6 +20,7 @@ export const apiErrorCodeSchema = z.enum([
   "FORBIDDEN",
   "NOT_FOUND",
   "CONFLICT",
+  "NFC_TAG_RETIRED",
   "PAYLOAD_TOO_LARGE",
   "UNSUPPORTED_MEDIA_TYPE",
   "INTERNAL_ERROR",

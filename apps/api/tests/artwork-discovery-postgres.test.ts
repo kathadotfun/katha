@@ -1,3 +1,5 @@
+import { createNfcResolution } from "../src/nfc-resolution.js";
+import { createNfcResolutionStore, createNfcTagStore, wallets } from "@katha/db";
 import { createArtworkProvenance } from "../src/artwork-provenance.js";
 import {
   createPublicProvenanceStore,
@@ -350,6 +352,47 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       fixture({ future: true }),
     ]);
     const devnet = await fixture({ cluster: "DEVNET" });
+    // Resolve real tag bindings through the catalogue's exact publication boundary.
+    const [tagActor] = await database.db
+      .insert(wallets)
+      .values({ address: wallet.address })
+      .returning();
+    if (!tagActor) throw new Error("Missing synthetic tag actor");
+    const tags = createNfcTagStore(database.db);
+    const nfcStore = createNfcResolutionStore(database.db, "LOCALNET");
+    const nfc = createNfcResolution(nfcStore, "https://katha.fun");
+    const publicTag = randomUUID();
+    await tags.assign(mandala.kathaId, publicTag, tagActor.id);
+    expect(await nfcStore.find(publicTag)).toEqual({
+      tagId: publicTag,
+      kathaId: mandala.kathaId,
+      retiredAt: null,
+    });
+    expect(await nfc.resolve(publicTag)).toBe(
+      `https://katha.fun/art/${mandala.kathaId}`,
+    );
+    expect(
+      await createNfcResolutionStore(database.db, "DEVNET").find(publicTag),
+    ).toBeNull();
+    for (const work of [...hidden, devnet]) {
+      const tagId = randomUUID();
+      await tags.assign(work.kathaId, tagId, tagActor.id);
+      expect(await nfcStore.find(tagId)).toBeNull();
+      await expect(nfc.resolve(tagId)).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await tags.retire(tagId, tagActor.id);
+      expect(await nfcStore.find(tagId)).toBeNull();
+    }
+    expect(await nfcStore.find(randomUUID())).toBeNull();
+    await tags.retire(publicTag, tagActor.id);
+    await expect(nfc.resolve(publicTag)).rejects.toMatchObject({
+      code: "NFC_TAG_RETIRED",
+    });
+    const replacementTag = randomUUID();
+    await tags.assign(mandala.kathaId, replacementTag, tagActor.id);
+    expect(await nfc.resolve(replacementTag)).toBe(
+      `https://katha.fun/art/${mandala.kathaId}`,
+    );
+
     await database.db.insert(artworkMaterials).values([
       { artworkId: mandala.id, name: "Mineral pigments", position: 1 },
       { artworkId: mandala.id, name: "Canvas", position: 0 },

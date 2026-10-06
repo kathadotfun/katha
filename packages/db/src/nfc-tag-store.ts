@@ -1,4 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
+import { artists } from "./schema/artists.js";
+import { publicationPredicate } from "./public-artwork-store.js";
 import type { Database } from "./connection.js";
 import { artworks } from "./schema/artworks.js";
 import { nfcTags } from "./schema/nfc-tags.js";
@@ -68,3 +70,24 @@ export function createNfcTagStore(db: Database) {
   };
 }
 export type NfcTagStore = ReturnType<typeof createNfcTagStore>;
+
+// Public reads never expose draft bindings or administrative audit fields.
+export function createNfcResolutionStore(db: Database, cluster: "LOCALNET" | "DEVNET") {
+  return {
+    async find(tagId: string) {
+      const [record] = await db
+        .select({
+          tagId: nfcTags.tagId,
+          kathaId: artworks.kathaId,
+          retiredAt: nfcTags.retiredAt,
+        })
+        .from(nfcTags)
+        .innerJoin(artworks, eq(artworks.id, nfcTags.artworkId))
+        .innerJoin(artists, eq(artists.id, artworks.artistId))
+        .where(and(eq(nfcTags.tagId, tagId), publicationPredicate(cluster)))
+        .limit(1);
+      return record ?? null;
+    },
+  };
+}
+export type NfcResolutionStore = ReturnType<typeof createNfcResolutionStore>;

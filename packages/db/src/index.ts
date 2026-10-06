@@ -193,3 +193,5 @@ export {
   type NfcTagStore,
   type NfcTagRecord,
 } from "./nfc-tag-store.js";
+
+export { createNfcResolutionStore, type NfcResolutionStore } from "./nfc-tag-store.js";

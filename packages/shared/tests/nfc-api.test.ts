@@ -1,3 +1,4 @@
+import { nfcResolutionQuerySchema } from "../src/index.js";
 import { expect, it } from "vitest";
 import {
   nfcTagIdSchema,
@@ -57,4 +58,14 @@ it("response separates active and retired states and requires ordered retirement
     { ...record, privateEvidence: "PRIVATE" },
   ])
     expect(nfcTagResponseSchema.safeParse(value).success).toBe(false);
+});
+
+it("public resolution accepts no caller-supplied redirect configuration", () => {
+  expect(nfcResolutionQuerySchema.parse({})).toEqual({});
+  for (const value of [
+    { url: "https://evil.example" },
+    { next: "/art/other" },
+    { origin: "https://evil.example" },
+  ])
+    expect(nfcResolutionQuerySchema.safeParse(value).success).toBe(false);
 });

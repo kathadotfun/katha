@@ -1,3 +1,5 @@
+import type { NfcResolutionBoundary } from "./nfc-resolution.js";
+import { nfcResolutionQuerySchema } from "@katha/shared";
 import type { NfcTagsBoundary } from "./nfc-tags.js";
 import {
   nfcArtworkParamsSchema,
@@ -98,6 +100,7 @@ export function createApi(
   receipts?: OperationReceiptsBoundary,
   provenance?: ArtworkProvenanceBoundary,
   nfcTags?: NfcTagsBoundary,
+  nfcResolution?: NfcResolutionBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -141,6 +144,10 @@ export function createApi(
       await next();
     });
   }
+  app.use("/nfc/*", async (c, next) => {
+    c.header("Cache-Control", "no-store");
+    await next();
+  });
   app.use("*", restrictedCors(origins));
   app.use("*", requestBodyLimit());
   // Reserve both namespaces before any future write handlers are registered.
@@ -225,6 +232,13 @@ export function createApi(
         201,
       ),
     );
+  }
+  if (nfcResolution) {
+    app.get("/nfc/:tagId", async (c) => {
+      const { tagId } = parseParams(c, nfcTagParamsSchema);
+      parseQuery(c, nfcResolutionQuerySchema);
+      return c.redirect(await nfcResolution.resolve(tagId), 302);
+    });
   }
   if (nfcTags) {
     app.post("/admin/artworks/:kathaId/nfc-tags", async (c) =>

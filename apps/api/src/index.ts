@@ -1,3 +1,5 @@
+import { createNfcResolution } from "./nfc-resolution.js";
+import { createNfcResolutionStore } from "@katha/db";
 import { createNfcTags } from "./nfc-tags.js";
 import { createNfcTagStore } from "@katha/db";
 import { createArtworkProvenance } from "./artwork-provenance.js";
@@ -190,6 +192,13 @@ function startApi() {
       ),
     ),
     createNfcTags(createNfcTagStore(database.db)),
+    createNfcResolution(
+      createNfcResolutionStore(
+        database.db,
+        config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
+      ),
+      config.KATHA_PUBLIC_APP_ORIGIN,
+    ),
   );
   const port = config.API_PORT;
 
