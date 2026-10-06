@@ -1,5 +1,6 @@
 import type { ArtworkRecord, ArtworkDraftStore } from "@katha/db";
 import {
+  artworkDraftReadResponseSchema,
   artworkDraftListResponseSchema,
   type Pagination,
   artworkDraftCreateRequestSchema,
@@ -9,8 +10,9 @@ import {
 } from "@katha/shared";
 import { DomainError } from "./errors.js";
 
-function response(record: ArtworkRecord) {
+function response(record: ArtworkRecord, materials: string[] = []) {
   return artworkDraftResponseSchema.parse({
+    materials,
     id: record.id,
     kathaId: record.kathaId,
     artistId: record.artistId,
@@ -44,6 +46,16 @@ function response(record: ArtworkRecord) {
 
 export function createArtworkDrafts(store: ArtworkDraftStore) {
   return {
+    async read(kathaId: string) {
+      const parsed = artworkDraftParamsSchema.safeParse({ kathaId });
+      if (!parsed.success) throw new DomainError("INVALID_REQUEST");
+      const found = await store.read(parsed.data.kathaId);
+      if (!found) throw new DomainError("NOT_FOUND");
+      return artworkDraftReadResponseSchema.parse({
+        artwork: response(found.record, found.materials),
+        editable: found.editable,
+      });
+    },
     async list(page: Pagination) {
       const rows = await store.list(page);
       return artworkDraftListResponseSchema.parse({
@@ -71,6 +83,7 @@ export function createArtworkDrafts(store: ArtworkDraftStore) {
       if (!path.success || !parsed.success) throw new DomainError("INVALID_REQUEST");
       const data = parsed.data;
       const result = await store.update(path.data.kathaId, data.expectedUpdatedAt, {
+        materials: data.materials,
         title: data.title,
         authorshipEvidenceHash: data.authorshipEvidenceHash,
         ...(data.dimensions !== undefined
@@ -95,7 +108,7 @@ export function createArtworkDrafts(store: ArtworkDraftStore) {
       });
       if (result.status === "not_found") throw new DomainError("NOT_FOUND");
       if (result.status !== "updated") throw new DomainError("CONFLICT");
-      return response(result.record);
+      return response(result.record, result.materials);
     },
     async create(input: unknown) {
       const parsed = artworkDraftCreateRequestSchema.safeParse(input);
@@ -105,6 +118,7 @@ export function createArtworkDrafts(store: ArtworkDraftStore) {
         creationRequestId: data.creationRequestId,
         artistId: data.artistId,
         category: data.category,
+        materials: data.materials,
         title: data.title,
         creationYear: data.creationYear,
         authorshipEvidenceHash: data.authorshipEvidenceHash ?? null,
@@ -123,7 +137,7 @@ export function createArtworkDrafts(store: ArtworkDraftStore) {
       if (result.status === "artist_not_found") throw new DomainError("NOT_FOUND");
       if (result.status !== "created") throw new DomainError("CONFLICT");
       const record = result.record;
-      return response(record);
+      return response(record, result.materials);
     },
   };
 }

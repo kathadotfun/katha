@@ -30,7 +30,7 @@ Reusing a creation UUID returns `409 CONFLICT`, even with different content, and
 cannot create a second draft. Same titles are allowed for distinct works; this
 boundary does not automatically recognize duplicate physical artworks.
 
-Optional fields are `authorshipEvidenceHash`, `dimensions`, `origin`, `technique`,
+Optional fields are `materials`, `authorshipEvidenceHash`, `dimensions`, `origin`, `technique`,
 `story`, `meaning`, `culturalContext` and `creationProcess`. Descriptive fields may
 be omitted or null; supplied text must be nonblank, bounded and free of unsupported
 control bytes. The evidence field accepts only a lowercase SHA-256 digest, never
@@ -41,7 +41,10 @@ When supplied, dimensions require positive integer `heightMm` and `widthMm`, wit
 nullable/optional positive `depthMm`; each must fit PostgreSQL's signed integer
 range. Origin requires a two-letter uppercase `countryCode`, with nullable/optional
 `region` and `locality`. Omitting origin defaults to `NP` with null locations.
-Materials and media are managed through their later workflows.
+Materials are ordered individual names: up to 20 distinct names of 120 characters,
+trimmed, without commas or line breaks. Empty lists are allowed during documentation.
+The response includes materials, persisted atomically with creation. Media is managed
+through its later workflow. See the [structured editor](artwork-draft-editor-web.md).
 
 UUIDs normalize to lowercase. Categories are `MANDALA`, `PAUBHA` and `THANGKA`;
 creation years range from 1 through 9999. Unknown keys are rejected, including

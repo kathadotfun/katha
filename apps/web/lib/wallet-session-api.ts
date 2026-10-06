@@ -1,4 +1,11 @@
 import {
+  artworkDraftCreateRequestSchema,
+  artworkDraftUpdateRequestSchema,
+  artworkDraftResponseSchema,
+  artworkDraftReadResponseSchema,
+  artworkDraftParamsSchema,
+  type ArtworkDraftCreateRequest,
+  type ArtworkDraftUpdateRequest,
   artworkDraftListQuerySchema,
   artworkDraftListResponseSchema,
   type Pagination,
@@ -53,7 +60,7 @@ export function createWalletSessionApi(
     body: unknown,
     token?: string,
     signal?: AbortSignal,
-    method: "POST" | "GET" = "POST",
+    method: "POST" | "GET" | "PATCH" = "POST",
   ) {
     const response = await send(new URL(path, base), {
       method,
@@ -90,6 +97,61 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readArtworkDraft(kathaId: string, token: string, signal: AbortSignal) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = artworkDraftReadResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.artwork.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async createArtworkDraft(
+      input: ArtworkDraftCreateRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const data = artworkDraftCreateRequestSchema.parse(input);
+      const result = artworkDraftResponseSchema.parse(
+        await request("/admin/artworks", data, token, signal),
+      );
+      if (
+        result.artistId !== data.artistId ||
+        result.category !== data.category ||
+        result.creationYear !== data.creationYear
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async updateArtworkDraft(
+      kathaId: string,
+      input: ArtworkDraftUpdateRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = artworkDraftResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}`,
+          artworkDraftUpdateRequestSchema.parse(input),
+          token,
+          signal,
+          "PATCH",
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.updatedAt === input.expectedUpdatedAt
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async listArtworkDrafts(page: Pagination, token: string, signal: AbortSignal) {
       const checked = artworkDraftListQuerySchema.parse({
         limit: String(page.limit),

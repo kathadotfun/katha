@@ -24,6 +24,18 @@ const origin = artworkOriginSchema.extend({
   region: content(artworkOriginSchema.shape.region).nullish(),
   locality: content(artworkOriginSchema.shape.locality.unwrap().unwrap()).nullish(),
 });
+export const artworkDraftMaterialsSchema = z
+  .array(
+    content(artworkSchema.shape.materials.element.trim()).refine(
+      (value) => !/[,\r\n]/.test(value),
+    ),
+  )
+  .max(20)
+  .refine(
+    (values) =>
+      new Set(values.map((value) => value.toLowerCase())).size === values.length,
+    { error: "Use distinct material names" },
+  );
 const draftFields = {
   artistId: artistIdParamsSchema.shape.artistId,
   category: artworkCategorySchema,
@@ -41,11 +53,13 @@ const draftFields = {
 export const artworkDraftCreateRequestSchema = z.strictObject({
   // Retain this UUID when retrying an uncertain creation request.
   creationRequestId: z.uuid().transform((value) => value.toLowerCase()),
+  materials: artworkDraftMaterialsSchema.optional(),
   ...draftFields,
 });
 export const artworkDraftResponseSchema = z
   .strictObject({
     ...draftFields,
+    materials: artworkDraftMaterialsSchema,
     id: z.uuid(),
     kathaId: kathaIdSchema,
     creatorWallet: walletAddressSchema.nullable(),
@@ -71,6 +85,7 @@ export const artworkDraftParamsSchema = z.strictObject({ kathaId: kathaIdSchema 
 export const artworkDraftUpdateRequestSchema = z
   .strictObject({
     expectedUpdatedAt: z.iso.datetime({ precision: 3 }),
+    materials: artworkDraftMaterialsSchema.optional(),
     title: draftFields.title.optional(),
     authorshipEvidenceHash: draftFields.authorshipEvidenceHash,
     dimensions: draftFields.dimensions,
@@ -120,3 +135,9 @@ export const artworkDraftListResponseSchema = paginatedResponseSchema(
   { error: "Duplicate artwork identities" },
 );
 export type ArtworkDraftListResponse = z.infer<typeof artworkDraftListResponseSchema>;
+
+export const artworkDraftReadResponseSchema = z.strictObject({
+  artwork: artworkDraftResponseSchema,
+  editable: z.boolean(),
+});
+export type ArtworkDraftReadResponse = z.infer<typeof artworkDraftReadResponseSchema>;

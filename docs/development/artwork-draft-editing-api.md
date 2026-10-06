@@ -24,12 +24,12 @@ three fractional digits. Success returns `200` with the shared administrative
 `ArtworkDraftResponse` and a new `updatedAt`. Keep the returned value for the next
 edit; each accepted update advances it by at least one visible millisecond.
 
-Editable fields are `title`, `dimensions`, `origin`, `technique`, `story`,
+Editable fields are `materials`, `title`, `dimensions`, `origin`, `technique`, `story`,
 `meaning`, `culturalContext`, `creationProcess` and, before it is established,
 `authorshipEvidenceHash`. Validation reuses the creation contracts and bounds.
 Omitted fields retain their existing values. Nullable descriptions accept null to
-clear them; title must remain nonblank. Materials and media remain separate later
-workflows.
+clear them; title must remain nonblank. Ordered `materials` are now optional: omit to retain, supply `[]` to clear, or
+replace with up to 20 distinct individual names. Media remains a later workflow.
 
 Dimensions are replaced as a complete group: supply height/width with optional
 depth, or null to clear all three. Origin is replaced as a complete group: supply
@@ -49,7 +49,8 @@ checks the editing window, then updates only explicitly allowed columns. Two
 requests with the same token cannot both succeed. Stale requests return a conflict
 without changing content, timestamps or category counters. Do not invent a new
 timestamp to bypass a conflict; inspect the current administrative record first.
-Administrative browsing interfaces arrive in their later workflow steps.
+The [structured editor](artwork-draft-editor-web.md) loads current records through
+`GET /admin/artworks/:kathaId`, returning `{ artwork, editable }`.
 
 This endpoint stops editing once the artwork has a publication marker or any metadata version,
 verification, condition report, custody event, blockchain operation, indexed

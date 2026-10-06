@@ -48,6 +48,11 @@ function fixture() {
     payoutWallet: "PRIVATE-PAYOUT",
   });
   const store: ArtworkDraftStore = {
+    read: vi.fn<ArtworkDraftStore["read"]>(async () => ({
+      record,
+      materials: [],
+      editable: true,
+    })),
     list: vi.fn<ArtworkDraftStore["list"]>(async () => [
       {
         id: record.id,
@@ -162,7 +167,7 @@ it.each([
   { creatorWallet: temporaryWallet().address },
   { verificationStatus: "VERIFIED" },
   { privateEvidence: "secret" },
-  { materials: ["gold"] },
+  { materials: ["gold, silk"] },
   { publishedAt: new Date().toISOString() },
 ])("rejects malformed or privileged creation %j", async (invalid) => {
   const f = fixture();
@@ -332,7 +337,7 @@ it.each([
   { updatedAt: new Date().toISOString() },
   { creationRequestId: randomUUID() },
   { verificationStatus: "VERIFIED" },
-  { materials: ["Gold"] },
+  { materials: ["Gold", "gold"] },
   { privateEvidence: "secret" },
   { publishedAt: new Date().toISOString() },
 ])("rejects invalid or privileged edit %j before persistence", async (invalid) => {
@@ -431,4 +436,47 @@ it("lists safe draft summaries only after admin authorization with strict pagina
   expect(failed.status).toBe(500);
   expect(await failed.text()).not.toContain("PRIVATE_DRIVER_SENTINEL");
   expect(f.chain).not.toHaveBeenCalled();
+});
+
+it("reads draft content only for administrators, projecting materials and editing eligibility", async () => {
+  const f = fixture();
+  for (const token of [undefined, "verifier", "outsider", "admin"]) {
+    const result = await f.app.request(`/admin/artworks/${f.record.kathaId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    expect(result.status).toBe(token === "admin" ? 200 : token ? 403 : 401);
+    if (token === "admin") {
+      expect(result.headers.get("Cache-Control")).toBe("no-store");
+      const body = await result.json();
+      expect(body).toMatchObject({
+        editable: true,
+        artwork: { kathaId: f.record.kathaId, materials: [] },
+      });
+      expect(JSON.stringify(body)).not.toContain("PRIVATE");
+    }
+  }
+  expect(f.store.read).toHaveBeenCalledTimes(1);
+  f.store.read = vi.fn(async () => null);
+  expect(
+    (
+      await f.app.request(`/admin/artworks/${f.record.kathaId}`, {
+        headers: { Authorization: "Bearer admin" },
+      })
+    ).status,
+  ).toBe(404);
+  expect(
+    (
+      await f.app.request("/admin/artworks/invalid", {
+        headers: { Authorization: "Bearer admin" },
+      })
+    ).status,
+  ).toBe(400);
+  f.store.read = vi.fn(async () => {
+    throw new Error("PRIVATE_DRIVER_ERROR");
+  });
+  const failed = await f.app.request(`/admin/artworks/${f.record.kathaId}`, {
+    headers: { Authorization: "Bearer admin" },
+  });
+  expect(failed.status).toBe(500);
+  expect(await failed.text()).not.toContain("PRIVATE_DRIVER_ERROR");
 });

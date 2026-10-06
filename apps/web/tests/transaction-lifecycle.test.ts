@@ -124,6 +124,15 @@ async function fixture(version: 0 | 1 = 0) {
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    readArtworkDraft: async () => {
+      throw new Error("Unused");
+    },
+    createArtworkDraft: async () => {
+      throw new Error("Unused");
+    },
+    updateArtworkDraft: async () => {
+      throw new Error("Unused");
+    },
     listArtworkDrafts: async () => {
       throw new Error("Unused fixture method");
     },

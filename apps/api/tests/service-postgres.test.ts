@@ -1,6 +1,7 @@
 import { artworkMetadataVersions, blockchainOperations } from "@katha/db";
 import { createArtworkDraftStore } from "@katha/db";
 import {
+  artworkDraftReadResponseSchema,
   artworkDraftListResponseSchema,
   artworkDraftResponseSchema,
 } from "@katha/shared";
@@ -655,6 +656,7 @@ it("creates and edits private drafts with signed admin authorization, retry roll
       category: "PAUBHA",
       title: "Synthetic private draft",
       creationYear: 2026,
+      materials: ["Silk", "Mineral pigment"],
     };
     expect((await post("/admin/artworks", draft)).status).toBe(401);
     expect(
@@ -678,6 +680,7 @@ it("creates and edits private drafts with signed admin authorization, retry roll
     const creation = await post("/admin/artworks", draft, session.token);
     expect(creation.status).toBe(201);
     const result = artworkDraftResponseSchema.parse(await creation.json());
+    expect(result.materials).toEqual(["Silk", "Mineral pigment"]);
     expect(result.creatorWallet).toBeNull();
     expect(result.dimensions).toBeNull();
     expect(result.kathaId).toMatch(/^KATHA-PAUBHA-[0-9]{6}$/);
@@ -783,6 +786,49 @@ it("creates and edits private drafts with signed admin authorization, retry roll
     expect(latest.story).toBeNull();
     expect(latest.dimensions).toBeNull();
     expect(latest.origin.region).toBe("Patan");
+    const readDraft = () =>
+      app.request(`/admin/artworks/${result.kathaId}`, {
+        headers: { Authorization: `Bearer ${session.token}` },
+      });
+    let read = artworkDraftReadResponseSchema.parse(await (await readDraft()).json());
+    expect(read.editable).toBe(true);
+    expect(read.artwork.materials).toEqual(["Silk", "Mineral pigment"]);
+    // Failure after the parent update must roll back timestamps, content and materials.
+    await expect(
+      createArtworkDraftStore(database.db).update(result.kathaId, latest.updatedAt, {
+        title: "Must roll back",
+        materials: ["Invalid, material"],
+      }),
+    ).rejects.toThrow();
+    read = artworkDraftReadResponseSchema.parse(await (await readDraft()).json());
+    expect(read.artwork.updatedAt).toBe(latest.updatedAt);
+    expect(read.artwork.title).toBe(latest.title);
+    expect(read.artwork.materials).toEqual(["Silk", "Mineral pigment"]);
+    const materialEdit = await patch(
+      result.kathaId,
+      { expectedUpdatedAt: latest.updatedAt, materials: ["Cotton", "Natural pigment"] },
+      session.token,
+    );
+    expect(materialEdit.status).toBe(200);
+    latest = artworkDraftResponseSchema.parse(await materialEdit.json());
+    expect(latest.materials).toEqual(["Cotton", "Natural pigment"]);
+    expect(
+      (
+        await patch(
+          result.kathaId,
+          { expectedUpdatedAt: result.updatedAt, materials: [] },
+          session.token,
+        )
+      ).status,
+    ).toBe(409);
+    const materialClear = await patch(
+      result.kathaId,
+      { expectedUpdatedAt: latest.updatedAt, materials: [] },
+      session.token,
+    );
+    expect(materialClear.status).toBe(200);
+    latest = artworkDraftResponseSchema.parse(await materialClear.json());
+    expect(latest.materials).toEqual([]);
     const before = await database.db.query.artworkIdCounters.findFirst({
       where: (row, { eq }) => eq(row.category, "PAUBHA"),
     });
@@ -985,6 +1031,9 @@ it("creates and edits private drafts with signed admin authorization, retry roll
         },
       ])
       .returning();
+    expect(
+      artworkDraftReadResponseSchema.parse(await (await readDraft()).json()).editable,
+    ).toBe(false);
     const list = await app.request("/admin/artworks?limit=100&offset=0", {
       headers: { Authorization: `Bearer ${session.token}` },
     });

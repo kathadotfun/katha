@@ -4,7 +4,8 @@ Open `/admin`, sign in with a wallet permitted by `ADMIN_WALLET_ADDRESSES`, and
 follow **Artwork drafts** to `/admin/artworks`. The list displays unpublished works
 with permanent Katha IDs, artist attribution, category, creation year, artist-profile
 verification, documentation status and the last documentation update. Artist
-verification is separate from artwork authenticity. The draft editor is a later step.
+verification is separate from artwork authenticity. Open a work’s title to review or edit its [structured documentation](artwork-draft-editor-web.md),
+or choose Document new artwork.
 
 ## Access and recovery
 

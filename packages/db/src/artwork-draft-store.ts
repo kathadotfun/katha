@@ -6,7 +6,8 @@ import {
 import { custodyEvents } from "./schema/custody-fulfillment.js";
 import { blockchainOperations } from "./schema/blockchain-operations.js";
 import { artworkOwnership, indexedEvents } from "./schema/blockchain-read-models.js";
-import { eq, sql, desc, isNull } from "drizzle-orm";
+import { artworkMaterials } from "./schema/artwork-materials.js";
+import { eq, sql, desc, asc, isNull } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { artists } from "./schema/artists.js";
 import {
@@ -33,9 +34,9 @@ type DraftCreation = Pick<
   | "meaning"
   | "culturalContext"
   | "creationProcess"
-> & { creationRequestId: string };
+> & { creationRequestId: string; materials?: string[] | undefined };
 type CreationResult =
-  | { status: "created"; record: ArtworkRecord }
+  | { status: "created"; record: ArtworkRecord; materials?: string[] | undefined }
   | { status: "artist_not_found" | "duplicate" | "capacity_exhausted" };
 type EditableDraft = Pick<
   NewArtworkRecord,
@@ -53,9 +54,12 @@ type EditableDraft = Pick<
   | "culturalContext"
   | "creationProcess"
 >;
-type DraftChanges = { [K in keyof EditableDraft]?: EditableDraft[K] | undefined };
+type DraftChanges = { [K in keyof EditableDraft]?: EditableDraft[K] | undefined } & {
+  materials?: string[] | undefined;
+};
 type UpdateResult =
-  { status: "updated"; record: ArtworkRecord } | { status: "not_found" | "conflict" };
+  | { status: "updated"; record: ArtworkRecord; materials?: string[] | undefined }
+  | { status: "not_found" | "conflict" };
 // The draft list and editor use the same conservative workflow boundary. Even
 // a prepared/failed operation freezes basic edits; this is not chain success.
 function lifecycleStarted(artworkId: string | typeof artworks.id) {
@@ -72,6 +76,32 @@ function lifecycleStarted(artworkId: string | typeof artworks.id) {
 class DuplicateDraft extends Error {}
 export function createArtworkDraftStore(db: Database) {
   return {
+    async read(kathaId: string) {
+      return db.transaction(async (tx) => {
+        // Share lock keeps parent content and materials consistent with our writers.
+        // Eligibility is a read hint; the update lock rechecks concurrent lifecycle inserts.
+        const [record] = await tx
+          .select()
+          .from(artworks)
+          .where(eq(artworks.kathaId, kathaId))
+          .for("share");
+        if (!record) return null;
+        const [state] = await tx
+          .select({ frozen: lifecycleStarted(record.id) })
+          .from(artworks)
+          .where(eq(artworks.id, record.id));
+        const materials = await tx
+          .select({ name: artworkMaterials.name })
+          .from(artworkMaterials)
+          .where(eq(artworkMaterials.artworkId, record.id))
+          .orderBy(asc(artworkMaterials.position));
+        return {
+          record,
+          materials: materials.map((row) => row.name),
+          editable: record.publishedAt === null && state?.frozen === false,
+        };
+      });
+    },
     async list(page: { limit: number; offset: number }) {
       return db
         .select({
@@ -144,7 +174,29 @@ export function createArtworkDraftStore(db: Database) {
           .where(eq(artworks.id, record.id))
           .returning();
         if (!updated) throw new Error("Locked draft disappeared");
-        return { status: "updated", record: updated };
+        if (changes.materials !== undefined) {
+          await tx
+            .delete(artworkMaterials)
+            .where(eq(artworkMaterials.artworkId, record.id));
+          if (changes.materials.length)
+            await tx.insert(artworkMaterials).values(
+              changes.materials.map((name, position) => ({
+                artworkId: record.id,
+                name,
+                position,
+              })),
+            );
+        }
+        const materials = await tx
+          .select({ name: artworkMaterials.name })
+          .from(artworkMaterials)
+          .where(eq(artworkMaterials.artworkId, record.id))
+          .orderBy(asc(artworkMaterials.position));
+        return {
+          status: "updated",
+          record: updated,
+          materials: materials.map((row) => row.name),
+        };
       });
     },
     async create(input: DraftCreation): Promise<CreationResult> {
@@ -181,7 +233,15 @@ export function createArtworkDraftStore(db: Database) {
             .returning();
           // BEFORE INSERT allocation also runs on conflicts; roll it back with the loser.
           if (!record) throw new DuplicateDraft();
-          return { status: "created", record };
+          if (input.materials?.length)
+            await tx.insert(artworkMaterials).values(
+              input.materials.map((name, position) => ({
+                artworkId: record.id,
+                name,
+                position,
+              })),
+            );
+          return { status: "created", record, materials: input.materials ?? [] };
         });
       } catch (error) {
         if (error instanceof DuplicateDraft) return { status: "duplicate" };

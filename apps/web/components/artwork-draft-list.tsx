@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { HTTP_LIMITS } from "@katha/shared";
 import { useWalletSession } from "./wallet-provider";
@@ -46,6 +47,11 @@ export function ArtworkDraftListPanel() {
       <h2 id="draft-list-title" className="text-2xl">
         Unpublished artworks
       </h2>
+      {state.status === "ready" && (
+        <Link href="/admin/artworks/new" className="text-link mt-5 inline-block">
+          Document new artwork
+        </Link>
+      )}
       <p className="mt-3 text-sm text-muted">
         {auth.session.cluster === "devnet" ? "Devnet" : "Localnet"} test environment ·
         Administrative records
@@ -91,7 +97,11 @@ export function ArtworkDraftListPanel() {
             {page.items.map((item) => (
               <li key={item.kathaId} className="min-w-0 border-t border-line py-6">
                 <p className="text-sm font-mono break-all">{item.kathaId}</p>
-                <h3 className="mt-3 text-2xl break-words">{item.title}</h3>
+                <h3 className="mt-3 text-2xl break-words">
+                  <Link href={`/admin/artworks/${item.kathaId}`} className="text-link">
+                    {item.title}
+                  </Link>
+                </h3>
                 <p className="mt-3">
                   {item.artist.displayName} ·{" "}
                   {item.category === "PAUBHA"

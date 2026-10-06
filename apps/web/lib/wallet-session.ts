@@ -3,6 +3,8 @@ import {
   type WalletSession,
   type ArtistCreateRequest,
   type Pagination,
+  type ArtworkDraftCreateRequest,
+  type ArtworkDraftUpdateRequest,
   type UnsignedOperationResponse,
 } from "@katha/shared";
 import type { WalletConnection } from "./wallet-connection.ts";
@@ -110,6 +112,28 @@ export function createWalletSession(
     return result;
   }
   return {
+    readArtworkDraft(kathaId: string, signal: AbortSignal) {
+      return authorized(
+        (value) => api.readArtworkDraft(kathaId, value, signal),
+        signal,
+      );
+    },
+    createArtworkDraft(input: ArtworkDraftCreateRequest, signal: AbortSignal) {
+      return authorized(
+        (value) => api.createArtworkDraft(input, value, signal),
+        signal,
+      );
+    },
+    updateArtworkDraft(
+      kathaId: string,
+      input: ArtworkDraftUpdateRequest,
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (value) => api.updateArtworkDraft(kathaId, input, value, signal),
+        signal,
+      );
+    },
     listArtworkDrafts(page: Pagination, signal: AbortSignal) {
       return authorized((value) => api.listArtworkDrafts(page, value, signal), signal);
     },

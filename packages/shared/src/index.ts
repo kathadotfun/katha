@@ -190,3 +190,9 @@ export {
   artworkDraftListResponseSchema,
   type ArtworkDraftListResponse,
 } from "./artwork-draft-api.js";
+
+export {
+  artworkDraftMaterialsSchema,
+  artworkDraftReadResponseSchema,
+  type ArtworkDraftReadResponse,
+} from "./artwork-draft-api.js";

@@ -88,6 +88,15 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readArtworkDraft: async () => {
+      throw new Error("Unused");
+    },
+    createArtworkDraft: async () => {
+      throw new Error("Unused");
+    },
+    updateArtworkDraft: async () => {
+      throw new Error("Unused");
+    },
     listArtworkDrafts: async () => {
       throw new Error("Unused fixture method");
     },

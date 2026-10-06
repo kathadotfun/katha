@@ -86,7 +86,7 @@ export async function runPublicBrowsingJourneys({
       const adminHeaders = {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Headers": "content-type,authorization",
-        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+        "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
         "Cache-Control": "no-store",
       };
       const authSession = () => ({
@@ -141,6 +141,74 @@ export async function runPublicBrowsingJourneys({
               hasMore: draftMode === "READY" && offset === 0,
             },
           },
+        });
+      });
+      let savedArtwork = null;
+      let rejectDraftSave = true;
+      let freezeDraft = false;
+      let draftCreateCalls = 0;
+      let retainedCreationId = null;
+      await context.route(`${apiOrigin}/admin/artworks`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(route.request().method(), "POST");
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        const data = route.request().postDataJSON();
+        retainedCreationId = data.creationRequestId;
+        draftCreateCalls++;
+        savedArtwork = {
+          ...data,
+          id: "cccccccc-1111-4111-8111-111111111111",
+          kathaId: "KATHA-PAUBHA-000050",
+          creatorWallet: null,
+          createdAt: "2026-10-06T00:00:00.000Z",
+          updatedAt: "2026-10-06T00:00:00.000Z",
+        };
+        delete savedArtwork.creationRequestId;
+        return route.fulfill({
+          status: 201,
+          headers: adminHeaders,
+          json: savedArtwork,
+        });
+      });
+      await context.route(`${apiOrigin}/admin/artworks/*`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        if (route.request().method() === "PATCH") {
+          const data = route.request().postDataJSON();
+          assert.equal(data.expectedUpdatedAt, savedArtwork.updatedAt);
+          for (const key of [
+            "artistId",
+            "category",
+            "creationYear",
+            "kathaId",
+            "creatorWallet",
+          ])
+            assert.ok(!(key in data));
+          if (rejectDraftSave)
+            return route.fulfill({
+              status: 409,
+              headers: adminHeaders,
+              json: { error: "PRIVATE_SAVE_SENTINEL" },
+            });
+          delete data.expectedUpdatedAt;
+          savedArtwork = {
+            ...savedArtwork,
+            ...data,
+            updatedAt: "2026-10-06T00:00:00.001Z",
+          };
+          return route.fulfill({ headers: adminHeaders, json: savedArtwork });
+        }
+        return route.fulfill({
+          headers: adminHeaders,
+          json: { artwork: savedArtwork, editable: !freezeDraft },
         });
       });
       await context.route(`${apiOrigin}/admin/artists`, async (route) => {
@@ -480,6 +548,93 @@ export async function runPublicBrowsingJourneys({
         fullPage: true,
       });
       await adminMain.getByRole("button", { name: "Previous draft page" }).click();
+      await expect(adminMain).toContainText("Showing 1–20 unpublished artworks");
+      await adminMain.getByRole("link", { name: "Document new artwork" }).click();
+      await expect(
+        adminMain.getByRole("button", { name: "Create artwork draft" }),
+      ).toBeVisible();
+      await audit("draft editor new");
+      await adminMain.getByRole("button", { name: "Create artwork draft" }).click();
+      await expect(adminMain.locator('[name="artistId"]')).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+      assert.equal(draftCreateCalls, 0);
+      await audit("draft editor validation");
+      for (const [name, value] of Object.entries({
+        artistId: "bbbbbbbb-1111-4111-8111-111111111111",
+        category: "PAUBHA",
+        creationYear: "2026",
+        title: "Synthetic documented Paubha",
+        materials: "Silk\nMineral pigment",
+        story: "Approved synthetic cultural story",
+        heightMm: "300",
+        widthMm: "200",
+      }))
+        await adminMain.locator(`[name="${name}"]`).fill(value);
+      await adminMain.getByRole("button", { name: "Create artwork draft" }).click();
+      await expect(adminMain).toContainText("Artwork documentation saved");
+      assert.equal(draftCreateCalls, 1);
+      assert.ok(retainedCreationId);
+      await expect(adminMain.locator('[name="artistId"]')).toHaveCount(0);
+      await expect(adminMain).toContainText("KATHA-PAUBHA-000050");
+      await audit("draft editor created");
+      await adminMain.getByRole("link", { name: "Open saved documentation" }).click();
+      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
+        "Artwork documentation",
+      );
+      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+        "Approved synthetic cultural story",
+      );
+      await audit("draft editor loaded by permanent ID");
+      await adminMain
+        .locator('[name="story"]')
+        .fill("Revised synthetic cultural story");
+      await adminMain
+        .getByRole("button", { name: "Save artwork documentation" })
+        .click();
+      await expect(adminMain.getByRole("alert")).toContainText(
+        "draft changed or editing has closed",
+      );
+      await expect(
+        adminMain.getByRole("button", { name: "Save artwork documentation" }),
+      ).toBeDisabled();
+      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+        "Revised synthetic cultural story",
+      );
+      await expect(adminMain).not.toContainText("PRIVATE_SAVE_SENTINEL");
+      await audit("draft editor conflict");
+      rejectDraftSave = false;
+      await adminMain.getByRole("button", { name: "Reload saved draft" }).click();
+      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+        "Approved synthetic cultural story",
+      );
+      await adminMain
+        .locator('[name="story"]')
+        .fill("Revised synthetic cultural story");
+      await adminMain
+        .getByRole("button", { name: "Save artwork documentation" })
+        .click();
+      await expect(adminMain).toContainText("Artwork documentation saved");
+      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+        "Revised synthetic cultural story",
+      );
+      await audit("draft editor saved");
+      freezeDraft = true;
+      await adminMain.getByRole("button", { name: "Reload saved draft" }).click();
+      await expect(adminMain).toContainText("Editing is closed");
+      await expect(
+        adminMain.getByRole("button", { name: "Save artwork documentation" }),
+      ).toBeDisabled();
+      await audit("draft editor frozen");
+      await page.evaluate(() => globalThis.scrollTo(0, 0));
+      await page.screenshot({
+        path: `${artifacts}/draft-editor-${width}.png`,
+        fullPage: true,
+      });
+      await adminMain
+        .getByRole("link", { name: "Artwork drafts", exact: true })
+        .click();
       await expect(adminMain).toContainText("Showing 1–20 unpublished artworks");
       draftMode = "UNAVAILABLE";
       await adminMain.getByRole("button", { name: "Refresh drafts" }).click();

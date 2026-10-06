@@ -238,6 +238,10 @@ export function createApi(
     app.get("/admin/artworks", async (c) =>
       c.json(await artworkDrafts.list(parseQuery(c, artworkDraftListQuerySchema))),
     );
+    app.get("/admin/artworks/:kathaId", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      return c.json(await artworkDrafts.read(kathaId));
+    });
     app.patch("/admin/artworks/:kathaId", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       return c.json(

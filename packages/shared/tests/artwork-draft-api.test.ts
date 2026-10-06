@@ -14,6 +14,7 @@ const input = {
   creationYear: 2026,
 };
 const response = {
+  materials: [],
   artistId: input.artistId,
   category: input.category,
   title: input.title,
@@ -62,6 +63,9 @@ it("requires whole, bounded dimensions when supplied", () => {
     ).toBe(false);
 });
 it("rejects mismatched or forged response identities and private extra fields", () => {
+  expect(
+    artworkDraftResponseSchema.safeParse({ ...response, materials: undefined }).success,
+  ).toBe(false);
   for (const patch of [
     { kathaId: "KATHA-MANDALA-000001" },
     { kathaId: "KATHA-PAUBHA-000000" },
@@ -126,4 +130,30 @@ it("bounds draft-list pagination and rejects privileged fields, duplicated or mi
     expect(artworkDraftListResponseSchema.safeParse({ ...page, items }).success).toBe(
       false,
     );
+});
+
+it("validates bounded individual material names and keeps permanent attribution out of updates", () => {
+  for (const materials of [
+    ["Silk", "silk"],
+    ["Pigment, silk"],
+    [""],
+    ["A\nB"],
+    Array.from({ length: 21 }, (_, i) => `Material ${i}`),
+  ]) {
+    expect(
+      artworkDraftCreateRequestSchema.safeParse({ ...input, materials }).success,
+    ).toBe(false);
+  }
+  expect(
+    artworkDraftCreateRequestSchema.parse({
+      ...input,
+      materials: [" Silk ", "Mineral pigment"],
+    }).materials,
+  ).toEqual(["Silk", "Mineral pigment"]);
+  expect(
+    artworkDraftUpdateRequestSchema.parse({
+      expectedUpdatedAt: "2026-10-06T00:00:00.000Z",
+      materials: [],
+    }).materials,
+  ).toEqual([]);
 });
