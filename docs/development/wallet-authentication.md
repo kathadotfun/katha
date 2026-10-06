@@ -46,7 +46,8 @@ The server reconstructs this format and checks its SHA-256 digest before accepti
 the signature. Kit imports the address as an Ed25519 public key and verifies the
 signature over exact message bytes. This is an application message-signing protocol;
 it is not a Wallet Standard `solana:signIn` implementation or transaction signature.
-The future wallet interface can use `solana:signMessage` to sign these bytes.
+The [web sign-in boundary](wallet-sign-in-web.md) uses the Kit Wallet Standard
+`solana:signMessage` feature to sign these exact bytes after validating the challenge.
 
 The domain is derived from `KATHA_PUBLIC_APP_ORIGIN`, never from request Host or
 Origin headers. The app authority must fit the existing domain constraint: DNS
@@ -72,7 +73,7 @@ origin and message commitment. Expiration is not extended by use. Logout stamps
 permanent revocation through the existing trigger.
 
 No cookie is set: clients explicitly send the bearer token in Authorization.
-The planned web boundary should keep it in memory and clear it on sign-out; do
+The web boundary keeps it in memory and clears it on sign-out or account changes; do
 not put tokens in URLs, logs, public documents or browser persistence. Bearer
 possession authorizes use until expiry/revocation, so use HTTPS outside trusted
 local development. There is no ambient cookie credential or cookie-based CSRF flow.

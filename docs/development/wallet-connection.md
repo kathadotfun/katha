@@ -21,7 +21,9 @@ There are no wallet-specific adapters, EVM injection, embedded wallets or new
 legacy/Umi types. Manifests and pnpm lockfile pin the compatible installation.
 
 `lib/wallet-connection.ts` creates a Kit `walletSigner` client only when the browser
-provider mounts. RPC/signing operations are not exposed. It disables persistence
+provider mounts. RPC/transaction signing operations are not exposed. A constrained
+`signLoginChallenge` action validates the canonical application challenge before
+using the plugin message-signing feature; see [wallet sign-in](wallet-sign-in-web.md). It disables persistence
 (`storage: null`) and automatic reconnection (`autoConnect: false`). The adapter
 projects stable observable snapshots to the UI: wallet IDs/names, selected public
 address, authorized account choices and supported v0/v1 transaction capabilities.
@@ -39,7 +41,8 @@ connection state updates.
 
 `WalletSession` remains the shared authenticated API session contract. Only its
 cluster type is reused here; a connected address is never fabricated into a session.
-Wallet authentication and transaction lifecycle controls follow separately.
+Wallet authentication uses a separate [session controller](wallet-sign-in-web.md).
+Transaction lifecycle controls follow separately.
 
 ## Configuration and use
 
@@ -79,8 +82,8 @@ private key is serialized, stored in browser storage, logged or included in Git.
 The boundary checks version support by set membership (`has(0)` / `has(1)`) rather
 than assuming every wallet supports newer transactions. A legacy/read-only account
 can connect, but the panel states when versioned transaction support is absent.
-Actual transaction version selection, simulation and wallet signatures belong to
-the subsequent transaction step; this step never calls a signing feature.
+Actual transaction version selection, simulation and transaction signatures belong
+to the subsequent transaction step. Explicit sign-in uses only message signing.
 
 ## Verification
 
@@ -100,10 +103,12 @@ changes, rejection sanitization, busy/disposed actions, cleanup and inert SSR be
 Browser tests register a synthetic Wallet Standard wallet after discovery starts:
 no-wallet state, rejected approval/retry, connection, account selection, disconnect,
 reconnection, wallet unregistration and refresh are tested at 320/768/1440 pixels.
-The synthetic signing methods fail if called; tests assert zero signing calls.
+Connection alone makes no signing calls. Extended session tests explicitly sign
+synthetic messages and assert zero transaction-signing calls.
 Full-page accessibility scans include open unavailable and connected panels.
 
 The browser fixture is test-only and uses public synthetic addresses. No real
-extension approval, message signature, chain transaction or private key is used.
+extension approval, chain transaction or private key is used. Message signatures
+in browser session checks use synthetic fixtures.
 A manual extension connection can be reviewed locally by the user; it is not claimed
 by the automated checks.

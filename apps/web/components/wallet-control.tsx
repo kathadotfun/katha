@@ -2,12 +2,20 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { disconnectedWalletSnapshot } from "../lib/wallet-connection";
-import { useWalletConnection } from "./wallet-provider";
+import { signedOutSnapshot } from "../lib/wallet-session";
+import { useWalletConnection, useWalletSession } from "./wallet-provider";
 const emptySubscribe = () => () => {};
+const serverSessionSnapshot = () => signedOutSnapshot;
 const serverSnapshot = () => disconnectedWalletSnapshot;
 
 export function WalletControl() {
   const connection = useWalletConnection();
+  const session = useWalletSession();
+  const auth = useSyncExternalStore(
+    session?.subscribe ?? emptySubscribe,
+    session?.getSnapshot ?? serverSessionSnapshot,
+    serverSessionSnapshot,
+  );
   const state = useSyncExternalStore(
     connection?.subscribe ?? emptySubscribe,
     connection?.getSnapshot ?? serverSnapshot,
@@ -52,6 +60,10 @@ export function WalletControl() {
             Connecting shares your public address. It does not sign you in or approve a
             transaction.
           </p>
+          <p className="mt-3 text-sm">
+            Network: {connection?.cluster === "devnet" ? "Devnet" : "Localnet"} · Test
+            environment
+          </p>
           {busy && (
             <p role="status" className="mt-3">
               {state.status === "pending"
@@ -94,6 +106,43 @@ export function WalletControl() {
                   This account does not support versioned Solana transactions.
                 </p>
               )}
+              <p role="status" className="mt-4">
+                {auth.status === "signed-in"
+                  ? "Signed in to Katha"
+                  : auth.status === "signing-in"
+                    ? "Waiting for sign-in approval…"
+                    : "Not signed in"}
+              </p>
+              {auth.session && (
+                <p className="mt-2 text-sm">
+                  Session expires {new Date(auth.session.expiresAt).toISOString()}
+                </p>
+              )}
+              {auth.status === "signed-out" &&
+                state.connected.supportsMessageSigning && (
+                  <button
+                    type="button"
+                    className="text-link mt-4 mr-4"
+                    disabled={busy || !session}
+                    onClick={() => void session?.signIn()}
+                  >
+                    Sign in to Katha
+                  </button>
+                )}
+              {auth.status !== "signed-out" && (
+                <button
+                  type="button"
+                  className="text-link mt-4 mr-4"
+                  onClick={() => session?.signOut()}
+                >
+                  {auth.status === "signing-in" ? "Cancel sign-in" : "Sign out"}
+                </button>
+              )}
+              {!state.connected.supportsMessageSigning && (
+                <p className="mt-3 text-sm text-muted">
+                  This account cannot sign sign-in messages.
+                </p>
+              )}
               <button
                 type="button"
                 className="text-link mt-4"
@@ -126,6 +175,11 @@ export function WalletControl() {
                 </li>
               ))}
             </ul>
+          )}
+          {auth.error && (
+            <p role="alert" className="mt-4 text-sm">
+              {auth.error}
+            </p>
           )}
           {error && (
             <p role="alert" className="mt-4 text-sm">

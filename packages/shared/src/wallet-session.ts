@@ -30,3 +30,58 @@ export type WalletChallengeRequest = z.infer<typeof walletChallengeRequestSchema
 export type WalletChallengeResponse = z.infer<typeof walletChallengeResponseSchema>;
 export type WalletVerifyRequest = z.infer<typeof walletVerifyRequestSchema>;
 export type WalletSession = z.infer<typeof walletSessionSchema>;
+
+/** The API and browser reconstruct the same exact UTF-8 sign-in statement. */
+export function walletSignInMessage(input: {
+  origin: string;
+  walletAddress: string;
+  cluster: WalletSession["cluster"];
+  nonce: string;
+  issuedAt: string;
+  expiresAt: string;
+  challengeId: string;
+}) {
+  return [
+    "Katha wallet sign-in",
+    "Sign this message to authenticate. This does not authorize a transaction.",
+    `Domain: ${new URL(input.origin).host}`,
+    `URI: ${input.origin}`,
+    `Wallet: ${input.walletAddress}`,
+    `Cluster: ${input.cluster}`,
+    `Nonce: ${input.nonce}`,
+    `Issued At: ${input.issuedAt}`,
+    `Expiration Time: ${input.expiresAt}`,
+    `Challenge ID: ${input.challengeId}`,
+  ].join("\n");
+}
+
+export function validateWalletSignInChallenge(
+  input: unknown,
+  context: { origin: string; walletAddress: string; cluster: WalletSession["cluster"] },
+  now = Date.now(),
+): WalletChallengeResponse {
+  const challenge = walletChallengeResponseSchema.parse(input);
+  const lines = challenge.message.split("\n");
+  const nonce = lines[6]?.replace(/^Nonce: /, "") ?? "";
+  const issuedAt = lines[7]?.replace(/^Issued At: /, "") ?? "";
+  const issued = Date.parse(issuedAt);
+  const expires = Date.parse(challenge.expiresAt);
+  if (
+    !/^[0-9a-f]{64}$/.test(nonce) ||
+    !z.iso.datetime().safeParse(issuedAt).success ||
+    issued > now ||
+    now >= expires ||
+    expires <= issued ||
+    expires - issued > 5 * 60_000 ||
+    challenge.message !==
+      walletSignInMessage({
+        ...context,
+        nonce,
+        issuedAt,
+        expiresAt: challenge.expiresAt,
+        challengeId: challenge.challengeId,
+      })
+  )
+    throw new Error("Invalid wallet sign-in challenge.");
+  return challenge;
+}

@@ -207,6 +207,8 @@ try {
         ...process.env,
         NODE_ENV: "production",
         KATHA_PUBLIC_API_ORIGIN: apiOrigin,
+        KATHA_PUBLIC_APP_ORIGIN: `http://127.0.0.1:${webPort}`,
+        KATHA_CLUSTER: "localnet",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },

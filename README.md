@@ -113,7 +113,9 @@ comparison with its documented features and inspections, and states that basic N
 can be cloned and does not independently prove authenticity.
 The header now connects Wallet Standard Solana wallets, displays authorized public
 accounts and handles account changes and disconnection. Connection does not sign in
-or approve transactions. Remaining API behavior and Marketplace
+or approve transactions. A separate sign-in signs a validated nonce challenge and
+keeps the API session in memory; sign-out and account changes clear it. The wallet
+panel displays the configured Localnet/Devnet test environment. Remaining API behavior and Marketplace
 business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -168,6 +170,7 @@ outside the current scope.
 - [Cultural homepage and featured artworks](docs/development/homepage.md)
 - [Public browsing and accessibility checks](docs/development/public-browsing-tests.md)
 - [Wallet Standard connection](docs/development/wallet-connection.md)
+- [Wallet sign-in and session handling](docs/development/wallet-sign-in-web.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)

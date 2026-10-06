@@ -1,3 +1,4 @@
+import { publicApiOrigin } from "../lib/public-api";
 import { WalletProvider } from "../components/wallet-provider";
 import { walletClusterSchema } from "@katha/shared";
 import { SiteHeader } from "../components/site-header";
@@ -23,6 +24,12 @@ export default function RootLayout({
           Skip to content
         </a>
         <WalletProvider
+          apiOrigin={publicApiOrigin(
+            process.env.KATHA_PUBLIC_API_ORIGIN ?? "http://localhost:3001",
+          )}
+          appOrigin={publicApiOrigin(
+            process.env.KATHA_PUBLIC_APP_ORIGIN ?? "http://localhost:3000",
+          )}
           cluster={walletClusterSchema.parse(process.env.KATHA_CLUSTER ?? "localnet")}
         >
           <SiteHeader />

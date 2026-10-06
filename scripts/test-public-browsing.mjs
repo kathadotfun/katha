@@ -1,3 +1,4 @@
+import { walletSignInMessage } from "../packages/shared/dist/index.js";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { mkdir } from "node:fs/promises";
@@ -71,6 +72,74 @@ export async function runPublicBrowsingJourneys({
       await audit("wallet unavailable");
       // Register a synthetic Wallet Standard wallet after discovery is running.
       // No extension, private key, signing or external network is involved.
+      let logoutCalls = 0;
+      let verifyCalls = 0;
+      let rejectVerification = true;
+      const walletAddress = "11111111111111111111111111111112";
+      await context.route(`${apiOrigin}/auth/**`, async (route) => {
+        const request = route.request();
+        const headers = {
+          "Access-Control-Allow-Origin": origin,
+          "Access-Control-Allow-Headers": "content-type,authorization",
+          "Access-Control-Allow-Methods": "POST,OPTIONS",
+          "Cache-Control": "no-store",
+        };
+        if (request.method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers });
+        if (request.url().endsWith("/logout")) {
+          logoutCalls++;
+          return route.fulfill({ status: 204, headers });
+        }
+        const input = request.postDataJSON();
+        if (request.url().endsWith("/challenge")) {
+          assert.equal(input.walletAddress, walletAddress);
+          assert.equal(input.cluster, "localnet");
+          const challengeId = "aaaaaaaa-1111-4111-8111-111111111111";
+          const expiresAt = new Date(Date.now() + 60_000).toISOString();
+          return route.fulfill({
+            headers,
+            json: {
+              challengeId,
+              expiresAt,
+              message: walletSignInMessage({
+                origin,
+                walletAddress,
+                cluster: "localnet",
+                nonce: "a".repeat(64),
+                issuedAt: new Date().toISOString(),
+                expiresAt,
+                challengeId,
+              }),
+            },
+          });
+        }
+        verifyCalls++;
+        assert.equal(input.walletAddress, walletAddress);
+        assert.equal(
+          input.signature,
+          globalThis.btoa(String.fromCharCode(...new Uint8Array(64))),
+        );
+        if (rejectVerification) {
+          rejectVerification = false;
+          return route.fulfill({
+            status: 401,
+            headers,
+            json: { message: "PRIVATE_AUTH_ERROR" },
+          });
+        }
+        return route.fulfill({
+          headers,
+          json: {
+            token: "a".repeat(64),
+            session: {
+              walletId: "bbbbbbbb-1111-4111-8111-111111111111",
+              walletAddress,
+              cluster: "localnet",
+              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+            },
+          },
+        });
+      });
       await page.evaluate(() => {
         const listeners = new Set();
         const accounts = [
@@ -90,6 +159,7 @@ export async function runPublicBrowsingJourneys({
         let connected = false;
         let reject = true;
         let signCalls = 0;
+        let transactionCalls = 0;
         let unregister;
         const wallet = {
           version: "1.0.0",
@@ -128,17 +198,26 @@ export async function runPublicBrowsingJourneys({
             },
             "solana:signMessage": {
               version: "1.0.0",
-              async signMessage() {
+              async signMessage(input) {
                 signCalls++;
-                throw new Error("No signing in connection tests");
+                if (
+                  !(input.message instanceof Uint8Array) ||
+                  !new globalThis.TextDecoder()
+                    .decode(input.message)
+                    .startsWith("Katha wallet sign-in\n")
+                )
+                  throw new Error("Unexpected message");
+                return [
+                  { signedMessage: input.message, signature: new Uint8Array(64) },
+                ];
               },
             },
             "solana:signTransaction": {
               version: "1.0.0",
               supportedTransactionVersions: [0, 1],
               async signTransaction() {
-                signCalls++;
-                throw new Error("No signing in connection tests");
+                transactionCalls++;
+                throw new Error("No transactions in session tests");
               },
             },
           },
@@ -153,6 +232,7 @@ export async function runPublicBrowsingJourneys({
         globalThis.__kathaWalletTest = {
           unregister: () => unregister(),
           signCalls: () => signCalls,
+          transactionCalls: () => transactionCalls,
         };
       });
       await walletPanel
@@ -172,6 +252,32 @@ export async function runPublicBrowsingJourneys({
       await expect(walletPanel.getByLabel("Wallet account")).toHaveValue(
         "11111111111111111111111111111112",
       );
+      await expect(walletPanel).toContainText("Network: Localnet");
+      await walletPanel
+        .getByRole("button", { name: "Sign in to Katha", exact: true })
+        .click();
+      await expect(walletPanel.getByRole("alert")).toContainText(
+        "Sign-in was not completed",
+      );
+      await expect(walletPanel).not.toContainText("PRIVATE_AUTH_ERROR");
+      await walletPanel
+        .getByRole("button", { name: "Sign in to Katha", exact: true })
+        .click();
+      await expect(walletPanel.getByRole("status")).toHaveText("Signed in to Katha");
+      await audit("wallet signed in");
+      await walletPanel.getByRole("button", { name: "Sign out", exact: true }).click();
+      await expect(walletPanel.getByRole("status")).toHaveText("Not signed in");
+      await expect.poll(() => logoutCalls).toBe(1);
+      await walletPanel
+        .getByRole("button", { name: "Sign in to Katha", exact: true })
+        .click();
+      await expect(walletPanel.getByRole("status")).toHaveText("Signed in to Katha");
+      await walletPanel
+        .getByLabel("Wallet account")
+        .selectOption("11111111111111111111111111111111");
+      await expect(walletPanel.getByRole("status")).toHaveText("Not signed in");
+      await expect.poll(() => logoutCalls).toBe(2);
+      assert.equal(verifyCalls, 3);
       await audit("wallet connected");
       await walletPanel.screenshot({ path: `${artifacts}/wallet-${width}.png` });
       await walletPanel.getByRole("button", { name: "Disconnect wallet" }).click();
@@ -185,6 +291,10 @@ export async function runPublicBrowsingJourneys({
       await expect(walletPanel).toContainText("No compatible Solana wallet found");
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.signCalls()),
+        3,
+      );
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         0,
       );
       await page.getByRole("button", { name: "Connect wallet", exact: true }).click();

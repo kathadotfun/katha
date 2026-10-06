@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { address, getAddressEncoder } from "@solana/kit";
+import { walletSignInMessage } from "@katha/shared";
 import type { WalletNamespace, WalletState } from "@solana/kit-plugin-wallet";
 import {
   createWalletBoundary,
@@ -13,7 +14,7 @@ function fixture() {
     address: "11111111111111111111111111111111",
     publicKey: new Uint8Array(32),
     chains: ["solana:localnet"],
-    features: [],
+    features: ["solana:signMessage"],
   } as unknown as Account;
   const second = {
     ...first,
@@ -26,7 +27,7 @@ function fixture() {
     name: "Synthetic wallet",
     chains: ["solana:localnet"],
     accounts: [first, second],
-    features: [],
+    features: ["solana:signMessage"],
     version: "1.0.0",
     icon: "data:image/png;base64,",
   } as unknown as NonNullable<WalletState["connected"]>["wallet"];
@@ -38,13 +39,19 @@ function fixture() {
   };
   const listeners = new Set<() => void>();
   let reject = false;
+  const signed: Uint8Array[] = [];
   const emit = (patch: Partial<WalletState>) => {
     state = { ...state, ...patch };
     for (const listener of listeners) listener();
   };
   const source: Pick<
     WalletNamespace,
-    "getState" | "subscribe" | "connect" | "disconnect" | "selectAccount"
+    | "getState"
+    | "subscribe"
+    | "connect"
+    | "disconnect"
+    | "selectAccount"
+    | "signMessage"
   > = {
     getState: () => state,
     subscribe: (listener) => {
@@ -69,6 +76,10 @@ function fixture() {
     disconnect: async () => {
       emit({ status: "disconnected", connected: null });
     },
+    signMessage: async (message) => {
+      signed.push(Uint8Array.from(message));
+      return new Uint8Array(64) as Awaited<ReturnType<WalletNamespace["signMessage"]>>;
+    },
     selectAccount: (account) => {
       if (state.connected) emit({ connected: { ...state.connected, account } });
     },
@@ -82,6 +93,7 @@ function fixture() {
     second,
     wallet,
     listeners,
+    signed,
     reject: () => {
       reject = true;
     },
@@ -167,4 +179,64 @@ test("real plugin is inert on the server and connection is not a wallet session"
   assert.equal(current.boundary.getSnapshot().connected, null);
   assert.deepEqual(current.boundary.getSnapshot().wallets, []);
   current.dispose();
+});
+
+test("sign-in boundary signs only matching canonical bytes and rejects wrong context before prompting", async () => {
+  const f = fixture();
+  await f.boundary.connect(f.boundary.getSnapshot().wallets[0]!.id);
+  const origin = "http://localhost:3000";
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  const challengeId = "aaaaaaaa-1111-4111-8111-111111111111";
+  const challenge = {
+    expiresAt,
+    challengeId,
+    message: walletSignInMessage({
+      origin,
+      walletAddress: f.first.address,
+      cluster: "localnet",
+      nonce: "a".repeat(64),
+      issuedAt: new Date().toISOString(),
+      expiresAt,
+      challengeId,
+    }),
+  };
+  const signature = await f.boundary.signLoginChallenge(
+    challenge,
+    origin,
+    new AbortController().signal,
+  );
+  assert.equal(signature.length, 88);
+  assert.deepEqual(f.signed[0], new TextEncoder().encode(challenge.message));
+  await assert.rejects(
+    f.boundary.signLoginChallenge(
+      { ...challenge, message: challenge.message + "\n" },
+      origin,
+      new AbortController().signal,
+    ),
+  );
+  await assert.rejects(
+    f.boundary.signLoginChallenge(
+      challenge,
+      "http://attacker.test",
+      new AbortController().signal,
+    ),
+  );
+  assert.equal(f.signed.length, 1);
+  const abort = new AbortController();
+  abort.abort();
+  await assert.rejects(f.boundary.signLoginChallenge(challenge, origin, abort.signal));
+  let finish!: (value: Awaited<ReturnType<WalletNamespace["signMessage"]>>) => void;
+  f.source.signMessage = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const pending = f.boundary.signLoginChallenge(
+    challenge,
+    origin,
+    new AbortController().signal,
+  );
+  f.boundary.selectAccount(f.second.address);
+  finish(new Uint8Array(64) as Awaited<ReturnType<WalletNamespace["signMessage"]>>);
+  await assert.rejects(pending);
+  f.boundary.dispose();
 });

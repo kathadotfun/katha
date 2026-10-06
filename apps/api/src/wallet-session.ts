@@ -4,6 +4,7 @@ import { validateWalletAddress, verifyWalletSignature } from "@katha/solana";
 import {
   walletChallengeRequestSchema,
   walletVerifyRequestSchema,
+  walletSignInMessage,
   type WalletSession,
 } from "@katha/shared";
 import type { WalletChallengeRecord } from "@katha/db";
@@ -22,18 +23,15 @@ export function challengeMessage(
     "id" | "domain" | "cluster" | "nonce" | "issuedAt" | "expiresAt"
   >,
 ) {
-  return [
-    "Katha wallet sign-in",
-    "Sign this message to authenticate. This does not authorize a transaction.",
-    `Domain: ${challenge.domain}`,
-    `URI: ${origin}`,
-    `Wallet: ${walletAddress}`,
-    `Cluster: ${challenge.cluster.toLowerCase()}`,
-    `Nonce: ${challenge.nonce}`,
-    `Issued At: ${challenge.issuedAt.toISOString()}`,
-    `Expiration Time: ${challenge.expiresAt.toISOString()}`,
-    `Challenge ID: ${challenge.id}`,
-  ].join("\n");
+  return walletSignInMessage({
+    origin,
+    walletAddress,
+    cluster: challenge.cluster === "LOCALNET" ? "localnet" : "devnet",
+    nonce: challenge.nonce,
+    issuedAt: challenge.issuedAt.toISOString(),
+    expiresAt: challenge.expiresAt.toISOString(),
+    challengeId: challenge.id,
+  });
 }
 
 export function createWalletSessions(

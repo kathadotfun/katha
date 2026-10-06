@@ -1,12 +1,24 @@
-import { address, createClient, getAddressEncoder } from "@solana/kit";
+import {
+  address,
+  createClient,
+  getAddressEncoder,
+  getBase64Decoder,
+} from "@solana/kit";
 import { walletSigner, type WalletNamespace } from "@solana/kit-plugin-wallet";
-import { walletClusterSchema, type WalletSession } from "@katha/shared";
+import {
+  walletClusterSchema,
+  validateWalletSignInChallenge,
+  type WalletChallengeResponse,
+  type WalletSession,
+} from "@katha/shared";
 
 type Cluster = WalletSession["cluster"];
 export type WalletConnectionSnapshot = Readonly<{
   status: ReturnType<WalletNamespace["getState"]>["status"];
   wallets: readonly { id: string; name: string }[];
   connected: null | {
+    walletId: string;
+    supportsMessageSigning: boolean;
     walletName: string;
     address: string;
     accounts: readonly string[];
@@ -26,7 +38,8 @@ export function createWalletBoundary(
   source: Pick<
     WalletNamespace,
     "getState" | "subscribe" | "connect" | "disconnect" | "selectAccount"
-  >,
+  > &
+    Partial<Pick<WalletNamespace, "signMessage">>,
   cluster: Cluster,
 ) {
   const chain = `solana:${walletClusterSchema.parse(cluster)}` as const;
@@ -76,6 +89,10 @@ export function createWalletBoundary(
         ) &&
         validAccount(connected.account)
           ? {
+              walletId: id(connected.wallet),
+              supportsMessageSigning:
+                connected.account.features.includes("solana:signMessage") &&
+                connected.wallet.features.includes("solana:signMessage"),
               walletName: name(connected.wallet.name),
               address: connected.account.address,
               accounts: connected.wallet.accounts
@@ -103,6 +120,41 @@ export function createWalletBoundary(
       throw new Error("Wallet action unavailable.");
   }
   return {
+    cluster,
+    async signLoginChallenge(
+      challenge: WalletChallengeResponse,
+      origin: string,
+      signal: AbortSignal,
+    ) {
+      available();
+      signal.throwIfAborted();
+      const before = read().connected;
+      if (!before?.supportsMessageSigning || !source.signMessage)
+        throw new Error("Wallet message signing unavailable.");
+      const parsed = validateWalletSignInChallenge(challenge, {
+        origin,
+        cluster,
+        walletAddress: before.address,
+      });
+      try {
+        const signature = await source.signMessage(
+          new TextEncoder().encode(parsed.message),
+          { abortSignal: signal },
+        );
+        signal.throwIfAborted();
+        const after = read().connected;
+        if (
+          disposed ||
+          after?.walletId !== before.walletId ||
+          after.address !== before.address ||
+          signature.length !== 64
+        )
+          throw new Error("Wallet changed.");
+        return getBase64Decoder().decode(signature);
+      } catch {
+        throw new Error("Wallet sign-in signature was not completed.");
+      }
+    },
     getSnapshot: () => snapshot,
     subscribe(listener: () => void) {
       listeners.add(listener);

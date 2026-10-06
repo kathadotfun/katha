@@ -98,6 +98,8 @@ export {
   walletVerifyRequestSchema,
   walletSessionSchema,
   walletSessionResponseSchema,
+  walletSignInMessage,
+  validateWalletSignInChallenge,
 } from "./wallet-session.js";
 export type {
   WalletChallengeRequest,
