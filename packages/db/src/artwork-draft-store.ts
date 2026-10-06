@@ -62,7 +62,7 @@ type UpdateResult =
   | { status: "not_found" | "conflict" };
 // The draft list and editor use the same conservative workflow boundary. Even
 // a prepared/failed operation freezes basic edits; this is not chain success.
-function lifecycleStarted(artworkId: string | typeof artworks.id) {
+export function lifecycleStarted(artworkId: string | typeof artworks.id) {
   return sql<boolean>`
     EXISTS (SELECT 1 FROM ${artworkMetadataVersions} WHERE ${artworkMetadataVersions.artworkId} = ${artworkId}) OR
     EXISTS (SELECT 1 FROM ${verifications} WHERE ${verifications.artworkId} = ${artworkId}) OR

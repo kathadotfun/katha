@@ -196,3 +196,15 @@ export {
   artworkDraftReadResponseSchema,
   type ArtworkDraftReadResponse,
 } from "./artwork-draft-api.js";
+
+export {
+  ARTWORK_MEDIA_MAX_BYTES,
+  artworkMediaMimeSchema,
+  artworkMediaRoleSchema,
+  artworkMediaUploadSchema,
+  artworkMediaUpdateSchema,
+  artworkMediaResponseSchema,
+  type ArtworkMediaUpload,
+  type ArtworkMediaUpdate,
+  type ArtworkMediaResponse,
+} from "./artwork-media-api.js";

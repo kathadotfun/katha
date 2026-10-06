@@ -1,4 +1,12 @@
 import {
+  ARTWORK_MEDIA_MAX_BYTES,
+  artworkMediaUploadSchema,
+  artworkMediaUpdateSchema,
+  artworkMediaResponseSchema,
+  type ArtworkMediaUpload,
+  type ArtworkMediaUpdate,
+} from "@katha/shared";
+import {
   artworkDraftCreateRequestSchema,
   artworkDraftUpdateRequestSchema,
   artworkDraftResponseSchema,
@@ -69,10 +77,12 @@ export function createWalletSessionApi(
       redirect: "error",
       headers: {
         Accept: "application/json",
-        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...(body && !(body instanceof FormData)
+          ? { "Content-Type": "application/json" }
+          : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      ...(body ? { body: body instanceof FormData ? body : JSON.stringify(body) } : {}),
       signal: AbortSignal.any([
         AbortSignal.timeout(10_000),
         ...(signal ? [signal] : []),
@@ -86,6 +96,8 @@ export function createWalletSessionApi(
       403: "FORBIDDEN",
       404: "NOT_FOUND",
       409: "CONFLICT",
+      413: "INVALID_REQUEST",
+      415: "INVALID_REQUEST",
     } as const;
     const code = codes[response.status as keyof typeof codes];
     if (code) throw new WalletSessionApiError(code);
@@ -97,6 +109,75 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readArtworkMedia(kathaId: string, token: string, signal: AbortSignal) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = artworkMediaResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/media`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async uploadArtworkMedia(
+      kathaId: string,
+      input: ArtworkMediaUpload,
+      file: File,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const data = artworkMediaUploadSchema.parse(input);
+      if (
+        file.size < 1 ||
+        file.size > ARTWORK_MEDIA_MAX_BYTES ||
+        file.type !== data.mimeType
+      )
+        throw new WalletSessionApiError("INVALID_REQUEST");
+      const form = new FormData();
+      form.set("metadata", JSON.stringify(data));
+      form.set("file", file, "upload");
+      const result = artworkMediaResponseSchema.parse(
+        await request(`/admin/artworks/${path.kathaId}/media`, form, token, signal),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.updatedAt === data.expectedUpdatedAt
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async updateArtworkMedia(
+      kathaId: string,
+      input: ArtworkMediaUpdate,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const data = artworkMediaUpdateSchema.parse(input);
+      const result = artworkMediaResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/media`,
+          data,
+          token,
+          signal,
+          "PATCH",
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.updatedAt === data.expectedUpdatedAt ||
+        result.items.length !== data.items.length ||
+        result.items.some((item, index) => item.id !== data.items[index]?.id)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readArtworkDraft(kathaId: string, token: string, signal: AbortSignal) {
       const path = artworkDraftParamsSchema.parse({ kathaId });
       const result = artworkDraftReadResponseSchema.parse(

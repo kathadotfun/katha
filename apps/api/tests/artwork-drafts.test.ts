@@ -1,3 +1,7 @@
+import { createArtworkMedia } from "../src/artwork-media.js";
+import type { ArtworkMediaStore } from "@katha/db";
+import { sha256Hex, artworkMediaResponseSchema } from "@katha/shared";
+import { StorageError, type StorageProvider } from "../src/storage.js";
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import type { ArtworkDraftStore, ArtworkRecord } from "@katha/db";
@@ -19,7 +23,7 @@ const input = {
   title: "Synthetic artwork",
   creationYear: 2026,
 };
-function fixture() {
+function fixture(mediaEnabled = false) {
   const now = new Date();
   const record: ArtworkRecord = {
     ...input,
@@ -77,6 +81,40 @@ function fixture() {
       record,
     })),
   };
+  const mediaStore: ArtworkMediaStore = {
+    read: vi.fn(async () => ({ artwork: record, items: [], editable: true })),
+    write: vi.fn<ArtworkMediaStore["write"]>(async (_kathaId, _updatedAt, build) => {
+      const values = await build([]);
+      return {
+        artwork: { ...record, updatedAt: new Date(record.updatedAt.getTime() + 1) },
+        editable: true,
+        items: values.map((value, position) => ({
+          ...value,
+          id: value.id ?? randomUUID(),
+          artworkId: record.id,
+          position,
+          role: value.role ?? "OTHER",
+          altText: value.altText ?? null,
+          caption: value.caption ?? null,
+          createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
+        })),
+      };
+    }),
+  };
+  const storage: StorageProvider = {
+    put: vi.fn(async ({ bytes, mimeType, visibility }) => {
+      const contentHash = await sha256Hex(bytes);
+      return {
+        storageKey: `${visibility.toLowerCase()}/${contentHash}.png`,
+        contentHash,
+        mimeType,
+        visibility,
+        byteSize: String(bytes.length),
+      };
+    }),
+    read: vi.fn(async () => new Uint8Array()),
+  };
   const admin = temporaryWallet().address;
   const verifier = temporaryWallet().address;
   const session: WalletSession = {
@@ -111,7 +149,10 @@ function fixture() {
     authorization,
     undefined,
     undefined,
-    createArtworkDrafts(store),
+    createArtworkDrafts(
+      store,
+      mediaEnabled ? createArtworkMedia(mediaStore, storage) : undefined,
+    ),
   );
   const post = (body: unknown, token?: string) =>
     app.request("/admin/artworks", {
@@ -122,7 +163,7 @@ function fixture() {
       },
       body: JSON.stringify(body),
     });
-  return { app, store, record, post, logs, chain };
+  return { app, store, record, post, logs, chain, mediaStore, storage };
 }
 it("creates a private draft with server identity and nullable content", async () => {
   const f = fixture();
@@ -479,4 +520,127 @@ it("reads draft content only for administrators, projecting materials and editin
   });
   expect(failed.status).toBe(500);
   expect(await failed.text()).not.toContain("PRIVATE_DRIVER_ERROR");
+});
+
+function mediaForm(expectedUpdatedAt: string, patch = {}) {
+  const data = new FormData();
+  data.set(
+    "metadata",
+    JSON.stringify({
+      expectedUpdatedAt,
+      mimeType: "image/png",
+      role: "FRONT",
+      visibility: "PRIVATE",
+      altText: "Synthetic photograph",
+      caption: null,
+      approvedPublic: false,
+      ...patch,
+    }),
+  );
+  data.set(
+    "file",
+    new File([new Uint8Array([1, 2, 3])], "PRIVATE_ORIGINAL_NAME.png", {
+      type: "image/png",
+    }),
+  );
+  return data;
+}
+it("authorizes all media routes before persistence or provider access", async () => {
+  const f = fixture(true);
+  for (const token of [undefined, "verifier", "outsider", "admin"]) {
+    const response = await f.app.request(`/admin/artworks/${f.record.kathaId}/media`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: mediaForm(f.record.updatedAt.toISOString()),
+    });
+    expect(response.status).toBe(token === "admin" ? 201 : token ? 403 : 401);
+    if (token === "admin") {
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+      expect(
+        artworkMediaResponseSchema.parse(await response.json()).items[0]?.visibility,
+      ).toBe("PRIVATE");
+    }
+  }
+  expect(f.mediaStore.write).toHaveBeenCalledTimes(1);
+  expect(f.storage.put).toHaveBeenCalledTimes(1);
+  expect(f.logs.join("")).not.toContain("PRIVATE_ORIGINAL_NAME");
+  for (const method of ["GET", "PATCH"]) {
+    const response = await f.app.request(`/admin/artworks/${f.record.kathaId}/media`, {
+      method,
+      headers: { Authorization: "Bearer verifier", "Content-Type": "application/json" },
+      ...(method === "PATCH" ? { body: "{}" } : {}),
+    });
+    expect(response.status).toBe(403);
+  }
+});
+it("rejects malformed multipart, forged publication, duplicate fields and provider failures safely", async () => {
+  const f = fixture(true);
+  const url = `/admin/artworks/${f.record.kathaId}/media`;
+  for (const patch of [
+    { visibility: "PUBLIC" },
+    { mimeType: "image/svg+xml" },
+    { role: "CONDITION", visibility: "PUBLIC", approvedPublic: true },
+    { storageKey: "public/forged.png" },
+  ]) {
+    expect(
+      (
+        await f.app.request(url, {
+          method: "POST",
+          headers: { Authorization: "Bearer admin" },
+          body: mediaForm(f.record.updatedAt.toISOString(), patch),
+        })
+      ).status,
+    ).toBe(400);
+  }
+  const duplicate = mediaForm(f.record.updatedAt.toISOString());
+  duplicate.append("file", new File(["private"], "private.png"));
+  expect(
+    (
+      await f.app.request(url, {
+        method: "POST",
+        headers: { Authorization: "Bearer admin" },
+        body: duplicate,
+      })
+    ).status,
+  ).toBe(400);
+  const oversized = mediaForm(f.record.updatedAt.toISOString());
+  oversized.set(
+    "file",
+    new File([new Uint8Array(8 * 1024 * 1024 + 1)], "oversized.png", {
+      type: "image/png",
+    }),
+  );
+  expect(
+    (
+      await f.app.request(url, {
+        method: "POST",
+        headers: { Authorization: "Bearer admin" },
+        body: oversized,
+      })
+    ).status,
+  ).toBe(413);
+  expect(f.mediaStore.write).not.toHaveBeenCalled();
+  expect(f.storage.put).not.toHaveBeenCalled();
+  f.storage.put = vi.fn(async () => {
+    throw new StorageError("INVALID_OBJECT");
+  });
+  expect(
+    (
+      await f.app.request(url, {
+        method: "POST",
+        headers: { Authorization: "Bearer admin" },
+        body: mediaForm(f.record.updatedAt.toISOString()),
+      })
+    ).status,
+  ).toBe(400);
+  f.storage.put = vi.fn(async () => {
+    throw new Error("PRIVATE_FILESYSTEM_PATH");
+  });
+  const failure = await f.app.request(url, {
+    method: "POST",
+    headers: { Authorization: "Bearer admin" },
+    body: mediaForm(f.record.updatedAt.toISOString()),
+  });
+  expect(failure.status).toBe(500);
+  expect(await failure.text()).not.toContain("PRIVATE_FILESYSTEM_PATH");
 });

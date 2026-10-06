@@ -1,3 +1,4 @@
+import type { ArtworkMediaUpload, ArtworkMediaUpdate } from "@katha/shared";
 import {
   walletSessionResponseSchema,
   type WalletSession,
@@ -112,6 +113,33 @@ export function createWalletSession(
     return result;
   }
   return {
+    readArtworkMedia(kathaId: string, signal: AbortSignal) {
+      return authorized(
+        (value) => api.readArtworkMedia(kathaId, value, signal),
+        signal,
+      );
+    },
+    uploadArtworkMedia(
+      kathaId: string,
+      input: ArtworkMediaUpload,
+      file: File,
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (value) => api.uploadArtworkMedia(kathaId, input, file, value, signal),
+        signal,
+      );
+    },
+    updateArtworkMedia(
+      kathaId: string,
+      input: ArtworkMediaUpdate,
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (value) => api.updateArtworkMedia(kathaId, input, value, signal),
+        signal,
+      );
+    },
     readArtworkDraft(kathaId: string, signal: AbortSignal) {
       return authorized(
         (value) => api.readArtworkDraft(kathaId, value, signal),

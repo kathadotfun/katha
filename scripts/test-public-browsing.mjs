@@ -1,3 +1,5 @@
+/* global Request */
+import { Buffer } from "node:buffer";
 import { walletSignInMessage } from "../packages/shared/dist/index.js";
 import { renderTransactionReviewPhase } from "../apps/web/tests/fixtures/transaction-review.mjs";
 import assert from "node:assert/strict";
@@ -210,6 +212,71 @@ export async function runPublicBrowsingJourneys({
           headers: adminHeaders,
           json: { artwork: savedArtwork, editable: !freezeDraft },
         });
+      });
+      let mediaPage = null;
+      let mediaWrites = 0;
+      let rejectMediaSave = true;
+      await context.route(`${apiOrigin}/admin/artworks/*/media`, async (route) => {
+        const request = route.request();
+        if (request.method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(request.headers().authorization, `Bearer ${"a".repeat(64)}`);
+        mediaPage ??= {
+          kathaId: savedArtwork.kathaId,
+          updatedAt: savedArtwork.updatedAt,
+          editable: true,
+          items: [],
+        };
+        if (request.method() === "POST") {
+          const form = await new Request("http://localhost/upload", {
+            method: "POST",
+            headers: { "Content-Type": request.headers()["content-type"] },
+            body: request.postDataBuffer(),
+          }).formData();
+          const data = JSON.parse(String(form.get("metadata")));
+          assert.equal(data.expectedUpdatedAt, mediaPage.updatedAt);
+          assert.equal(data.visibility, "PRIVATE");
+          assert.equal(data.approvedPublic, false);
+          const id = `dddddddd-1111-4111-8111-${String(mediaPage.items.length + 1).padStart(12, "0")}`;
+          mediaPage.items.push({
+            id,
+            role: data.role,
+            visibility: data.visibility,
+            altText: data.altText,
+            caption: data.caption,
+            kind: "IMAGE",
+            mimeType: data.mimeType,
+            byteSize: String(form.get("file").size),
+            contentHash: String(mediaPage.items.length + 1).repeat(64),
+            position: mediaPage.items.length,
+          });
+          mediaPage.updatedAt = new Date(
+            Date.parse(mediaPage.updatedAt) + 1,
+          ).toISOString();
+          mediaWrites++;
+          return route.fulfill({ status: 201, headers: adminHeaders, json: mediaPage });
+        }
+        if (request.method() === "PATCH") {
+          const data = request.postDataJSON();
+          assert.equal(data.expectedUpdatedAt, mediaPage.updatedAt);
+          if (rejectMediaSave)
+            return route.fulfill({
+              status: 409,
+              headers: adminHeaders,
+              json: { error: "PRIVATE_MEDIA_SENTINEL" },
+            });
+          mediaPage.items = data.items.map((item, position) => {
+            const existing = mediaPage.items.find((value) => value.id === item.id);
+            const { approvedPublic, ...fields } = item;
+            if (item.visibility === "PUBLIC") assert.equal(approvedPublic, true);
+            return { ...existing, ...fields, position };
+          });
+          mediaPage.updatedAt = new Date(
+            Date.parse(mediaPage.updatedAt) + 1,
+          ).toISOString();
+          mediaWrites++;
+        }
+        return route.fulfill({ headers: adminHeaders, json: mediaPage });
       });
       await context.route(`${apiOrigin}/admin/artists`, async (route) => {
         if (route.request().method() === "OPTIONS")
@@ -620,6 +687,89 @@ export async function runPublicBrowsingJourneys({
         "Revised synthetic cultural story",
       );
       await audit("draft editor saved");
+      await adminMain.getByRole("link", { name: "Manage artwork media" }).click();
+      await expect(adminMain).toContainText("No artwork files yet");
+      await audit("media empty");
+      await adminMain.getByRole("button", { name: "Upload artwork file" }).click();
+      await expect(adminMain.locator('[name="file"]')).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
+      assert.equal(mediaWrites, 0);
+      await audit("media upload validation");
+      for (const caption of [
+        "Synthetic front photograph",
+        "Synthetic detail photograph",
+      ]) {
+        await adminMain.locator('[name="file"]').setInputFiles({
+          name: "synthetic.png",
+          mimeType: "image/png",
+          buffer: Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        });
+        await adminMain.locator('[name="caption"]').fill(caption);
+        await adminMain.getByRole("button", { name: "Upload artwork file" }).click();
+        await expect(adminMain).toContainText("Artwork media saved");
+        await expect(adminMain.locator('[name="file"]')).toHaveValue("");
+      }
+      assert.equal(mediaWrites, 2);
+      await expect(adminMain).toContainText("Stored visibility: Private");
+      await audit("media private uploads");
+      await adminMain.getByRole("button", { name: "Move file 2 earlier" }).click();
+      await expect(
+        adminMain.getByRole("status").filter({ hasText: "File moved" }),
+      ).toContainText("position 1");
+      await adminMain.getByRole("button", { name: "Save media choices" }).click();
+      await expect(adminMain.getByRole("alert")).toContainText(
+        "could not be confirmed",
+      );
+      await expect(
+        adminMain.getByRole("button", { name: "Save media choices" }),
+      ).toBeDisabled();
+      await expect(adminMain).not.toContainText("PRIVATE_MEDIA_SENTINEL");
+      await audit("media conflict");
+      rejectMediaSave = false;
+      await adminMain.getByRole("button", { name: "Reload media" }).click();
+      await expect(
+        adminMain.getByRole("button", { name: "Save media choices" }),
+      ).toBeEnabled();
+      await adminMain.getByRole("button", { name: "Move file 2 earlier" }).click();
+      const publicId = mediaPage.items[1].id;
+      await adminMain.locator(`[name="visibility:${publicId}"]`).selectOption("PUBLIC");
+      await adminMain.getByRole("button", { name: "Save media choices" }).click();
+      await expect(
+        adminMain.locator(`[name="approvedPublic:${publicId}"]`),
+      ).toHaveAttribute("aria-invalid", "true");
+      assert.equal(mediaWrites, 2);
+      await adminMain.locator(`[name="approvedPublic:${publicId}"]`).check();
+      await adminMain
+        .locator(`[name="altText:${publicId}"]`)
+        .fill("Approved synthetic photograph of Nepali artwork");
+      await adminMain.getByRole("button", { name: "Save media choices" }).click();
+      await expect(adminMain).toContainText("Stored visibility: Public");
+      assert.equal(mediaWrites, 3);
+      assert.equal(mediaPage.items[0].id, publicId);
+      await audit("media approved and reordered");
+      mediaPage.editable = false;
+      await adminMain.getByRole("button", { name: "Reload media" }).click();
+      await expect(adminMain).toContainText("Media editing is closed");
+      await expect(
+        adminMain.getByRole("button", { name: "Upload artwork file" }),
+      ).toBeDisabled();
+      await audit("media frozen");
+      await page.evaluate(() => globalThis.scrollTo(0, 0));
+      await page.screenshot({
+        path: `${artifacts}/media-admin-${width}.png`,
+        fullPage: true,
+      });
+      await adminMain
+        .getByRole("link", { name: "Artwork documentation", exact: true })
+        .click();
+      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+        "Revised synthetic cultural story",
+      );
       freezeDraft = true;
       await adminMain.getByRole("button", { name: "Reload saved draft" }).click();
       await expect(adminMain).toContainText("Editing is closed");

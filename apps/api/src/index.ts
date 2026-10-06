@@ -1,3 +1,5 @@
+import { createArtworkMediaStore } from "@katha/db";
+import { createArtworkMedia } from "./artwork-media.js";
 import { createNfcResolution } from "./nfc-resolution.js";
 import { createNfcResolutionStore } from "@katha/db";
 import { createNfcTags } from "./nfc-tags.js";
@@ -99,7 +101,10 @@ function startApi() {
     authorization,
     createArtists(createArtistStore(database.db)),
     createPublicArtists(createPublicArtistStore(database.db)),
-    createArtworkDrafts(createArtworkDraftStore(database.db)),
+    createArtworkDrafts(
+      createArtworkDraftStore(database.db),
+      createArtworkMedia(createArtworkMediaStore(database.db), storage),
+    ),
     createArtworkDiscovery(
       createPublicArtworkStore(
         database.db,

@@ -1,3 +1,8 @@
+import {
+  ARTWORK_MEDIA_MAX_BYTES,
+  artworkMediaUploadSchema,
+  artworkMediaUpdateSchema,
+} from "@katha/shared";
 import type { NfcResolutionBoundary } from "./nfc-resolution.js";
 import { nfcResolutionQuerySchema } from "@katha/shared";
 import type { NfcTagsBoundary } from "./nfc-tags.js";
@@ -233,6 +238,60 @@ export function createApi(
     app.get("/artists/:slug", async (c) =>
       c.json(await publicArtists.detail(parseParams(c, artistSlugParamsSchema).slug)),
     );
+  }
+  if (artworkDrafts?.media) {
+    const media = artworkDrafts.media;
+    app.get("/admin/artworks/:kathaId/media", async (c) =>
+      c.json(await media.read(parseParams(c, artworkDraftParamsSchema).kathaId)),
+    );
+    app.patch("/admin/artworks/:kathaId/media", async (c) =>
+      c.json(
+        await media.update(
+          parseParams(c, artworkDraftParamsSchema).kathaId,
+          await parseJson(c, artworkMediaUpdateSchema),
+        ),
+      ),
+    );
+    app.post("/admin/artworks/:kathaId/media", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      if (
+        c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !==
+        "multipart/form-data"
+      )
+        throw new DomainError("UNSUPPORTED_MEDIA_TYPE");
+      let form: FormData;
+      try {
+        form = await c.req.raw.formData();
+      } catch {
+        throw new DomainError("INVALID_REQUEST");
+      }
+      const keys = [...form.keys()];
+      if (keys.length !== 2 || !keys.includes("metadata") || !keys.includes("file"))
+        throw new DomainError("INVALID_REQUEST");
+      const file = form.get("file");
+      const raw = form.get("metadata");
+      if (!(file instanceof File) || typeof raw !== "string" || raw.length > 4096)
+        throw new DomainError("INVALID_REQUEST");
+      let input: unknown;
+      try {
+        input = JSON.parse(raw);
+      } catch {
+        throw new DomainError("INVALID_REQUEST");
+      }
+      if (file.size > ARTWORK_MEDIA_MAX_BYTES)
+        throw new DomainError("PAYLOAD_TOO_LARGE");
+      const parsed = artworkMediaUploadSchema.safeParse(input);
+      if (!parsed.success || file.type !== parsed.data.mimeType)
+        throw new DomainError("INVALID_REQUEST");
+      return c.json(
+        await media.upload(
+          kathaId,
+          parsed.data,
+          new Uint8Array(await file.arrayBuffer()),
+        ),
+        201,
+      );
+    });
   }
   if (artworkDrafts) {
     app.get("/admin/artworks", async (c) =>

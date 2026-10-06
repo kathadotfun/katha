@@ -73,7 +73,8 @@ with category filtering and a publication gate, plus public artwork details with
 finalized attestation summaries and explicit indexed ownership/freshness. A local
 storage provider validates content-addressed bytes with separate public/private
 namespaces. Authorized document preparation now preserves canonical public metadata
-and private condition bytes; media upload workflows remain planned. Internal
+and private condition bytes. Administrators can upload bounded media, order it, and
+explicitly approve public copies while keeping condition evidence private. Internal
 unsigned-operation helpers now authorize and simulate exact wallet transactions,
 preserving idempotent intents and immutable preparation history. The admin registration
 preparation endpoint now binds approved metadata and immutable identity. A verifier
@@ -178,6 +179,7 @@ outside the current scope.
 - [Artist onboarding administration](docs/development/artist-onboarding-web.md)
 - [Artwork draft administration](docs/development/artwork-draft-list-web.md)
 - [Structured artwork documentation editor](docs/development/artwork-draft-editor-web.md)
+- [Artwork media administration](docs/development/artwork-media-administration.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)

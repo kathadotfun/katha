@@ -3,9 +3,10 @@
 The API's `StorageProvider` boundary exposes `put({ bytes, mimeType, visibility })`
 and `read(reference)`. `createLocalStorageProvider({ root, maxBytes })` supplies the
 local development implementation. Construction/import does not create directories
-or read environment files. [Canonical document preparation](document-preparation.md) and future media workflows
+or read environment files. [Canonical document preparation](document-preparation.md) and [media administration](artwork-media-administration.md)
 inject this boundary. Approved public delivery uses that document service; the
-provider itself mounts no directory and adds no upload or private download route.
+provider itself mounts no directory. The admin media API handles uploads; no private
+download route is exposed.
 
 ## References and immutable writes
 
@@ -43,8 +44,8 @@ step; storage hashes bytes without rewriting JSON.
 
 Empty objects are rejected. The default object limit is 10 MiB, configurable up to
 50 MiB. JSON documents additionally have a fixed 1 MiB ceiling. Validation occurs
-before filesystem writes. HTTP body limits remain independent; multipart uploads
-and their limits belong to the later media administration step.
+before filesystem writes. HTTP body limits remain independent. Admin media uploads allow an 8 MiB file
+within a 10 MiB multipart body and exclude JSON; canonical JSON uses the document service.
 
 ## Filesystem and configuration
 

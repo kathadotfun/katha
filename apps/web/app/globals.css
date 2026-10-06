@@ -394,7 +394,8 @@
     font-weight: 500;
   }
   .admin-form input,
-  .admin-form textarea {
+  .admin-form textarea,
+  .admin-form select {
     display: block;
     width: 100%;
     min-width: 0;

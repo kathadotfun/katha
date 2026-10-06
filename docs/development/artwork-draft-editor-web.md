@@ -32,7 +32,8 @@ creator-wallet snapshot and identity are displayed as immutable information.
 Updates omit these fields entirely, even if form data is tampered with. Success
 shows a saved confirmation and replaces the form with returned content and the
 new concurrency timestamp. No action registers, verifies, mints or publishes a work.
-Media management follows in its separate workflow.
+Choose **Manage artwork media** on a saved work to open its
+[upload, ordering and visibility workflow](artwork-media-administration.md).
 
 ## Retry and review
 

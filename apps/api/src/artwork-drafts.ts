@@ -1,3 +1,4 @@
+import type { ArtworkMediaBoundary } from "./artwork-media.js";
 import type { ArtworkRecord, ArtworkDraftStore } from "@katha/db";
 import {
   artworkDraftReadResponseSchema,
@@ -44,8 +45,12 @@ function response(record: ArtworkRecord, materials: string[] = []) {
   });
 }
 
-export function createArtworkDrafts(store: ArtworkDraftStore) {
+export function createArtworkDrafts(
+  store: ArtworkDraftStore,
+  media?: ArtworkMediaBoundary,
+) {
   return {
+    media,
     async read(kathaId: string) {
       const parsed = artworkDraftParamsSchema.safeParse({ kathaId });
       if (!parsed.success) throw new DomainError("INVALID_REQUEST");

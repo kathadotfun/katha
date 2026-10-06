@@ -151,6 +151,12 @@ function EditorWorkspace({
           >
             Open saved documentation
           </Link>
+          <Link
+            className="text-link mt-4 inline-block ml-6"
+            href={`/admin/artworks/${artwork.kathaId}/media`}
+          >
+            Manage artwork media
+          </Link>
           <p className="mt-4 text-sm text-muted">
             Permanent identity, artist, category and creation year cannot be edited.
             Lifecycle records can close the editing window independently.

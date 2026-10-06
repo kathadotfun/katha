@@ -1,3 +1,11 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createArtworkMediaStore, createPublicDocumentStore } from "@katha/db";
+import { artworkMediaResponseSchema } from "@katha/shared";
+import { createArtworkMedia } from "../src/artwork-media.js";
+import { createLocalStorageProvider } from "../src/local-storage.js";
+import { createPublicDocuments } from "../src/public-documents.js";
 import { artworkMetadataVersions, blockchainOperations } from "@katha/db";
 import { createArtworkDraftStore } from "@katha/db";
 import {
@@ -556,6 +564,10 @@ it("creates and edits private drafts with signed admin authorization, retry roll
   const freshUrl = new URL(url);
   freshUrl.pathname = `/${databaseName}`;
   const database = createDatabase(freshUrl.toString());
+  const mediaDirectory = await mkdtemp(join(tmpdir(), "katha-media-test-"));
+  const mediaStorage = createLocalStorageProvider({
+    root: join(mediaDirectory, ".storage"),
+  });
   let databaseCreated = false;
   const admin = temporaryWallet();
   const creator = temporaryWallet();
@@ -584,7 +596,10 @@ it("creates and edits private drafts with signed admin authorization, retry roll
     authorization,
     undefined,
     createPublicArtists(createPublicArtistStore(database.db)),
-    createArtworkDrafts(createArtworkDraftStore(database.db)),
+    createArtworkDrafts(
+      createArtworkDraftStore(database.db),
+      createArtworkMedia(createArtworkMediaStore(database.db), mediaStorage),
+    ),
   );
   const post = (path: string, body: unknown, token?: string) =>
     app.request(path, {
@@ -829,6 +844,132 @@ it("creates and edits private drafts with signed admin authorization, retry roll
     expect(materialClear.status).toBe(200);
     latest = artworkDraftResponseSchema.parse(await materialClear.json());
     expect(latest.materials).toEqual([]);
+    const mediaDraft = artworkDraftResponseSchema.parse(
+      await (
+        await post(
+          "/admin/artworks",
+          { ...draft, creationRequestId: randomUUID(), title: "Synthetic media draft" },
+          session.token,
+        )
+      ).json(),
+    );
+    const mediaPath = `/admin/artworks/${mediaDraft.kathaId}/media`;
+    const mediaRead = async () =>
+      artworkMediaResponseSchema.parse(
+        await (
+          await app.request(mediaPath, {
+            headers: { Authorization: `Bearer ${session.token}` },
+          })
+        ).json(),
+      );
+    const mediaUpload = (stamp: string, role: string, seed: number) => {
+      const bytes = new Uint8Array(24);
+      bytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
+      bytes.set([73, 72, 68, 82], 12);
+      bytes[20] = seed;
+      const form = new FormData();
+      form.set(
+        "metadata",
+        JSON.stringify({
+          expectedUpdatedAt: stamp,
+          mimeType: "image/png",
+          role,
+          visibility: "PRIVATE",
+          altText: "Synthetic photograph",
+          caption: null,
+          approvedPublic: false,
+        }),
+      );
+      form.set(
+        "file",
+        new File([bytes], "PRIVATE_TEST_NAME.png", { type: "image/png" }),
+      );
+      return app.request(mediaPath, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.token}` },
+        body: form,
+      });
+    };
+    let mediaPage = await mediaRead();
+    expect(mediaPage.items).toEqual([]);
+    expect((await mediaUpload(mediaPage.updatedAt, "FRONT", 1)).status).toBe(201);
+    mediaPage = await mediaRead();
+    expect((await mediaUpload(mediaDraft.updatedAt, "DETAIL", 2)).status).toBe(409);
+    const publicDelivery = createPublicDocuments(
+      createPublicDocumentStore(database.db),
+      mediaStorage,
+    );
+    await expect(
+      publicDelivery.read(`${mediaPage.items[0]!.contentHash}.png`),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect((await mediaUpload(mediaPage.updatedAt, "DETAIL", 2)).status).toBe(201);
+    mediaPage = await mediaRead();
+    const originalMedia = mediaPage;
+    const reorder = {
+      expectedUpdatedAt: mediaPage.updatedAt,
+      items: [...mediaPage.items].reverse().map((item, index) => ({
+        id: item.id,
+        role: index === 0 ? "HERO" : "FRONT",
+        visibility: "PUBLIC",
+        altText: "Approved synthetic artwork photograph",
+        caption: null,
+        approvedPublic: true,
+      })),
+    };
+    expect(
+      (await patch(mediaDraft.kathaId + "/media", reorder, session.token)).status,
+    ).toBe(200);
+    mediaPage = await mediaRead();
+    expect(mediaPage.items.map((item) => item.id)).toEqual(
+      [...originalMedia.items].reverse().map((item) => item.id),
+    );
+    expect(mediaPage.items.map((item) => item.position)).toEqual([0, 1]);
+    expect(
+      (await publicDelivery.read(`${mediaPage.items[0]!.contentHash}.png`)).bytes
+        .length,
+    ).toBe(24);
+    const storeMedia = createArtworkMediaStore(database.db);
+    await expect(
+      storeMedia.write(mediaDraft.kathaId, mediaPage.updatedAt, async (items) =>
+        items.map((item) => ({ ...item, role: "HERO" })),
+      ),
+    ).rejects.toThrow();
+    expect(await mediaRead()).toEqual(mediaPage);
+    const forged = {
+      expectedUpdatedAt: mediaPage.updatedAt,
+      items: reorder.items.map((item, index) => ({
+        ...item,
+        id: index === 0 ? randomUUID() : item.id,
+      })),
+    };
+    expect(
+      (await patch(mediaDraft.kathaId + "/media", forged, session.token)).status,
+    ).toBe(409);
+    const hide = {
+      expectedUpdatedAt: mediaPage.updatedAt,
+      items: mediaPage.items.map((item) => ({
+        id: item.id,
+        role: item.role,
+        visibility: "PRIVATE",
+        altText: item.altText,
+        caption: item.caption,
+        approvedPublic: false,
+      })),
+    };
+    expect(
+      (await patch(mediaDraft.kathaId + "/media", hide, session.token)).status,
+    ).toBe(200);
+    mediaPage = await mediaRead();
+    await expect(
+      publicDelivery.read(`${mediaPage.items[0]!.contentHash}.png`),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const uploads = await Promise.all([
+      mediaUpload(mediaPage.updatedAt, "DETAIL", 3),
+      mediaUpload(mediaPage.updatedAt, "DETAIL", 4),
+    ]);
+    expect(uploads.map((item) => item.status).sort()).toEqual([201, 409]);
+    mediaPage = await mediaRead();
+    expect(mediaPage.items).toHaveLength(3);
     const before = await database.db.query.artworkIdCounters.findFirst({
       where: (row, { eq }) => eq(row.category, "PAUBHA"),
     });
@@ -931,6 +1072,15 @@ it("creates and edits private drafts with signed admin authorization, retry roll
       finalizedAt,
       updatedAt: finalizedAt,
     });
+    await database.db.insert(artworkMetadataVersions).values({
+      artworkId: mediaDraft.id,
+      version: 1,
+      status: "DRAFT",
+      authorityWallet: admin.address,
+    });
+    expect((await mediaRead()).editable).toBe(false);
+    expect((await mediaUpload(mediaPage.updatedAt, "DETAIL", 5)).status).toBe(409);
+
     expect(
       (
         await patch(
@@ -1116,6 +1266,7 @@ it("creates and edits private drafts with signed admin authorization, retry roll
       expect(logs.join("")).not.toContain(secret);
   } finally {
     await database.close();
+    await rm(mediaDirectory, { recursive: true, force: true });
     try {
       if (databaseCreated)
         await adminDatabase.db.execute(`DROP DATABASE "${databaseName}"`);

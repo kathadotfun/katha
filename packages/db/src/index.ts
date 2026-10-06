@@ -195,3 +195,9 @@ export {
 } from "./nfc-tag-store.js";
 
 export { createNfcResolutionStore, type NfcResolutionStore } from "./nfc-tag-store.js";
+
+export {
+  createArtworkMediaStore,
+  MediaStoreConflict,
+  type ArtworkMediaStore,
+} from "./artwork-media-store.js";
