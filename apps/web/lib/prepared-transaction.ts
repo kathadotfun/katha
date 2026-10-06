@@ -10,16 +10,20 @@ import {
   getPublicKeyFromAddress,
   verifySignature,
   address,
+  unwrapOption,
 } from "@solana/kit";
 import {
   unsignedOperationResponseSchema,
   sha256Hex,
+  registrationIdentitySchema,
+  type RegistrationIdentity,
   type UnsignedOperationResponse,
 } from "@katha/shared";
 import {
   KATHA_REGISTRY_PROGRAM_ADDRESS,
   identifyKathaRegistryInstruction,
   KathaRegistryInstruction,
+  ArtworkCategory,
   parseKathaRegistryInstruction,
   findArtworkPda,
   findConfigPda,
@@ -64,6 +68,7 @@ export async function inspectPreparedTransaction(
     cluster: "localnet" | "devnet";
     kind: UnsignedOperationResponse["kind"];
     kathaId: string;
+    registration?: RegistrationIdentity;
   },
 ) {
   const operation = unsignedOperationResponseSchema.parse(input);
@@ -113,6 +118,25 @@ export async function inspectPreparedTransaction(
       parsed.data.kathaId !== operation.kathaId)
   )
     throw new Error("Registry artwork identity mismatch.");
+  if (context.registration) {
+    const expected = registrationIdentitySchema.parse(context.registration);
+    const categories = {
+      MANDALA: ArtworkCategory.Mandala,
+      PAUBHA: ArtworkCategory.Paubha,
+      THANGKA: ArtworkCategory.Thangka,
+    };
+    if (
+      parsed.instructionType !== KathaRegistryInstruction.RegisterArtwork ||
+      parsed.data.artistId !== expected.artistId ||
+      unwrapOption(parsed.data.creatorWallet) !== expected.creatorWallet ||
+      parsed.data.category !== categories[expected.category] ||
+      parsed.data.creationYear !== expected.creationYear ||
+      Array.from(parsed.data.authorshipEvidenceHash, (value) =>
+        value.toString(16).padStart(2, "0"),
+      ).join("") !== expected.authorshipEvidenceHash
+    )
+      throw new Error("Registration attribution mismatch.");
+  }
   return {
     operation,
     transaction: {

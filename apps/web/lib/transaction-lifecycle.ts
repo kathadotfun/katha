@@ -1,6 +1,7 @@
 import type {
   UnsignedOperationResponse,
   ArtworkProvenanceResponse,
+  RegistrationIdentity,
 } from "@katha/shared";
 import {
   inspectPreparedTransaction,
@@ -50,6 +51,11 @@ export function createTransactionLifecycle(
     kathaId: string,
     signal: AbortSignal,
   ) => Promise<ArtworkProvenanceResponse>,
+  indexed?: (
+    operation: UnsignedOperationResponse,
+    signature: string,
+    signal: AbortSignal,
+  ) => Promise<boolean>,
 ) {
   let state = idleTransactionSnapshot;
   let wire: string | null = null;
@@ -162,6 +168,11 @@ export function createTransactionLifecycle(
     finalized = true;
     publish({ phase: "indexing-delay", error: null });
     try {
+      if (indexed) {
+        const seen = await indexed(operation, state.signature!, signal());
+        if (version === generation && !disposed && seen) publish({ phase: "indexed" });
+        return;
+      }
       const history = await provenance(operation.kathaId, signal());
       if (version !== generation || disposed) return;
       if (
@@ -184,7 +195,9 @@ export function createTransactionLifecycle(
     },
     async load(
       input: unknown,
-      expected: Pick<UnsignedOperationResponse, "kind" | "kathaId">,
+      expected: Pick<UnsignedOperationResponse, "kind" | "kathaId"> & {
+        registration?: RegistrationIdentity;
+      },
     ) {
       if (
         active ||

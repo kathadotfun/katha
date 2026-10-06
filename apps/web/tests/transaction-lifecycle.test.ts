@@ -124,6 +124,15 @@ async function fixture(version: 0 | 1 = 0) {
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    readRegistration: async () => {
+      throw new Error("unused");
+    },
+    prepareMetadata: async () => {
+      throw new Error("unused");
+    },
+    prepareRegistration: async () => {
+      throw new Error("unused");
+    },
     readArtworkMedia: async () => {
       throw new Error("Unused");
     },
@@ -560,4 +569,36 @@ test("Kit RPC checks genesis, preserves simulation bytes and submits once with p
     globalThis.fetch = originalFetch;
     f.flow.dispose();
   }
+});
+
+test("protected registration indexing checks preserve finalized receipts during read outages", async () => {
+  const f = await fixture();
+  let indexed = false,
+    unavailable = true;
+  const flow = createTransactionLifecycle(
+    f.connection,
+    f.session,
+    f.rpc,
+    async () => {
+      throw new Error("Unpublished artwork has no public provenance");
+    },
+    async (operation, signature) => {
+      assert.equal(operation.operationId, f.operation.operationId);
+      assert.equal(signature, f.signature);
+      if (unavailable) throw new Error("Synthetic protected read outage");
+      return indexed;
+    },
+  );
+  await flow.load(f.operation, f.operation);
+  await flow.approveAndSend();
+  f.setStatus("FINALIZED");
+  await flow.checkConfirmation();
+  assert.equal(flow.getSnapshot().phase, "indexing-delay");
+  unavailable = false;
+  indexed = true;
+  await flow.checkConfirmation();
+  assert.equal(flow.getSnapshot().phase, "indexed");
+  assert.equal(f.calls.filter((call) => call === "submit").length, 1);
+  flow.dispose();
+  f.flow.dispose();
 });

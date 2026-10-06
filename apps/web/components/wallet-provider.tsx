@@ -71,6 +71,25 @@ export function WalletProvider({
       createTransactionRpc(cluster, rpcUrl),
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
+      async (operation, signature, signal) => {
+        if (operation.kind === "REGISTER_ARTWORK") {
+          const review = await auth.readRegistration(operation.kathaId, signal);
+          return (
+            review.registration.receipt?.status === "FINALIZED" &&
+            review.registration.receipt.signature === signature &&
+            review.registration.receipt.indexed
+          );
+        }
+        const history = await createPublicApi(apiOrigin).provenance(
+          operation.kathaId,
+          { limit: "100" },
+          { signal },
+        );
+        return (
+          history.chain.cluster.toLowerCase() === operation.cluster &&
+          history.items.some((item) => item.transaction.signature === signature)
+        );
+      },
     );
     publish({ connection: current.boundary, session: auth, transactions: flow });
     return () => {

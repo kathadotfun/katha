@@ -157,6 +157,12 @@ function EditorWorkspace({
           >
             Manage artwork media
           </Link>
+          <Link
+            href={`/admin/artworks/${artwork.kathaId}/registration`}
+            className="text-link mt-4 inline-block"
+          >
+            Register artwork on chain
+          </Link>
           <p className="mt-4 text-sm text-muted">
             Permanent identity, artist, category and creation year cannot be edited.
             Lifecycle records can close the editing window independently.

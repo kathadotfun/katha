@@ -119,7 +119,7 @@ keeps the API session in memory; sign-out and account changes clear it. The wall
 panel displays the configured Localnet/Devnet test environment. A shared transaction
 review boundary now validates and simulates prepared Registry messages, requests
 explicit wallet approval, records signed attempts and reconciles finalized outcomes
-with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork administration follows in later steps. Remaining API behavior and Marketplace
+with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork drafts, media management and the registration workflow are connected, with exact document review, simulation, explicit wallet approval and protected receipt/indexing feedback. Remaining API behavior and Marketplace
 business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -148,6 +148,7 @@ outside the current scope.
 - [Content API contracts and privacy boundaries](docs/development/content-api-contracts.md)
 - [Unsigned blockchain operation preparation](docs/development/blockchain-operation-preparation.md)
 - [Artwork registration preparation](docs/development/artwork-registration-api.md)
+- [Artwork registration administration](docs/development/artwork-registration-web.md)
 - [Artwork verification preparation](docs/development/artwork-verification-api.md)
 - [Condition attestation preparation](docs/development/condition-attestation-api.md)
 - [Custody and manual fulfillment API](docs/development/custody-operations-api.md)

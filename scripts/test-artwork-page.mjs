@@ -209,6 +209,7 @@ try {
         KATHA_PUBLIC_API_ORIGIN: apiOrigin,
         KATHA_PUBLIC_APP_ORIGIN: `http://127.0.0.1:${webPort}`,
         KATHA_CLUSTER: "localnet",
+        KATHA_PUBLIC_SOLANA_RPC_URL: "http://127.0.0.1:8899",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },

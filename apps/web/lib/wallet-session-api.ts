@@ -1,4 +1,11 @@
 import {
+  artworkRegistrationReviewSchema,
+  artworkRegistrationRequestSchema,
+  metadataPreparationRequestSchema,
+  preparedDocumentResponseSchema,
+  type ArtworkRegistrationRequest,
+} from "@katha/shared";
+import {
   ARTWORK_MEDIA_MAX_BYTES,
   artworkMediaUploadSchema,
   artworkMediaUpdateSchema,
@@ -109,6 +116,65 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readRegistration(kathaId: string, token: string, signal: AbortSignal) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = artworkRegistrationReviewSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/registration`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareMetadata(
+      kathaId: string,
+      expectedUpdatedAt: string,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const input = metadataPreparationRequestSchema.parse({ expectedUpdatedAt });
+      const result = preparedDocumentResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/documents/metadata`,
+          input,
+          token,
+          signal,
+        ),
+      );
+      if (result.kathaId !== path.kathaId || result.uri === null)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareRegistration(
+      kathaId: string,
+      input: ArtworkRegistrationRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const data = artworkRegistrationRequestSchema.parse(input);
+      const result = unsignedOperationResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/operations/registration`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.kind !== "REGISTER_ARTWORK" ||
+        !data.supportedTransactionVersions.includes(result.transactionVersion)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readArtworkMedia(kathaId: string, token: string, signal: AbortSignal) {
       const path = artworkDraftParamsSchema.parse({ kathaId });
       const result = artworkMediaResponseSchema.parse(

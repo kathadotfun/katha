@@ -88,6 +88,15 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readRegistration: async () => {
+      throw new Error("unused");
+    },
+    prepareMetadata: async () => {
+      throw new Error("unused");
+    },
+    prepareRegistration: async () => {
+      throw new Error("unused");
+    },
     readArtworkMedia: async () => {
       throw new Error("Unused");
     },

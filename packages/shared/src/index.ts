@@ -208,3 +208,10 @@ export {
   type ArtworkMediaUpdate,
   type ArtworkMediaResponse,
 } from "./artwork-media-api.js";
+export {
+  registrationIdentitySchema,
+  registrationStatusSchema,
+  artworkRegistrationReviewSchema,
+  type RegistrationIdentity,
+  type ArtworkRegistrationReview,
+} from "./artwork-registration-review.js";

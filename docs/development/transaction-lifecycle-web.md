@@ -1,8 +1,8 @@
 # Wallet transaction lifecycle
 
 The wallet provider now owns a reusable transaction controller and review panel.
-Feature-specific administration workflows supply prepared Registry operations in
-later steps; this step adds their common simulation, approval, submission and
+The [registration administration workflow](artwork-registration-web.md) supplies
+prepared Registry operations to this common simulation, approval, submission and
 confirmation boundary. Public browsing and sign-in never initiate a transaction.
 There is no raw transaction paste form, demonstration transfer or automatic signing.
 
@@ -25,7 +25,8 @@ sole required signer. Generated Codama clients identify/decode the single Regist
 instruction and validate artwork/config PDAs. A registration's encoded Katha ID
 must also match the expected ID. Unknown programs, extra instructions, signed
 preparations, mismatched accounts/identity and unsupported versions fail before
-wallet approval. Domain-specific forms must review their parameters; the API and
+wallet approval. Registration additionally compares the decoded artist UUID, creator wallet, category,
+year and evidence digest to the independently reviewed identity. Domain-specific forms must review their parameters; the API and
 program still enforce the complete authorization and lifecycle rules.
 
 Only the existing browser-safe generated Registry export and RPC-cluster helper
@@ -76,7 +77,9 @@ regress a known finalized outcome. An expired preparation stops before broadcast
 expiry of an unresolved signature does not prove it failed. Do not blindly prepare
 or submit a replacement while the previous outcome is unresolved.
 
-After successful finalization, a public provenance read checks for the same signature.
+After successful registration finalization, a protected registration read checks for
+the same finalized receipt signature and matching indexed Registry event, even for
+unpublished works. Other operations use a public provenance read for the same signature.
 Until observed, the panel reports **Transaction finalized; artwork indexing pending**.
 An indexer/API outage never changes finalization into failure. The user can recheck;
 no automatic polling or replacement transaction is scheduled. The first public

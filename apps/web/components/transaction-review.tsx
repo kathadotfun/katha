@@ -41,11 +41,15 @@ export function TransactionReview() {
 }
 export function TransactionReviewView({
   state,
+  id = "transaction-review-title",
+  title = "Transaction review",
   onApprove,
   onCheck,
   onCancel,
 }: {
   state: TransactionSnapshot;
+  id?: string;
+  title?: string;
   onApprove: () => void;
   onCheck: () => void;
   onCancel: () => void;
@@ -53,12 +57,9 @@ export function TransactionReviewView({
   if (state.phase === "idle") return null;
   const operation = state.operation;
   return (
-    <section
-      aria-labelledby="transaction-review-title"
-      className="mt-6 border-t border-line pt-4"
-    >
-      <h3 id="transaction-review-title" className="text-xl">
-        Transaction review
+    <section aria-labelledby={id} className="mt-6 border-t border-line pt-4">
+      <h3 id={id} className="text-xl">
+        {title}
       </h3>
       <p role="status" className="mt-3">
         {labels[state.phase]}

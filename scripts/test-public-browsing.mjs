@@ -1,3 +1,4 @@
+import { registrationFixture } from "../apps/web/tests/fixtures/registration.ts";
 /* global Request */
 import { Buffer } from "node:buffer";
 import { walletSignInMessage } from "../packages/shared/dist/index.js";
@@ -95,7 +96,7 @@ export async function runPublicBrowsingJourneys({
         walletId: "bbbbbbbb-1111-4111-8111-111111111111",
         walletAddress: "11111111111111111111111111111112",
         cluster: "localnet",
-        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        expiresAt: new Date(Date.now() + 120_000).toISOString(),
       });
       await context.route(`${apiOrigin}/admin/artworks?**`, async (route) => {
         if (route.request().method() === "OPTIONS")
@@ -211,6 +212,102 @@ export async function runPublicBrowsingJourneys({
         return route.fulfill({
           headers: adminHeaders,
           json: { artwork: savedArtwork, editable: !freezeDraft },
+        });
+      });
+      const registration = await registrationFixture();
+      let registrationPage = { ...registration.page, metadata: null };
+      let metadataCalls = 0,
+        registrationCalls = 0,
+        registrationSimulations = 0;
+      let rejectRegistration = true;
+      await context.route(
+        `${apiOrigin}/admin/artworks/*/registration`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          registrationPage.updatedAt = savedArtwork.updatedAt;
+          return route.fulfill({ headers: adminHeaders, json: registrationPage });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/admin/artworks/*/documents/metadata`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          const input = route.request().postDataJSON();
+          assert.equal(input.expectedUpdatedAt, registrationPage.updatedAt);
+          metadataCalls++;
+          registrationPage.metadata = registration.page.metadata;
+          const { id, version, documentHash, uri } = registration.page.metadata;
+          return route.fulfill({
+            status: 201,
+            headers: adminHeaders,
+            json: {
+              id,
+              version,
+              documentHash,
+              uri,
+              kathaId: registration.page.kathaId,
+              status: "PREPARED",
+            },
+          });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/admin/artworks/*/operations/registration`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          const input = route.request().postDataJSON();
+          registrationCalls++;
+          assert.equal(input.metadataVersionId, registration.page.metadata.id);
+          assert.deepEqual(input.supportedTransactionVersions, [0, 1]);
+          assert.equal(
+            input.idempotencyKey,
+            `register-${authSession().walletId}-${registration.page.metadata.id}`,
+          );
+          if (rejectRegistration)
+            return route.fulfill({
+              status: 409,
+              headers: adminHeaders,
+              json: { error: "PRIVATE_REGISTRATION_ERROR" },
+            });
+          return route.fulfill({
+            status: 201,
+            headers: adminHeaders,
+            json: registration.operation,
+          });
+        },
+      );
+      await context.route("http://127.0.0.1:8899/**", async (route) => {
+        const headers = {
+          "Access-Control-Allow-Origin": origin,
+          "Access-Control-Allow-Headers": "content-type,solana-client",
+          "Access-Control-Allow-Methods": "POST,OPTIONS",
+        };
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers });
+        const input = route.request().postDataJSON();
+        let result;
+        if (input.method === "getGenesisHash")
+          result = "11111111111111111111111111111111";
+        else if (input.method === "getBlockHeight") result = 20;
+        else if (input.method === "getFeeForMessage")
+          result = { context: { slot: 10 }, value: 5000 };
+        else if (input.method === "simulateTransaction") {
+          registrationSimulations++;
+          result = {
+            context: { slot: 10 },
+            value: { err: null, logs: [], unitsConsumed: 200 },
+          };
+        } else throw new Error("No signing or broadcast in this browser fixture");
+        return route.fulfill({
+          headers,
+          json: { jsonrpc: "2.0", id: input.id, result },
         });
       });
       let mediaPage = null;
@@ -391,7 +488,7 @@ export async function runPublicBrowsingJourneys({
               walletId: "bbbbbbbb-1111-4111-8111-111111111111",
               walletAddress,
               cluster: "localnet",
-              expiresAt: new Date(Date.now() + 60_000).toISOString(),
+              expiresAt: new Date(Date.now() + 120_000).toISOString(),
             },
           },
         });
@@ -770,6 +867,98 @@ export async function runPublicBrowsingJourneys({
       await expect(adminMain.locator('[name="story"]')).toHaveValue(
         "Revised synthetic cultural story",
       );
+      await adminMain.getByRole("link", { name: "Register artwork on chain" }).click();
+      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
+        "Artwork registration",
+      );
+      await expect(
+        adminMain.getByRole("button", { name: "Prepare canonical metadata" }),
+      ).toBeEnabled();
+      await audit("registration without metadata");
+      await adminMain
+        .getByRole("button", { name: "Prepare canonical metadata" })
+        .click();
+      await expect(adminMain).toContainText("Exact saved bytes and SHA-256 verified");
+      assert.equal(metadataCalls, 1);
+      const registrationPrepare = adminMain.getByRole("button", {
+        name: "Prepare and simulate registration",
+      });
+      await expect(registrationPrepare).toBeDisabled();
+      await adminMain
+        .getByText("Review exact canonical document", { exact: true })
+        .click();
+      await expect(adminMain.locator("pre")).toContainText(
+        "Approved synthetic cultural story",
+      );
+      await audit("registration canonical review");
+      await adminMain.getByRole("checkbox").check();
+      await registrationPrepare.click();
+      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
+      await expect(adminMain).not.toContainText("PRIVATE_REGISTRATION_ERROR");
+      await audit("registration conflict");
+      rejectRegistration = false;
+      await adminMain
+        .getByRole("button", { name: "Reload registration state" })
+        .click();
+      await adminMain.getByRole("checkbox").check();
+      await registrationPrepare.click();
+      await expect(adminMain).toContainText(
+        "Review transaction before wallet approval",
+      );
+      assert.equal(registrationCalls, 2);
+      assert.equal(registrationSimulations, 1);
+      await expect(
+        adminMain.getByRole("button", { name: "Approve in wallet and submit" }),
+      ).toBeVisible();
+      await audit("registration simulated before approval");
+      await adminMain
+        .getByRole("button", { name: "Cancel transaction review" })
+        .click();
+      registrationPage.registration = {
+        finalized: false,
+        unresolved: true,
+        receipt: {
+          status: "UNKNOWN",
+          signature: "3".repeat(88),
+          slot: null,
+          indexed: false,
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload registration state" })
+        .click();
+      await expect(adminMain).toContainText("A retained signature is unresolved");
+      await expect(adminMain.getByRole("checkbox")).toBeDisabled();
+      await audit("registration unresolved receipt");
+      registrationPage.registration = {
+        finalized: true,
+        unresolved: false,
+        receipt: {
+          status: "FINALIZED",
+          signature: "3".repeat(88),
+          slot: "20",
+          indexed: false,
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload registration state" })
+        .click();
+      await expect(adminMain).toContainText("Finalized; registration indexing pending");
+      await audit("registration finalized indexing delay");
+      registrationPage.registration.receipt.indexed = true;
+      await adminMain
+        .getByRole("button", { name: "Reload registration state" })
+        .click();
+      await expect(adminMain).toContainText("Registration event indexed");
+      await audit("registration indexed");
+      await page.evaluate(() => globalThis.scrollTo(0, 0));
+      await page.screenshot({
+        path: `${artifacts}/registration-admin-${width}.png`,
+        fullPage: true,
+      });
+      await adminMain
+        .getByRole("link", { name: "Artwork documentation", exact: true })
+        .click();
       freezeDraft = true;
       await adminMain.getByRole("button", { name: "Reload saved draft" }).click();
       await expect(adminMain).toContainText("Editing is closed");

@@ -26,7 +26,7 @@ afterEach(async () => {
   );
 });
 type Snapshot = Parameters<Parameters<DocumentPreparationStore["prepare"]>[4]>[0];
-async function fixture() {
+async function fixture(admin = false) {
   const base = await mkdtemp(join(tmpdir(), "katha-documents-"));
   temporary.push(base);
   const storage = createLocalStorageProvider({ root: join(base, ".storage") });
@@ -149,11 +149,16 @@ async function fixture() {
       authenticate: async (header) => {
         if (header === "Bearer outsider")
           return { ...session, walletAddress: temporaryWallet().address };
-        if (header !== "Bearer verifier") throw new DomainError("UNAUTHENTICATED");
+        if (header !== "Bearer verifier" && !(admin && header === "Bearer admin"))
+          throw new DomainError("UNAUTHENTICATED");
         return session;
       },
     },
-    { cluster: "localnet", adminWallets: [], verifierWallets: [wallet] },
+    {
+      cluster: "localnet",
+      adminWallets: admin ? [wallet] : [],
+      verifierWallets: admin ? [] : [wallet],
+    },
     async () => ({
       authority: wallet,
       registrationAuthority: wallet,
@@ -387,4 +392,46 @@ it("normalizes UUID identifiers before canonical condition persistence", async (
   );
   expect(result.id).toBe(reportId);
   expect(JSON.parse(f.built.document!).inspectorId).toBe(inspectorId);
+});
+
+it("permits admin canonical metadata preparation without granting condition authority", async () => {
+  const path = (id: string) => `/admin/artworks/${id}/documents/metadata`;
+  const verifier = await fixture();
+  expect(
+    (
+      await verifier.app.request(path(verifier.snapshot.artwork.kathaId), {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer verifier",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      })
+    ).status,
+  ).toBe(403);
+  expect(verifier.prepare).not.toHaveBeenCalled();
+  const f = await fixture(true);
+  const response = await f.app.request(path(f.snapshot.artwork.kathaId), {
+    method: "POST",
+    headers: { Authorization: "Bearer admin", "Content-Type": "application/json" },
+    body: JSON.stringify({ expectedUpdatedAt: f.at.toISOString() }),
+  });
+  expect(response.status).toBe(201);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.text()).not.toContain("PRIVATE");
+  expect(
+    (
+      await f.app.request(
+        `/verifier/artworks/${f.snapshot.artwork.kathaId}/documents/condition`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer admin",
+            "Content-Type": "application/json",
+          },
+          body: "{}",
+        },
+      )
+    ).status,
+  ).toBe(403);
 });

@@ -2793,6 +2793,66 @@ it("rechecks registration snapshots under save locks and rolls back raced eligib
       .operations(current)
       .save(operation, address, artwork.kathaId, preparation);
     expect(saved.status).toBe("saved");
+    const { createArtworkRegistrationStatusStore } = await import("../src/index.js");
+    const readStatus = createArtworkRegistrationStatusStore(db, "LOCALNET");
+    expect(await readStatus(artwork.kathaId)).toEqual({
+      finalized: false,
+      unresolved: false,
+      receipt: null,
+    });
+    if (saved.status !== "saved") throw new Error("Preparation missing");
+    const signature = "9".repeat(88);
+    await db.insert(transactionReceipts).values({
+      operationId: saved.operationId,
+      cluster: "LOCALNET",
+      signature,
+      messageHash: preparation.messageHash,
+    });
+    // A newer unsigned operation cannot hide this older unresolved signed attempt.
+    await db
+      .insert(blockchainOperations)
+      .values({ ...operation, idempotencyKey: "unsigned-after-signed" });
+    expect(await readStatus(artwork.kathaId)).toMatchObject({
+      finalized: false,
+      unresolved: true,
+      receipt: { signature, status: "UNKNOWN", indexed: false },
+    });
+    expect(
+      await createArtworkRegistrationStatusStore(db, "DEVNET")(artwork.kathaId),
+    ).toEqual({ finalized: false, unresolved: false, receipt: null });
+    const finalizedAt = new Date();
+    await db
+      .update(transactionReceipts)
+      .set({
+        status: "FINALIZED",
+        slot: 100n,
+        chainRecordedAt: finalizedAt,
+        finalizedAt,
+        observedAt: finalizedAt,
+      })
+      .where(eq(transactionReceipts.signature, signature));
+    await db
+      .update(blockchainOperations)
+      .set({ status: "FINALIZED", updatedAt: finalizedAt })
+      .where(eq(blockchainOperations.id, saved.operationId));
+    expect(await readStatus(artwork.kathaId)).toMatchObject({
+      finalized: true,
+      unresolved: false,
+      receipt: { signature, status: "FINALIZED", indexed: false, slot: "100" },
+    });
+    await db.insert(indexedEvents).values({
+      artworkId: artwork.id,
+      cluster: "LOCALNET",
+      programAddress: address,
+      signature,
+      slot: 100n,
+      transactionIndex: 0,
+      outerInstructionIndex: 0,
+      kind: "REGISTRY",
+      payload: { synthetic: "ArtworkRegistered" },
+      chainRecordedAt: finalizedAt,
+    });
+    expect((await readStatus(artwork.kathaId)).receipt?.indexed).toBe(true);
     const staleArtist = await store.load(artwork.kathaId);
     if (!staleArtist) throw new Error("Snapshot missing");
     await db

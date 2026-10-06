@@ -1,3 +1,4 @@
+import type { ArtworkRegistrationRequest } from "@katha/shared";
 import type { ArtworkMediaUpload, ArtworkMediaUpdate } from "@katha/shared";
 import {
   walletSessionResponseSchema,
@@ -113,6 +114,37 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readRegistration(kathaId: string, signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.readRegistration(kathaId, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    prepareMetadata(kathaId: string, expectedUpdatedAt: string, signal: AbortSignal) {
+      return authorized(
+        (value) => api.prepareMetadata(kathaId, expectedUpdatedAt, value, signal),
+        signal,
+      );
+    },
+    async prepareRegistration(
+      kathaId: string,
+      input: ArtworkRegistrationRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.prepareRegistration(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     readArtworkMedia(kathaId: string, signal: AbortSignal) {
       return authorized(
         (value) => api.readArtworkMedia(kathaId, value, signal),

@@ -83,8 +83,10 @@ cluster, request/message hashes, unsigned base64 transaction, transaction versio
 fee payer, required signer, blockhash, expiry and simulation slot/units as decimal
 strings. It omits canonical private intent, storage paths, private content and RPC
 logs. Cache-Control is no-store. Public discovery/details retain their existing
-publication gate. Receipt validation and chain-to-database reconciliation remain
-planned; submitting or preparing bytes does not mark a draft registered locally.
+publication gate. [Receipt reconciliation](operation-receipts-api.md) validates finalized outcomes;
+submitting or preparing bytes does not mark a draft registered locally. The
+[admin workflow](artwork-registration-web.md) also exposes a protected canonical
+document/receipt read for unpublished artworks and explicit wallet approval.
 
 ## Errors and verification
 

@@ -106,3 +106,9 @@ no blockchain transactions, key reads or real artist uploads occur.
 
 No dependency or migration change is required. Transaction preparation and
 finalized receipt validation retain their later steps.
+
+Administrators can prepare the same canonical public metadata through
+`POST /admin/artworks/:kathaId/documents/metadata` for the
+[registration workflow](artwork-registration-web.md). The request/response and
+exact-byte rules match the verifier metadata route. This does not grant admin-only
+wallets access to private condition preparation.

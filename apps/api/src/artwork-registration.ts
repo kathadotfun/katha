@@ -1,5 +1,9 @@
 import { validateArtworkDocumentation } from "./artwork-documentation.js";
-import { artworkRegistrationRequestSchema } from "@katha/shared";
+import {
+  artworkRegistrationRequestSchema,
+  artworkRegistrationReviewSchema,
+  registrationStatusSchema,
+} from "@katha/shared";
 import type { ArtworkRegistrationStore } from "@katha/db";
 import {
   buildRegisterArtworkTransaction,
@@ -19,8 +23,52 @@ export function createArtworkRegistration(
   chain: OperationChain,
   storage: StorageProvider,
   cluster: "localnet" | "devnet",
+  readStatus?: (kathaId: string) => Promise<unknown>,
 ) {
   return {
+    async review(bearer: string | undefined, kathaId: string) {
+      await authorization.requireRole(bearer, "admin");
+      const snapshot = await store.load(kathaId);
+      if (!snapshot) throw new DomainError("NOT_FOUND");
+      const { artwork, metadata, artist } = snapshot;
+      const available = metadata && ["PREPARED", "FINALIZED"].includes(metadata.status);
+      if (available) await validateArtworkDocumentation(snapshot, storage);
+      const registration = registrationStatusSchema.parse(
+        readStatus
+          ? await readStatus(kathaId)
+          : { finalized: snapshot.registered, unresolved: false, receipt: null },
+      );
+      return artworkRegistrationReviewSchema.parse({
+        kathaId,
+        cluster,
+        updatedAt: artwork.updatedAt.toISOString(),
+        title: artwork.title,
+        identity:
+          artwork.authorshipEvidenceHash &&
+          !/^0{64}$/.test(artwork.authorshipEvidenceHash)
+            ? {
+                artistId: artwork.artistId,
+                creatorWallet: artwork.creatorWallet,
+                category: artwork.category,
+                creationYear: artwork.creationYear,
+                authorshipEvidenceHash: artwork.authorshipEvidenceHash,
+              }
+            : null,
+        artistVerified: artist?.verificationStatus === "VERIFIED",
+        published: artwork.publishedAt !== null,
+        metadata: available
+          ? {
+              id: metadata.id,
+              version: metadata.version,
+              status: metadata.status,
+              documentHash: metadata.documentHash,
+              uri: metadata.uri,
+              canonicalDocument: metadata.canonicalDocument,
+            }
+          : null,
+        registration,
+      });
+    },
     async prepare(bearer: string | undefined, kathaId: string, input: unknown) {
       const parsed = artworkRegistrationRequestSchema.safeParse(input);
       if (!parsed.success) throw new DomainError("INVALID_REQUEST");

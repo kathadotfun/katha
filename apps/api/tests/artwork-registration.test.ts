@@ -144,6 +144,15 @@ it("installs a protected strict JSON route with safe errors and no-store", async
     f.service,
   );
   const path = `/admin/artworks/${f.snapshot.artwork.kathaId}/operations/registration`;
+  const reviewPath = `/admin/artworks/${f.snapshot.artwork.kathaId}/registration`;
+  expect((await app.request(reviewPath)).status).toBe(401);
+  const review = await app.request(reviewPath, {
+    headers: { Authorization: "Bearer synthetic" },
+  });
+  expect(review.status).toBe(200);
+  expect(review.headers.get("Cache-Control")).toBe("no-store");
+  expect(await review.text()).not.toContain("PRIVATE ARTIST BIO");
+
   const send = (body: unknown = f.request, auth = "Bearer synthetic", suffix = "") =>
     app.request(path + suffix, {
       method: "POST",
@@ -233,4 +242,29 @@ it("rejects a session from another cluster before reading the draft", async () =
     f.service.prepare("Bearer synthetic", f.snapshot.artwork.kathaId, f.request),
   ).rejects.toMatchObject({ code: "FORBIDDEN" });
   expect(f.load).not.toHaveBeenCalled();
+});
+
+it("returns only validated canonical public registration review and denies readers before storage", async () => {
+  const f = await registrationFixture();
+  await expect(
+    f.service.review(undefined, f.snapshot.artwork.kathaId),
+  ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  expect(f.load).not.toHaveBeenCalled();
+  expect(f.read).not.toHaveBeenCalled();
+  const review = await f.service.review("Bearer synthetic", f.snapshot.artwork.kathaId);
+  expect(review).toMatchObject({
+    cluster: "localnet",
+    artistVerified: true,
+    registration: { finalized: false, unresolved: false, receipt: null },
+  });
+  expect(review.identity?.artistId).toBe(f.snapshot.artwork.artistId);
+  expect(review.metadata?.canonicalDocument).toBe(
+    f.snapshot.metadata!.canonicalDocument,
+  );
+  expect(JSON.stringify(review)).not.toContain("PRIVATE ARTIST BIO");
+  expect(review.metadata).not.toHaveProperty("authorityWallet");
+  f.snapshot.metadata!.canonicalDocument += " ";
+  await expect(
+    f.service.review("Bearer synthetic", f.snapshot.artwork.kathaId),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
 });

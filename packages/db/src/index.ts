@@ -201,3 +201,5 @@ export {
   MediaStoreConflict,
   type ArtworkMediaStore,
 } from "./artwork-media-store.js";
+
+export { createArtworkRegistrationStatusStore } from "./artwork-registration-status-store.js";

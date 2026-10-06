@@ -365,6 +365,17 @@ export function createApi(
     });
   }
   if (documents) {
+    app.post("/admin/artworks/:kathaId/documents/metadata", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      return c.json(
+        await documents.metadata(
+          kathaId,
+          await parseJson(c, metadataPreparationRequestSchema),
+          c.get("walletSession"),
+        ),
+        201,
+      );
+    });
     app.post("/verifier/artworks/:kathaId/documents/metadata", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       return c.json(
@@ -399,6 +410,11 @@ export function createApi(
     });
   }
   if (registration) {
+    app.get("/admin/artworks/:kathaId/registration", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(await registration.review(c.req.header("Authorization"), kathaId));
+    });
     app.post("/admin/artworks/:kathaId/operations/registration", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       parseQuery(c, artworkDetailQuerySchema);
