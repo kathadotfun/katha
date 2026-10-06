@@ -103,7 +103,9 @@ collectors. The homepage introduces the cultural purpose, Mandala, Paubha and
 Thangka, with up to three published works from the catalogue and explicit
 empty/unavailable states. A reproducible Chromium suite now checks public
 navigation, keyboard focus, responsive wrapping, automated accessibility and
-recovery from unavailable data.
+recovery from unavailable data. Authorized NFC administration now assigns unique
+public tag references, preserves their permanent artwork binding and supports
+terminal retirement; public resolution and tag writing remain planned.
 Remaining API behavior and Marketplace
 business instructions remain planned.
 
@@ -158,6 +160,7 @@ outside the current scope.
 - [Public artist profile pages](docs/development/artist-profiles-web.md)
 - [Cultural homepage and featured artworks](docs/development/homepage.md)
 - [Public browsing and accessibility checks](docs/development/public-browsing-tests.md)
+- [NFC tag administration](docs/development/nfc-administration.md)
 - [Artwork exploration and category filtering](docs/development/artwork-exploration.md)
 - [Canonical artwork page, provenance and metadata integrity](docs/development/artwork-page.md)
 - [Public provenance and condition timelines](docs/development/artwork-provenance-api.md)

@@ -186,3 +186,10 @@ export {
   createPublicProvenanceStore,
   type PublicProvenanceStore,
 } from "./public-provenance-store.js";
+
+export { nfcTags } from "./schema/nfc-tags.js";
+export {
+  createNfcTagStore,
+  type NfcTagStore,
+  type NfcTagRecord,
+} from "./nfc-tag-store.js";

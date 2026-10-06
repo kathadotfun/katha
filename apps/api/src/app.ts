@@ -1,3 +1,10 @@
+import type { NfcTagsBoundary } from "./nfc-tags.js";
+import {
+  nfcArtworkParamsSchema,
+  nfcTagParamsSchema,
+  nfcTagAssignmentRequestSchema,
+  nfcTagRetirementRequestSchema,
+} from "@katha/shared";
 import type { ArtworkProvenanceBoundary } from "./artwork-provenance.js";
 import {
   artworkProvenanceParamsSchema,
@@ -90,6 +97,7 @@ export function createApi(
   metadataRevisions?: MetadataRevisionsBoundary,
   receipts?: OperationReceiptsBoundary,
   provenance?: ArtworkProvenanceBoundary,
+  nfcTags?: NfcTagsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -217,6 +225,26 @@ export function createApi(
         201,
       ),
     );
+  }
+  if (nfcTags) {
+    app.post("/admin/artworks/:kathaId/nfc-tags", async (c) =>
+      c.json(
+        await nfcTags.assign(
+          parseParams(c, nfcArtworkParamsSchema).kathaId,
+          await parseJson(c, nfcTagAssignmentRequestSchema),
+          c.get("walletSession"),
+        ),
+        200,
+      ),
+    );
+    app.get("/admin/nfc-tags/:tagId", async (c) =>
+      c.json(await nfcTags.get(parseParams(c, nfcTagParamsSchema).tagId)),
+    );
+    app.post("/admin/nfc-tags/:tagId/retire", async (c) => {
+      const { tagId } = parseParams(c, nfcTagParamsSchema);
+      await parseJson(c, nfcTagRetirementRequestSchema);
+      return c.json(await nfcTags.retire(tagId, c.get("walletSession")));
+    });
   }
   if (discovery) {
     app.get("/artworks", async (c) =>

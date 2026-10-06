@@ -1,3 +1,5 @@
+import { createNfcTags } from "./nfc-tags.js";
+import { createNfcTagStore } from "@katha/db";
 import { createArtworkProvenance } from "./artwork-provenance.js";
 import { createPublicProvenanceStore } from "@katha/db";
 import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
@@ -187,6 +189,7 @@ function startApi() {
         { registry: KATHA_REGISTRY_PROGRAM_ADDRESS, core: CORE_PROGRAM_ADDRESS },
       ),
     ),
+    createNfcTags(createNfcTagStore(database.db)),
   );
   const port = config.API_PORT;
 

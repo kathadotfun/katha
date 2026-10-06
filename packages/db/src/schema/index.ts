@@ -42,3 +42,5 @@ export {
 } from "./blockchain-read-models.js";
 export { operationPreparations } from "./operation-preparations.js";
 export { indexerNetworks, ownershipReconciliations } from "./indexer-recovery.js";
+
+export { nfcTags } from "./nfc-tags.js";

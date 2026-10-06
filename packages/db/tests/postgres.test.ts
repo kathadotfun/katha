@@ -1,3 +1,4 @@
+import { createNfcTagStore, nfcTags } from "../src/index.js";
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -63,7 +64,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(12);
+    expect(applicationCount).toBe(13);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -4431,6 +4432,135 @@ it("binds indexer networks, repairs gaps by retained history and never invents o
       (await legacy.checkpoint({ ...stream, programAddress: legacyPrograms.registry }))
         ?.gapReason,
     ).toBe("NETWORK_UNBOUND");
+  } finally {
+    await connection.close();
+  }
+});
+
+it("NFC assignment is race-safe, immutable and never reuses retired identifiers", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const db = connection.db;
+  const store = createNfcTagStore(db);
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: `nfc-${randomUUID()}`,
+        displayName: "Synthetic NFC Artist",
+        biography: "Synthetic",
+        region: "Patan",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    const [wallet] = await db
+      .insert(wallets)
+      .values({ address: "11111111111111111111111111111111" })
+      .onConflictDoNothing()
+      .returning();
+    const actor =
+      wallet ??
+      (
+        await db
+          .select()
+          .from(wallets)
+          .where(eq(wallets.address, "11111111111111111111111111111111"))
+      )[0];
+    if (!artist || !actor) throw new Error("Missing synthetic NFC fixture");
+    const works = await db
+      .insert(artworks)
+      .values(
+        [0, 1, 2].map(() => ({
+          artistId: artist.id,
+          category: "PAUBHA" as const,
+          title: "Synthetic tagged artwork",
+          creationYear: 2026,
+        })),
+      )
+      .returning();
+    const [first, second, third] = works;
+    if (!first || !second || !third) throw new Error("Missing artwork");
+    expect(await store.assign("KATHA-PAUBHA-999999", randomUUID(), actor.id)).toEqual({
+      status: "not_found",
+    });
+    const ids = [randomUUID(), randomUUID()];
+    const race = await Promise.all(
+      ids.map((id) => store.assign(first.kathaId, id, actor.id)),
+    );
+    expect(race.filter((result) => result.status === "assigned")).toHaveLength(1);
+    expect(race.filter((result) => result.status === "conflict")).toHaveLength(1);
+    const winning = race.find((result) => result.status === "assigned");
+    if (!winning || winning.status !== "assigned") throw new Error("Missing winner");
+    const tag = winning.record;
+    expect(await store.assign(first.kathaId, tag.tagId, actor.id)).toEqual(winning);
+    expect(await store.assign(second.kathaId, tag.tagId, actor.id)).toEqual({
+      status: "conflict",
+    });
+    for (const patch of [
+      { artworkId: second.id },
+      { tagId: randomUUID() },
+      { assignedAt: new Date(0) },
+      { retiredByWalletId: actor.id },
+      { assignedByWalletId: randomUUID() },
+      { retiredAt: new Date(0), retiredByWalletId: actor.id },
+    ])
+      await expect(
+        db.update(nfcTags).set(patch).where(eq(nfcTags.tagId, tag.tagId)),
+      ).rejects.toThrow();
+    await expect(
+      db.delete(nfcTags).where(eq(nfcTags.tagId, tag.tagId)),
+    ).rejects.toThrow();
+    await expect(
+      db.insert(nfcTags).values({
+        tagId: randomUUID(),
+        artworkId: second.id,
+        assignedByWalletId: actor.id,
+        retiredAt: new Date(),
+        retiredByWalletId: actor.id,
+      }),
+    ).rejects.toThrow();
+    const sameAssignment = randomUUID();
+    const retries = await Promise.all(
+      [0, 1].map(() => store.assign(second.kathaId, sameAssignment, actor.id)),
+    );
+    expect(retries.every((value) => value.status === "assigned")).toBe(true);
+    expect(retries[0]).toEqual(retries[1]);
+    await store.retire(sameAssignment, actor.id);
+    const retired = await store.retire(tag.tagId, actor.id);
+    expect(retired?.retiredAt).toBeInstanceOf(Date);
+    expect(await store.retire(tag.tagId, actor.id)).toEqual(retired);
+    expect(await store.get(tag.tagId)).toEqual(retired);
+    expect(await store.assign(first.kathaId, tag.tagId, actor.id)).toEqual({
+      status: "conflict",
+    });
+    await expect(
+      db
+        .update(nfcTags)
+        .set({ retiredAt: null, retiredByWalletId: null })
+        .where(eq(nfcTags.tagId, tag.tagId)),
+    ).rejects.toThrow();
+    expect((await store.assign(first.kathaId, randomUUID(), actor.id)).status).toBe(
+      "assigned",
+    );
+    const sharedTag = randomUUID();
+    const reuseRace = await Promise.all(
+      [second, third].map((work) => store.assign(work.kathaId, sharedTag, actor.id)),
+    );
+    expect(reuseRace.filter((value) => value.status === "assigned")).toHaveLength(1);
+    expect(reuseRace.filter((value) => value.status === "conflict")).toHaveLength(1);
+    expect(await store.retire(randomUUID(), actor.id)).toBeNull();
+    await expect(
+      db.insert(nfcTags).values({
+        tagId: randomUUID(),
+        artworkId: randomUUID(),
+        assignedByWalletId: actor.id,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      db.delete(artworks).where(eq(artworks.id, first.id)),
+    ).rejects.toThrow();
   } finally {
     await connection.close();
   }

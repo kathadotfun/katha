@@ -65,7 +65,7 @@ async function withFreshDatabase(
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(12);
+    ).toBe(13);
     await check(first.db, second.db, url.toString());
   } finally {
     await first?.close();
@@ -83,7 +83,7 @@ it("migrates a fresh application database and seeds concurrent fictional drafts 
           sql`select count(*)::int as count from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`,
         )
       )[0]?.count,
-    ).toBe(23);
+    ).toBe(24);
     expect(
       (
         await db.execute(sql`select to_regclass('public.migration_probe') as relation`)
