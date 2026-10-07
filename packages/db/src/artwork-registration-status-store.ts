@@ -9,7 +9,7 @@ import { indexedEvents } from "./schema/blockchain-read-models.js";
 function createArtworkOperationStatusStore(
   db: Database,
   cluster: "LOCALNET" | "DEVNET",
-  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK" | "RECORD_CONDITION",
+  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK" | "RECORD_CONDITION" | "UPDATE_CUSTODY",
   reportHash?: string,
 ) {
   return async (kathaId: string) =>
@@ -57,7 +57,9 @@ function createArtworkOperationStatusStore(
           ),
         )
         .orderBy(
-          sql`case ${transactionReceipts.status} when 'FINALIZED' then 0 when 'UNKNOWN' then 1 else 2 end`,
+          kind === "UPDATE_CUSTODY"
+            ? sql`case ${transactionReceipts.status} when 'UNKNOWN' then 0 else 1 end`
+            : sql`case ${transactionReceipts.status} when 'FINALIZED' then 0 when 'UNKNOWN' then 1 else 2 end`,
           desc(transactionReceipts.observedAt),
           desc(transactionReceipts.id),
         )
@@ -140,4 +142,11 @@ export function createConditionAttestationStatusStore(
       "RECORD_CONDITION",
       reportHash,
     )(kathaId);
+}
+
+export function createCustodyOperationStatusStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET",
+) {
+  return createArtworkOperationStatusStore(db, cluster, "UPDATE_CUSTODY");
 }

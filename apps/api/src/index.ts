@@ -2,6 +2,7 @@ import {
   createArtworkRegistrationStatusStore,
   createArtworkVerificationStatusStore,
   createConditionAttestationStatusStore,
+  createCustodyOperationStatusStore,
 } from "@katha/db";
 import { createArtworkMediaStore } from "@katha/db";
 import { createArtworkMedia } from "./artwork-media.js";
@@ -193,12 +194,19 @@ function startApi() {
       },
     ),
     createCustodyOperations(
-      createCustodyOperationStore(database.db),
+      createCustodyOperationStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+      ),
       authorization,
       sessions,
       createCustodyReader(rpcConfig),
       createOperationChain(rpcConfig),
       config.KATHA_CLUSTER,
+      createCustodyOperationStatusStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+      ),
     ),
     createArtworkMinting(
       createArtworkMintStore(

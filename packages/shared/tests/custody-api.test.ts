@@ -1,6 +1,8 @@
 import { expect, it } from "vitest";
 import {
   custodyPreparationRequestSchema,
+  custodyAdministrationReviewSchema,
+  fulfillmentResponseSchema,
   fulfillmentCreateRequestSchema,
   fulfillmentUpdateRequestSchema,
 } from "../src/index.js";
@@ -72,5 +74,71 @@ it.each([
 ])("rejects malformed/private authority input %j", (change) => {
   expect(
     fulfillmentCreateRequestSchema.safeParse({ ...request, ...change }).success,
+  ).toBe(false);
+});
+
+const review = {
+  kathaId: "KATHA-PAUBHA-000001",
+  title: "Synthetic custody",
+  cluster: "localnet",
+  updatedAt: custody.expectedUpdatedAt,
+  chain: {
+    revision: "0",
+    state: "UNKNOWN",
+    subject: null,
+    ownerWallet: null,
+    custodyAuthority: "11111111111111111111111111111112",
+  },
+  canAttest: true,
+  transitions: [custody.transition],
+  custody: { finalized: false, unresolved: false, receipt: null },
+  requests: [],
+  pagination: { limit: 20, offset: 0, hasMore: false },
+};
+it("accepts bounded private custody review", () => {
+  expect(custodyAdministrationReviewSchema.parse(review).chain.revision).toBe("0");
+});
+it.each([
+  {
+    transitions: [
+      { action: "DISPATCH_FROM_KATHA", from: "KATHA_HELD", to: "IN_TRANSIT" },
+    ],
+  },
+  { requesterWallet: "11111111111111111111111111111112" },
+  { chain: { ...review.chain, revision: "01" } },
+  { pagination: { ...review.pagination, limit: 101 } },
+])("rejects invalid custody review %j", (change) => {
+  expect(
+    custodyAdministrationReviewSchema.safeParse({ ...review, ...change }).success,
+  ).toBe(false);
+});
+it("rejects request leakage across artwork pages and duplicate requests", () => {
+  const { requestId, ...fields } = request;
+  const row = {
+    request: fulfillmentResponseSchema.parse({
+      ...fields,
+      id: requestId,
+      kathaId: review.kathaId,
+      status: "REQUESTED",
+      courier: null,
+      trackingReference: null,
+      createdAt: review.updatedAt,
+      updatedAt: review.updatedAt,
+    }),
+    ownerMatches: false,
+    allowedStatuses: ["CANCELLED"],
+    transitions: [],
+  };
+  expect(
+    custodyAdministrationReviewSchema.safeParse({ ...review, requests: [row, row] })
+      .success,
+  ).toBe(false);
+  expect(
+    custodyAdministrationReviewSchema.safeParse({
+      ...review,
+      requests: [
+        { ...row, request: { ...row.request, kathaId: "KATHA-PAUBHA-000002" } },
+      ],
+    }).success,
   ).toBe(false);
 });

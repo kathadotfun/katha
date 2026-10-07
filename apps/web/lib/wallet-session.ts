@@ -1,5 +1,7 @@
 import type {
   ArtworkVerificationRequest,
+  CustodyPreparationRequest,
+  FulfillmentUpdateRequest,
   ConditionPreparationRequest,
   ConditionAttestationRequest,
   ArtworkRegistrationRequest,
@@ -119,6 +121,41 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readCustody(kathaId: string, pagination: Pagination, signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.readCustody(kathaId, pagination, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    updateFulfillment(
+      id: string,
+      input: FulfillmentUpdateRequest,
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (value) => api.updateFulfillment(id, input, value, signal),
+        signal,
+      );
+    },
+    async prepareCustody(
+      kathaId: string,
+      input: CustodyPreparationRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.prepareCustody(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readCondition(kathaId: string, signal: AbortSignal) {
       const result = await authorized(
         (value) => api.readCondition(kathaId, value, signal),

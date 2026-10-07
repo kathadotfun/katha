@@ -15,6 +15,8 @@ import {
 } from "@solana/kit";
 import {
   unsignedOperationResponseSchema,
+  custodyPreparationRequestSchema,
+  type CustodyPreparationRequest,
   sha256Hex,
   registrationIdentitySchema,
   type RegistrationIdentity,
@@ -36,10 +38,16 @@ import {
   findReportPda,
   findAssetPda,
   findInitializeCustodyHeadPda,
+  CustodyAction,
+  findTransitionCustodyTransitionPda,
   ConditionGrade,
   ConditionReason,
 } from "@katha/solana/registry";
 
+export type CustodyTransactionReview = Pick<
+  CustodyPreparationRequest,
+  "transition" | "collectorWallet" | "expectedCustodyRevision"
+>;
 export type ConditionTransactionReview = {
   document: ConditionReportDocument;
   reportHash: string;
@@ -87,6 +95,7 @@ export async function inspectPreparedTransaction(
     registration?: RegistrationIdentity;
     verification?: { authorshipEvidenceHash: string };
     condition?: ConditionTransactionReview;
+    custody?: CustodyTransactionReview;
   },
 ) {
   const operation = unsignedOperationResponseSchema.parse(input);
@@ -180,6 +189,60 @@ export async function inspectPreparedTransaction(
       ).join("") !== context.verification.authorshipEvidenceHash
     )
       throw new Error("Verification commitment mismatch.");
+  }
+  if (operation.kind === "UPDATE_CUSTODY") {
+    const expected = custodyPreparationRequestSchema
+      .pick({ transition: true, collectorWallet: true, expectedCustodyRevision: true })
+      .parse(context.custody);
+    const revision = BigInt(expected.expectedCustodyRevision);
+    const [[head], [transition]] = await Promise.all([
+      findInitializeCustodyHeadPda({ artwork }),
+      findTransitionCustodyTransitionPda({ artwork, nextRevision: revision + 1n }),
+    ]);
+    const actions = {
+      ATTEST_KATHA_CUSTODY: CustodyAction.AttestKathaCustody,
+      ATTEST_COLLECTOR_CUSTODY: CustodyAction.AttestCollectorCustody,
+      DISPATCH_FROM_KATHA: CustodyAction.DispatchFromKatha,
+      DISPATCH_FROM_COLLECTOR: CustodyAction.DispatchFromCollector,
+      RECEIVE_AT_KATHA: CustodyAction.ReceiveAtKatha,
+      RECEIVE_BY_COLLECTOR: CustodyAction.ReceiveByCollector,
+    };
+    if (
+      parsed.instructionType !== KathaRegistryInstruction.InitializeCustody &&
+      parsed.instructionType !== KathaRegistryInstruction.TransitionCustody
+    )
+      throw new Error("Custody instruction required");
+    const initial =
+      parsed.instructionType === KathaRegistryInstruction.InitializeCustody;
+    const roles = [
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.WRITABLE,
+      AccountRole.WRITABLE,
+      AccountRole.WRITABLE_SIGNER,
+      AccountRole.READONLY,
+    ];
+    if (
+      initial !== (revision === 0n) ||
+      (revision === 0n) !== (expected.transition.from === "UNKNOWN") ||
+      parsed.data.action !== actions[expected.transition.action] ||
+      unwrapOption(parsed.data.collector) !== expected.collectorWallet ||
+      (expected.transition.to === "COLLECTOR_HELD"
+        ? !expected.collectorWallet ||
+          expected.collectorWallet === context.wallet ||
+          /^1{32}$/.test(expected.collectorWallet)
+        : expected.collectorWallet !== null) ||
+      parsed.accounts.head.address !== head ||
+      parsed.accounts.transition.address !== transition ||
+      parsed.accounts.custodyAuthority.address !== context.wallet ||
+      parsed.accounts.systemProgram.address !== "11111111111111111111111111111111" ||
+      instruction.accounts?.length !== roles.length ||
+      instruction.accounts.some((item, index) => item.role !== roles[index]) ||
+      (parsed.instructionType === KathaRegistryInstruction.TransitionCustody &&
+        (parsed.data.expectedRevision !== revision ||
+          parsed.data.nextRevision !== revision + 1n))
+    )
+      throw new Error("Custody movement mismatch");
   }
   if (context.condition) {
     const { document: inputDocument, reportHash, expectedVersion } = context.condition;

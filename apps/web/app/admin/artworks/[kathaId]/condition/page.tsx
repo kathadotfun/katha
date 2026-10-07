@@ -28,6 +28,12 @@ export default async function ConditionPage({
       >
         Artwork authenticity
       </Link>
+      <Link
+        href={`/admin/artworks/${parsed.data.kathaId}/custody`}
+        className="text-link ml-6"
+      >
+        Custody coordination
+      </Link>
       <p className="eyebrow mt-8">Katha administration</p>
       <h1 className="mt-4 text-4xl sm:text-5xl">Condition inspection</h1>
       <p className="mt-5 max-w-reading text-muted">

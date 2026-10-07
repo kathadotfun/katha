@@ -5,6 +5,7 @@ import type {
 } from "@katha/shared";
 import {
   type ConditionTransactionReview,
+  type CustodyTransactionReview,
   inspectPreparedTransaction,
   validateSignedTransaction,
 } from "./prepared-transaction.ts";
@@ -200,6 +201,7 @@ export function createTransactionLifecycle(
         registration?: RegistrationIdentity;
         verification?: { authorshipEvidenceHash: string };
         condition?: ConditionTransactionReview;
+        custody?: CustodyTransactionReview;
       },
     ) {
       if (

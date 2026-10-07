@@ -1,3 +1,4 @@
+import { custodyFixture } from "../apps/web/tests/fixtures/custody.ts";
 import { conditionFixture } from "../apps/web/tests/fixtures/condition.ts";
 import { canonicalDocumentBytes, sha256Hex } from "../packages/shared/dist/index.js";
 import { verificationFixture } from "../apps/web/tests/fixtures/verification.ts";
@@ -284,6 +285,78 @@ export async function runPublicBrowsingJourneys({
             status: 201,
             headers: adminHeaders,
             json: registration.operation,
+          });
+        },
+      );
+      const custodyFixtureData = await custodyFixture("DISPATCH_FROM_KATHA");
+      const custodyPage = custodyFixtureData.page;
+      custodyPage.chain.ownerWallet = "11111111111111111111111111111113";
+      let fulfillmentWrites = 0,
+        custodyPreparations = 0,
+        rejectFulfillment = true;
+      await context.route(`${apiOrigin}/admin/artworks/*/custody**`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        if (!adminAllowed)
+          return route.fulfill({
+            status: 403,
+            headers: adminHeaders,
+            json: { error: "forbidden" },
+          });
+        return route.fulfill({ headers: adminHeaders, json: custodyPage });
+      });
+      await context.route(`${apiOrigin}/admin/fulfillment/*`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        fulfillmentWrites++;
+        if (rejectFulfillment)
+          return route.fulfill({
+            status: 409,
+            headers: adminHeaders,
+            json: { error: "conflict" },
+          });
+        const input = route.request().postDataJSON(),
+          row = custodyPage.requests[0];
+        assert.equal(input.manualConfirmation, true);
+        assert.equal(input.expectedUpdatedAt, row.request.updatedAt);
+        assert.equal(input.status, "APPROVED");
+        Object.assign(row.request, {
+          status: "APPROVED",
+          updatedAt: "2026-10-06T00:00:02.000Z",
+          courier: input.courier,
+          trackingReference: input.trackingReference,
+        });
+        row.allowedStatuses = ["DISPATCHED", "CANCELLED"];
+        row.transitions = [custodyFixtureData.transition];
+        return route.fulfill({ headers: adminHeaders, json: row.request });
+      });
+      await context.route(
+        `${apiOrigin}/admin/artworks/*/operations/custody`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers: adminHeaders });
+          custodyPreparations++;
+          const input = route.request().postDataJSON();
+          assert.equal(input.expectedCustodyRevision, "1");
+          assert.equal(input.movementConfirmed, true);
+          assert.equal(input.fulfillmentId, custodyPage.requests[0].request.id);
+          assert.equal(JSON.stringify(input).includes("Synthetic recipient"), false);
+          assert.equal(
+            JSON.stringify(input).includes("synthetic@example.invalid"),
+            false,
+          );
+          return route.fulfill({
+            status: 201,
+            headers: adminHeaders,
+            json: custodyFixtureData.operation,
           });
         },
       );
@@ -1239,7 +1312,10 @@ export async function runPublicBrowsingJourneys({
         .getByRole("link", { name: "Open condition inspection", exact: true })
         .click();
       await expect(
-        adminMain.getByRole("heading", { name: "Condition inspection", exact: true }),
+        adminMain.getByRole("heading", {
+          name: "Condition inspection",
+          exact: true,
+        }),
       ).toBeVisible();
       const conditionSave = adminMain.getByRole("button", {
         name: "Save private condition report",
@@ -1369,6 +1445,121 @@ export async function runPublicBrowsingJourneys({
         path: `${artifacts}/condition-admin-${width}.png`,
         fullPage: true,
       });
+      adminAllowed = true;
+      await adminMain
+        .getByRole("link", { name: "Custody coordination", exact: true })
+        .click();
+      await expect(adminMain).toContainText("katha held · revision 1");
+      await expect(
+        adminMain.getByRole("heading", { name: "Custody coordination", exact: true }),
+      ).toHaveCount(1);
+      await audit("custody administration");
+      const fulfillmentDetails = adminMain
+        .locator("details")
+        .filter({ hasText: "delivery · requested" });
+      await fulfillmentDetails.locator("summary").click();
+      await expect(fulfillmentDetails).toContainText("synthetic@example.invalid");
+      const fulfillmentSave = adminMain.getByRole("button", {
+        name: "Save fulfillment status",
+        exact: true,
+      });
+      await expect(fulfillmentSave).toBeDisabled();
+      await adminMain
+        .getByLabel("Fulfillment status", { exact: true })
+        .selectOption("APPROVED");
+      await adminMain.getByLabel("Courier", { exact: true }).fill("Synthetic courier");
+      await adminMain
+        .getByRole("checkbox", {
+          name: "I confirmed this fulfillment status manually.",
+          exact: false,
+        })
+        .check();
+      await fulfillmentSave.click();
+      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
+      await expect(fulfillmentSave).toBeDisabled();
+      await audit("fulfillment conflict");
+      rejectFulfillment = false;
+      await adminMain
+        .getByRole("button", { name: "Reload custody state", exact: true })
+        .click();
+      await fulfillmentDetails.locator("summary").click();
+      await adminMain
+        .getByLabel("Fulfillment status", { exact: true })
+        .selectOption("APPROVED");
+      await adminMain.getByLabel("Courier", { exact: true }).fill("Synthetic courier");
+      await adminMain
+        .getByRole("checkbox", {
+          name: "I confirmed this fulfillment status manually.",
+          exact: false,
+        })
+        .check();
+      await fulfillmentSave.click();
+      await expect.poll(() => fulfillmentWrites).toBe(2);
+      await expect(adminMain).toContainText("delivery · approved");
+      await expect(adminMain).toContainText("katha held · revision 1");
+      assert.equal(custodyPreparations, 0);
+      await audit("fulfillment approval separate from custody");
+      await adminMain
+        .getByLabel("Related fulfillment request", { exact: true })
+        .selectOption(custodyPage.requests[0].request.id);
+      await adminMain
+        .getByLabel("Physical movement", { exact: true })
+        .selectOption("DISPATCH_FROM_KATHA");
+      const custodyPrepare = adminMain.getByRole("button", {
+        name: "Prepare custody attestation",
+        exact: true,
+      });
+      await expect(custodyPrepare).toBeDisabled();
+      await adminMain
+        .getByRole("checkbox", {
+          name: "I confirmed that this physical movement has already occurred",
+          exact: false,
+        })
+        .check();
+      await custodyPrepare.click();
+      await expect(adminMain).toContainText(
+        "Review transaction before wallet approval",
+      );
+      assert.equal(custodyPreparations, 1);
+      await audit("custody transaction review");
+      await page.screenshot({
+        path: `${artifacts}/custody-admin-${width}.png`,
+        fullPage: true,
+      });
+      await adminMain
+        .getByRole("button", { name: "Cancel transaction review", exact: true })
+        .click();
+      custodyPage.custody.unresolved = true;
+      await adminMain
+        .getByRole("button", { name: "Reload custody state", exact: true })
+        .click();
+      await expect(adminMain).toContainText("A signed custody attempt is unresolved");
+      await expect(custodyPrepare).toBeDisabled();
+      await audit("custody unresolved signature");
+      custodyPage.custody.unresolved = false;
+      custodyPage.canAttest = false;
+      await adminMain
+        .getByRole("button", { name: "Reload custody state", exact: true })
+        .click();
+      await expect(adminMain).toContainText(
+        "current Registry custody authority must sign",
+      );
+      await expect(custodyPrepare).toBeDisabled();
+      await audit("custody administrator without chain authority");
+      adminAllowed = false;
+      await adminMain
+        .getByRole("button", { name: "Reload custody state", exact: true })
+        .click();
+      await expect(adminMain.getByRole("alert")).toContainText("administrator session");
+      await expect(adminMain).not.toContainText("synthetic@example.invalid");
+      await expect(adminMain).not.toContainText("Synthetic address");
+      await audit("custody role revoked clears private details");
+      await adminMain
+        .getByRole("link", { name: "Artwork authenticity", exact: true })
+        .click();
+      await adminMain
+        .getByRole("link", { name: "Open condition inspection", exact: true })
+        .click();
       verifierAllowed = false;
       await adminMain
         .getByRole("button", { name: "Reload inspection state", exact: true })

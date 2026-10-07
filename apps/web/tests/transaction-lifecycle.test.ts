@@ -146,6 +146,15 @@ async function fixture(
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    readCustody: async () => {
+      throw new Error("Unused custody");
+    },
+    updateFulfillment: async () => {
+      throw new Error("Unused fulfillment");
+    },
+    prepareCustody: async () => {
+      throw new Error("Unused custody preparation");
+    },
     readCondition: async () => {
       throw new Error("Unexpected condition read");
     },

@@ -4,12 +4,13 @@ These routes coordinate physical work separately from Core ownership, sale statu
 and finalized Registry history. All responses use `Cache-Control: no-store`.
 Queries and unknown request fields are rejected by shared contracts.
 
-| Route                                              | Access                                                 | Contract                          | Success                                |
-| -------------------------------------------------- | ------------------------------------------------------ | --------------------------------- | -------------------------------------- |
-| `POST /admin/artworks/:kathaId/operations/custody` | Admin allowlist and current Registry custody authority | `custodyPreparationRequestSchema` | `unsignedOperationResponseSchema`, 201 |
-| `POST /fulfillment/artworks/:kathaId`              | Session and current finalized Core owner               | `fulfillmentCreateRequestSchema`  | `fulfillmentResponseSchema`, 201       |
-| `GET /fulfillment/:requestId`                      | Original requester or configured admin                 | UUID path, empty query            | `fulfillmentResponseSchema`, 200       |
-| `PATCH /admin/fulfillment/:requestId`              | Configured admin                                       | `fulfillmentUpdateRequestSchema`  | `fulfillmentResponseSchema`, 200       |
+| Route                                              | Access                                                 | Contract                          | Success                                  |
+| -------------------------------------------------- | ------------------------------------------------------ | --------------------------------- | ---------------------------------------- |
+| `GET /admin/artworks/:kathaId/custody`             | Configured admin                                       | Pagination query                  | `custodyAdministrationReviewSchema`, 200 |
+| `POST /admin/artworks/:kathaId/operations/custody` | Admin allowlist and current Registry custody authority | `custodyPreparationRequestSchema` | `unsignedOperationResponseSchema`, 201   |
+| `POST /fulfillment/artworks/:kathaId`              | Session and current finalized Core owner               | `fulfillmentCreateRequestSchema`  | `fulfillmentResponseSchema`, 201         |
+| `GET /fulfillment/:requestId`                      | Original requester or configured admin                 | UUID path, empty query            | `fulfillmentResponseSchema`, 200         |
+| `PATCH /admin/fulfillment/:requestId`              | Configured admin                                       | `fulfillmentUpdateRequestSchema`  | `fulfillmentResponseSchema`, 200         |
 
 The custody authority is checked independently from verifier authority. Existing
 administrative configuration uses the admin allowlist for custody-authority access;
@@ -60,8 +61,7 @@ Only request UUID/timestamp enter that intent; no contact, address, courier or n
 The response contains one simulated unsigned transaction. Initial custody uses
 `initialize_custody`; subsequent movement uses `transition_custody`. The authorized
 wallet reviews and signs. Preparing a transaction never inserts custody observations,
-changes fulfillment status or creates finalized history. Receipt reconciliation is
-scheduled separately. Chain state may change before execution; revisions and authority
+changes fulfillment status or creates finalized history. Receipt reconciliation uses the existing operation receipt boundary. Chain state may change before execution; revisions and authority
 are rechecked by the program. Preparation reads do not reserve ownership or custody.
 
 ## Owner fulfillment requests
@@ -89,8 +89,7 @@ Unminted works and transit are ineligible for owner requests.
 All contact/address fields are bounded; at least one contact method is required.
 The requester comes from the authenticated session. Client-chosen request UUIDs
 make identical retries reuse one record; changes to identity or submitted details
-conflict. Artwork parent locks serialize writes. No list/bulk export endpoint is
-added. The original requester retains access to their private request after sale;
+conflict. Artwork parent locks serialize writes. The per-artwork administrator review includes a bounded private request page; no bulk export is available. The original requester retains access to their private request after sale;
 other wallets require admin authorization.
 
 ## Manual status coordination
@@ -131,3 +130,15 @@ Run `pnpm test`, `pnpm db:test`, `pnpm typecheck`, `pnpm lint`, `pnpm build`,
 finalized RPC/simulation with real generated instruction encoding. Existing program
 lifecycle tests cover authorized custody transitions. No live signing, submission,
 physical delivery or Devnet deployment is performed by these endpoints or tests.
+
+## Administrator review
+
+`GET /admin/artworks/:kathaId/custody?limit=20&offset=0` checks administrator
+authorization before any private query. Standard pagination is bounded to 100 rows
+and offset 100000. The response separates finalized chain custody from private
+requests and exposes allowed physical actions, per-request status actions, owner
+eligibility, signing-authority eligibility and receipt/indexing state.
+Unresolved signed custody attempts block replacement preparation under the artwork
+lock; receipt writes acquire the same parent lock before locking their operation.
+See the [administration guide](custody-administration-web.md) for the linked
+dispatch/receipt sequence and explicit wallet approval.

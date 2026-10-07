@@ -33,6 +33,14 @@ export function ArtworkVerificationLookup() {
           Open condition inspection
         </Link>
       )}
+      {parsed.success && (
+        <Link
+          className="text-link mt-4 mr-6 inline-block"
+          href={`/admin/artworks/${parsed.data.kathaId}/custody`}
+        >
+          Open custody coordination
+        </Link>
+      )}
       {parsed.success ? (
         <Link
           className="text-link mt-4 inline-block"

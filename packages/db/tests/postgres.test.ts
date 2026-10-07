@@ -3417,13 +3417,107 @@ it("serializes private fulfillment retries and status changes, and rejects stale
     ).toHaveLength(0);
     const current = await store.load(artwork.kathaId, input.requestId);
     if (!current) throw new Error("Snapshot missing");
+    const savedCustody = await store
+      .operations(current)
+      .save(operation, address, artwork.kathaId, preparation);
+    if (savedCustody.status !== "saved") throw new Error("Custody preparation missing");
+    const { createCustodyOperationStatusStore, createOperationReceiptStore } =
+      await import("../src/index.js");
+    const receiptStore = createOperationReceiptStore(db);
+    const readCustodyStatus = createCustodyOperationStatusStore(db, "LOCALNET");
+    const latest = await db
+      .select()
+      .from(blockchainOperations)
+      .where(eq(blockchainOperations.idempotencyKey, operation.idempotencyKey));
+    if (!latest[0]) throw new Error("Missing custody operation");
+    const signedAt = new Date();
     expect(
       (
-        await store
-          .operations(current)
-          .save(operation, address, artwork.kathaId, preparation)
+        await receiptStore.save(
+          savedCustody.operationId,
+          savedCustody.preparationId,
+          wallet.id,
+          "LOCALNET",
+          "BC".repeat(44),
+          preparation.messageHash,
+          { status: "UNKNOWN" },
+        )
       ).status,
     ).toBe("saved");
+    expect(await readCustodyStatus(artwork.kathaId)).toMatchObject({
+      unresolved: true,
+      receipt: { status: "UNKNOWN", signature: "BC".repeat(44) },
+    });
+    const replacement = await store
+      .operations(current)
+      .save(
+        { ...operation, idempotencyKey: "custody-replacement" },
+        address,
+        artwork.kathaId,
+        { ...preparation, messageHash: "b".repeat(64) },
+      );
+    expect(replacement.status).toBe("conflict");
+    expect(
+      await createCustodyOperationStatusStore(db, "DEVNET")(artwork.kathaId),
+    ).toEqual({ finalized: false, unresolved: false, receipt: null });
+    const finalizedAt = new Date(Math.max(Date.now(), signedAt.getTime() + 1));
+    expect(
+      (
+        await receiptStore.save(
+          savedCustody.operationId,
+          savedCustody.preparationId,
+          wallet.id,
+          "LOCALNET",
+          "BC".repeat(44),
+          preparation.messageHash,
+          { status: "FINALIZED", slot: 101n, chainRecordedAt: finalizedAt },
+        )
+      ).status,
+    ).toBe("saved");
+    const next = await store
+      .operations(current)
+      .save(
+        { ...operation, idempotencyKey: "custody-after-finalized" },
+        address,
+        artwork.kathaId,
+        { ...preparation, messageHash: "c".repeat(64) },
+      );
+    if (next.status !== "saved")
+      throw new Error("Next custody preparation blocked by past finalized movement");
+    expect(
+      (
+        await receiptStore.save(
+          next.operationId,
+          next.preparationId,
+          wallet.id,
+          "LOCALNET",
+          "CD".repeat(44),
+          "c".repeat(64),
+          { status: "FAILED", failureCode: "TRANSACTION_FAILED" },
+        )
+      ).status,
+    ).toBe("saved");
+    expect(await readCustodyStatus(artwork.kathaId)).toMatchObject({
+      finalized: true,
+      unresolved: false,
+      receipt: { status: "FAILED", signature: "CD".repeat(44), indexed: false },
+    });
+    const secondRequest = await store.create(artwork, address, {
+      ...input,
+      requestId: randomUUID(),
+    });
+    expect(secondRequest).not.toBeNull();
+    const firstPage = await store.listRequests(artwork.id, { limit: 1, offset: 0 });
+    const secondPage = await store.listRequests(artwork.id, { limit: 1, offset: 1 });
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.hasMore).toBe(true);
+    expect(secondPage.items).toHaveLength(1);
+    expect(secondPage.hasMore).toBe(false);
+    expect(firstPage.items[0]?.id).not.toBe(secondPage.items[0]?.id);
+    expect(await store.listRequests(randomUUID(), { limit: 1, offset: 0 })).toEqual({
+      items: [],
+      hasMore: false,
+    });
     const approved = await store.findRequest(input.requestId);
     if (!approved) throw new Error("Snapshot missing");
     expect(

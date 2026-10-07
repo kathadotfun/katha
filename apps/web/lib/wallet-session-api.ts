@@ -2,6 +2,14 @@ import {
   conditionInspectionReviewSchema,
   conditionPreparationRequestSchema,
   conditionAttestationRequestSchema,
+  type CustodyPreparationRequest,
+  type FulfillmentUpdateRequest,
+  custodyPreparationRequestSchema,
+  custodyAdministrationReviewSchema,
+  fulfillmentResponseSchema,
+  fulfillmentIdParamsSchema,
+  fulfillmentUpdateRequestSchema,
+  paginationQuerySchema,
   type ConditionPreparationRequest,
   type ConditionAttestationRequest,
   artworkVerificationReviewSchema,
@@ -124,6 +132,83 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readCustody(
+      kathaId: string,
+      pagination: Pagination,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const query = paginationQuerySchema.parse({
+        limit: String(pagination.limit),
+        offset: String(pagination.offset),
+      });
+      const result = custodyAdministrationReviewSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/custody?limit=${query.limit}&offset=${query.offset}`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.pagination.limit !== query.limit ||
+        result.pagination.offset !== query.offset
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async updateFulfillment(
+      id: string,
+      input: FulfillmentUpdateRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = fulfillmentIdParamsSchema.parse({ requestId: id });
+      const data = fulfillmentUpdateRequestSchema.parse(input);
+      const result = fulfillmentResponseSchema.parse(
+        await request(
+          `/admin/fulfillment/${path.requestId}`,
+          data,
+          token,
+          signal,
+          "PATCH",
+        ),
+      );
+      if (
+        result.id !== path.requestId ||
+        result.status !== data.status ||
+        result.updatedAt === data.expectedUpdatedAt
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareCustody(
+      kathaId: string,
+      input: CustodyPreparationRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const data = custodyPreparationRequestSchema.parse(input);
+      const result = unsignedOperationResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/operations/custody`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.kind !== "UPDATE_CUSTODY" ||
+        !data.supportedTransactionVersions.includes(result.transactionVersion)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readCondition(kathaId: string, token: string, signal: AbortSignal) {
       const path = artworkDraftParamsSchema.parse({ kathaId });
       const result = conditionInspectionReviewSchema.parse(

@@ -119,7 +119,7 @@ keeps the API session in memory; sign-out and account changes clear it. The wall
 panel displays the configured Localnet/Devnet test environment. A shared transaction
 review boundary now validates and simulates prepared Registry messages, requests
 explicit wallet approval, records signed attempts and reconciles finalized outcomes
-with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork drafts, media management and the registration workflow are connected, with exact document review, simulation, explicit wallet approval and protected receipt/indexing feedback. Artwork authenticity now connects manual inspection and authorship approval to verifier-authorized preparation, wallet signing and finalized receipt/indexing feedback. Condition inspection now connects private evidence upload and immutable report preparation to explicit verifier signing, current owner/custody scope checks and report-specific finalized receipt/indexing feedback. Remaining API behavior and Marketplace
+with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork drafts, media management and the registration workflow are connected, with exact document review, simulation, explicit wallet approval and protected receipt/indexing feedback. Artwork authenticity now connects manual inspection and authorship approval to verifier-authorized preparation, wallet signing and finalized receipt/indexing feedback. Condition inspection now connects private evidence upload and immutable report preparation to explicit verifier signing, current owner/custody scope checks and report-specific finalized receipt/indexing feedback. Custody administration now connects finalized physical state and private fulfillment requests to explicit manual status confirmation, authority-bound custody signing and separate receipt/indexing feedback. Remaining API behavior and Marketplace
 business instructions remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
@@ -182,6 +182,7 @@ outside the current scope.
 - [Artwork draft administration](docs/development/artwork-draft-list-web.md)
 - [Structured artwork documentation editor](docs/development/artwork-draft-editor-web.md)
 - [Condition inspection administration](docs/development/condition-inspection-web.md)
+- [Custody and fulfillment administration](docs/development/custody-administration-web.md)
 - [Artwork media administration](docs/development/artwork-media-administration.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)

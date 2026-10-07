@@ -1,5 +1,9 @@
 import {
   custodyPreparationRequestSchema,
+  custodyAdministrationReviewSchema,
+  physicalCustodyTransitionSchema,
+  type Pagination,
+  type ArtworkRegistrationReview,
   fulfillmentCreateRequestSchema,
   fulfillmentUpdateRequestSchema,
   fulfillmentResponseSchema,
@@ -23,6 +27,7 @@ export function createCustodyOperations(
   readChain: CustodyReader,
   chain: OperationChain,
   cluster: "localnet" | "devnet",
+  readStatus: (kathaId: string) => Promise<ArtworkRegistrationReview["registration"]>,
 ) {
   async function read(kathaId: string, nextRevision?: bigint) {
     try {
@@ -60,6 +65,82 @@ export function createCustodyOperations(
     return wallet;
   }
   return {
+    async review(bearer: string | undefined, kathaId: string, pagination: Pagination) {
+      const handler = await authorization.requireRole(bearer, "admin");
+      if (handler.cluster !== cluster) throw new DomainError("FORBIDDEN");
+      const snapshot = await store.load(kathaId);
+      if (!snapshot) throw new DomainError("NOT_FOUND");
+      const accounts = await read(kathaId);
+      const [queue, custody] = await Promise.all([
+        store.listRequests(snapshot.artwork.id, pagination),
+        readStatus(kathaId),
+      ]);
+      const transitions = physicalCustodyTransitionSchema.options
+        .map((option) =>
+          option.parse({
+            action: option.shape.action.value,
+            from: option.shape.from.value,
+            to: option.shape.to.value,
+          }),
+        )
+        .filter(
+          (t) =>
+            t.from === accounts.custodyState &&
+            !(
+              t.to === "COLLECTOR_HELD" &&
+              accounts.ownerWallet === accounts.configuration.custodyAuthority
+            ),
+        );
+      return custodyAdministrationReviewSchema.parse({
+        kathaId,
+        title: snapshot.artwork.title,
+        updatedAt: snapshot.artwork.updatedAt.toISOString(),
+        cluster,
+        chain: {
+          revision: accounts.custodyRevision.toString(),
+          state: accounts.custodyState,
+          subject: accounts.custodySubject,
+          ownerWallet: accounts.ownerWallet,
+          custodyAuthority: accounts.configuration.custodyAuthority,
+        },
+        canAttest: handler.walletAddress === accounts.configuration.custodyAuthority,
+        transitions,
+        custody,
+        requests: queue.items.map((row) => {
+          const ownerMatches = row.requesterWallet === accounts.ownerWallet;
+          const statuses = {
+            REQUESTED: ["APPROVED", "CANCELLED"],
+            APPROVED: ["DISPATCHED", "CANCELLED"],
+            DISPATCHED: ["RECEIVED"],
+            RECEIVED: [],
+            CANCELLED: [],
+          } as const;
+          return {
+            request: response(row, kathaId),
+            ownerMatches,
+            allowedStatuses: statuses[row.status].filter(
+              (status) => ownerMatches || status === "CANCELLED",
+            ),
+            transitions: ownerMatches
+              ? transitions.filter(
+                  (t) =>
+                    (row.status === "APPROVED" &&
+                      t.action ===
+                        (row.kind === "DELIVERY"
+                          ? "DISPATCH_FROM_KATHA"
+                          : "DISPATCH_FROM_COLLECTOR")) ||
+                    (row.status === "DISPATCHED" &&
+                      t.action ===
+                        (row.kind === "DELIVERY"
+                          ? "RECEIVE_BY_COLLECTOR"
+                          : "RECEIVE_AT_KATHA")),
+                )
+              : [],
+          };
+        }),
+        pagination: { ...pagination, hasMore: queue.hasMore },
+      });
+    },
     async prepare(bearer: string | undefined, kathaId: string, input: unknown) {
       const result = custodyPreparationRequestSchema.safeParse(input);
       if (!result.success) throw new DomainError("INVALID_REQUEST");
@@ -73,6 +154,7 @@ export function createCustodyOperations(
       if (!snapshot) throw new DomainError("NOT_FOUND");
       if (snapshot.artwork.updatedAt.toISOString() !== request.expectedUpdatedAt)
         throw new DomainError("CONFLICT");
+      if ((await readStatus(kathaId)).unresolved) throw new DomainError("CONFLICT");
       const expectedRevision = BigInt(request.expectedCustodyRevision);
       const accounts = await read(kathaId, expectedRevision + 1n);
       if (

@@ -88,6 +88,15 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readCustody: async () => {
+      throw new Error("Unused custody");
+    },
+    updateFulfillment: async () => {
+      throw new Error("Unused fulfillment");
+    },
+    prepareCustody: async () => {
+      throw new Error("Unused custody preparation");
+    },
     readCondition: async () => {
       throw new Error("Unexpected condition read");
     },

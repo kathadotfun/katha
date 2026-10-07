@@ -523,6 +523,17 @@ export function createApi(
     });
   }
   if (custodyOperations) {
+    app.get("/admin/artworks/:kathaId/custody", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      const pagination = parseQuery(c, paginationQuerySchema);
+      return c.json(
+        await custodyOperations.review(
+          c.req.header("Authorization"),
+          kathaId,
+          pagination,
+        ),
+      );
+    });
     app.use("/fulfillment/*", async (c, next) => {
       c.header("Cache-Control", "no-store");
       await next();

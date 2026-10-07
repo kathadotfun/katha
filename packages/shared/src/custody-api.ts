@@ -1,7 +1,12 @@
+import { registrationStatusSchema } from "./artwork-registration-review.js";
+import { paginationResponseSchema } from "./http.js";
 import { kathaIdSchema } from "./artwork-identity.js";
 import { z } from "zod";
 import { walletAddressSchema } from "./artwork-domain.js";
-import { physicalCustodyTransitionSchema } from "./artwork-lifecycle.js";
+import {
+  physicalCustodyTransitionSchema,
+  physicalCustodyStateSchema,
+} from "./artwork-lifecycle.js";
 import { artworkRegistrationRequestSchema } from "./artwork-registration-api.js";
 const timestamp = z.iso.datetime({ precision: 3 });
 export const custodyPreparationRequestSchema = artworkRegistrationRequestSchema
@@ -75,3 +80,52 @@ export const fulfillmentResponseSchema = z.strictObject({
 });
 export type FulfillmentCreateRequest = z.infer<typeof fulfillmentCreateRequestSchema>;
 export type FulfillmentUpdateRequest = z.infer<typeof fulfillmentUpdateRequestSchema>;
+
+export type CustodyPreparationRequest = z.infer<typeof custodyPreparationRequestSchema>;
+export type FulfillmentResponse = z.infer<typeof fulfillmentResponseSchema>;
+export const custodyAdministrationReviewSchema = z
+  .strictObject({
+    kathaId: kathaIdSchema,
+    title: z.string().min(1).max(200),
+    updatedAt: timestamp,
+    cluster: z.enum(["localnet", "devnet"]),
+    chain: z.strictObject({
+      revision: custodyPreparationRequestSchema.shape.expectedCustodyRevision,
+      state: physicalCustodyStateSchema,
+      subject: walletAddressSchema.nullable(),
+      ownerWallet: walletAddressSchema.nullable(),
+      custodyAuthority: walletAddressSchema,
+    }),
+    canAttest: z.boolean(),
+    transitions: z.array(physicalCustodyTransitionSchema).max(6),
+    custody: registrationStatusSchema,
+    requests: z
+      .array(
+        z.strictObject({
+          request: fulfillmentResponseSchema,
+          ownerMatches: z.boolean(),
+          allowedStatuses: z.array(fulfillmentUpdateRequestSchema.shape.status).max(4),
+          transitions: z.array(physicalCustodyTransitionSchema).max(2),
+        }),
+      )
+      .max(100),
+    pagination: paginationResponseSchema,
+  })
+  .refine((v) => v.requests.length <= v.pagination.limit)
+  .refine(
+    (v) => new Set(v.requests.map((row) => row.request.id)).size === v.requests.length,
+  )
+  .refine(
+    (v) =>
+      v.transitions.every((t) => t.from === v.chain.state) &&
+      v.requests.every(
+        (row) =>
+          row.request.kathaId === v.kathaId &&
+          row.transitions.every((t) =>
+            v.transitions.some((allowed) => allowed.action === t.action),
+          ),
+      ),
+  );
+export type CustodyAdministrationReview = z.infer<
+  typeof custodyAdministrationReviewSchema
+>;

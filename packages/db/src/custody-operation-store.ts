@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, desc, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
 
 import { artworks } from "./schema/artworks.js";
@@ -25,8 +25,27 @@ type UpdateInput = {
   courier?: string | null | undefined;
   trackingReference?: string | null | undefined;
 };
-export function createCustodyOperationStore(db: Database) {
+export function createCustodyOperationStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET" = "LOCALNET",
+) {
   return {
+    async listRequests(
+      artworkId: string,
+      pagination: { limit: number; offset: number },
+    ) {
+      const rows = await db
+        .select()
+        .from(fulfillmentRequests)
+        .where(eq(fulfillmentRequests.artworkId, artworkId))
+        .orderBy(desc(fulfillmentRequests.createdAt), desc(fulfillmentRequests.id))
+        .limit(pagination.limit + 1)
+        .offset(pagination.offset);
+      return {
+        items: rows.slice(0, pagination.limit),
+        hasMore: rows.length > pagination.limit,
+      };
+    },
     async load(kathaId: string, fulfillmentId?: string) {
       const [artwork] = await db
         .select()
@@ -164,6 +183,12 @@ export function createCustodyOperationStore(db: Database) {
           artwork.updatedAt.toISOString() !== expected.artwork.updatedAt.toISOString()
         )
           return false;
+        // Parent lock serializes UNKNOWN receipt writes with replacement preparations.
+        const unresolved = await tx.execute(sql`select 1 from transaction_receipts r
+          join blockchain_operations o on o.id = r.operation_id
+          where o.artwork_id = ${artwork.id} and o.kind = 'UPDATE_CUSTODY'
+          and o.cluster = ${cluster} and r.cluster = ${cluster} and r.status = 'UNKNOWN' limit 1`);
+        if (unresolved.length) return false;
         if (!expected.request) return true;
         const [request] = await tx
           .select()

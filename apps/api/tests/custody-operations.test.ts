@@ -12,7 +12,10 @@ import {
   parseInitializeCustodyInstruction,
   parseTransitionCustodyInstruction,
 } from "@katha/solana/registry";
-import { fulfillmentResponseSchema } from "@katha/shared";
+import {
+  fulfillmentResponseSchema,
+  custodyAdministrationReviewSchema,
+} from "@katha/shared";
 import { conditionFixture } from "./fixtures/condition-attestation.js";
 import { temporaryWallet } from "./fixtures/wallet.js";
 import { createCustodyOperations } from "../src/custody-operations.js";
@@ -75,6 +78,7 @@ async function fixture(minted = false) {
     status: "APPROVED",
   }));
   const store: CustodyOperationStore = {
+    listRequests: vi.fn(async () => ({ items: [row], hasMore: false })),
     load,
     findRequest,
     create,
@@ -88,6 +92,11 @@ async function fixture(minted = false) {
       return f.session;
     },
   };
+  const readStatus = vi.fn(async () => ({
+    finalized: false,
+    unresolved: false,
+    receipt: null,
+  }));
   const service = createCustodyOperations(
     store,
     f.authorization,
@@ -95,6 +104,7 @@ async function fixture(minted = false) {
     read,
     f.chain,
     "localnet",
+    readStatus,
   );
   const request = {
     idempotencyKey: "synthetic-custody",
@@ -122,6 +132,7 @@ async function fixture(minted = false) {
     service,
     request,
     sessions,
+    readStatus,
   };
 }
 it.each([false, true])(
@@ -443,3 +454,139 @@ it.each([true, false])(
     }
   },
 );
+
+it("reviews only valid chain transitions and bounded private requests", async () => {
+  const f = await fixture(true);
+  const result = await f.service.review(
+    "Bearer synthetic",
+    f.snapshot.artwork.kathaId,
+    { limit: 20, offset: 0 },
+  );
+  expect(result.chain.state).toBe("KATHA_HELD");
+  expect(result.transitions.map((t) => t.action)).toEqual(["DISPATCH_FROM_KATHA"]);
+  expect(result.requests[0]?.allowedStatuses).toEqual(["APPROVED", "CANCELLED"]);
+  expect(result.requests[0]?.transitions).toEqual([]);
+  expect(result.requests[0]?.request.recipientName).toBe("Synthetic recipient");
+  expect(JSON.stringify(result)).not.toContain("requesterWallet");
+  expect(JSON.stringify(result)).not.toContain("handledByWallet");
+  expect(f.store.listRequests).toHaveBeenCalledWith(f.snapshot.artwork.id, {
+    limit: 20,
+    offset: 0,
+  });
+  expect(f.save).not.toHaveBeenCalled();
+});
+it("admin review denies roles before reading private fulfillment", async () => {
+  const f = await fixture();
+  f.authorization.requireRole = vi.fn(async () => {
+    throw new DomainError("FORBIDDEN");
+  });
+  await expect(
+    f.service.review("Bearer synthetic", f.snapshot.artwork.kathaId, {
+      limit: 20,
+      offset: 0,
+    }),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(f.load).not.toHaveBeenCalled();
+  expect(f.read).not.toHaveBeenCalled();
+  expect(f.store.listRequests).not.toHaveBeenCalled();
+});
+it("stale requester may be cancelled but cannot authorize movement", async () => {
+  const f = await fixture(true);
+  f.accounts.ownerWallet = temporaryWallet().address;
+  f.row.status = "APPROVED";
+  const review = await f.service.review(
+    "Bearer synthetic",
+    f.snapshot.artwork.kathaId,
+    { limit: 20, offset: 0 },
+  );
+  expect(review.requests[0]?.ownerMatches).toBe(false);
+  expect(review.requests[0]?.allowedStatuses).toEqual(["CANCELLED"]);
+  expect(review.requests[0]?.transitions).toEqual([]);
+});
+it.each(["APPROVED", "DISPATCHED"] as const)(
+  "matches %s request to its physical action",
+  async (status) => {
+    const f = await fixture(true);
+    f.row.status = status;
+    if (status === "DISPATCHED") {
+      f.accounts.custodyState = "IN_TRANSIT";
+      f.accounts.custodySubject = null;
+      f.accounts.ownerWallet = temporaryWallet().address;
+      f.row.requesterWallet = f.accounts.ownerWallet;
+    }
+    const review = await f.service.review(
+      "Bearer synthetic",
+      f.snapshot.artwork.kathaId,
+      { limit: 20, offset: 0 },
+    );
+    expect(review.requests[0]?.transitions.map((t) => t.action)).toEqual([
+      status === "APPROVED" ? "DISPATCH_FROM_KATHA" : "RECEIVE_BY_COLLECTOR",
+    ]);
+  },
+);
+it("ordinary admin sees requests without Registry signing authority", async () => {
+  const f = await fixture();
+  f.accounts.configuration.custodyAuthority = f.accounts.artworkAccount.address;
+  const review = await f.service.review(
+    "Bearer synthetic",
+    f.snapshot.artwork.kathaId,
+    { limit: 20, offset: 0 },
+  );
+  expect(review.canAttest).toBe(false);
+  expect(review.requests).toHaveLength(1);
+});
+it("unresolved signature rejects preparation before RPC or persistence", async () => {
+  const f = await fixture();
+  f.readStatus.mockResolvedValueOnce({
+    finalized: false,
+    unresolved: true,
+    receipt: null,
+  });
+  await expect(
+    f.service.prepare("Bearer synthetic", f.snapshot.artwork.kathaId, f.request),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(f.read).not.toHaveBeenCalled();
+  expect(f.save).not.toHaveBeenCalled();
+});
+it("custody review route is private, paginated and validates query boundaries", async () => {
+  const f = await fixture();
+  const app = createApi(
+    undefined,
+    undefined,
+    [],
+    undefined,
+    f.authorization,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    f.service,
+  );
+  const result = await app.request(
+    `/admin/artworks/${f.snapshot.artwork.kathaId}/custody?limit=1&offset=0`,
+    { headers: { Authorization: "Bearer synthetic" } },
+  );
+  expect(result.status).toBe(200);
+  expect(result.headers.get("Cache-Control")).toBe("no-store");
+  expect(
+    custodyAdministrationReviewSchema.parse(await result.json()).pagination,
+  ).toEqual({
+    limit: 1,
+    offset: 0,
+    hasMore: false,
+  });
+  expect(
+    (
+      await app.request(
+        `/admin/artworks/${f.snapshot.artwork.kathaId}/custody?limit=101`,
+        { headers: { Authorization: "Bearer synthetic" } },
+      )
+    ).status,
+  ).toBe(400);
+});

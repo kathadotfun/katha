@@ -60,7 +60,11 @@ export function createOperationReceiptStore(db: Database) {
               eq(blockchainOperations.cluster, cluster),
             ),
           );
-        if (identity?.kind === "RECORD_CONDITION" && identity.artworkId) {
+        if (
+          identity &&
+          ["RECORD_CONDITION", "UPDATE_CUSTODY"].includes(identity.kind) &&
+          identity.artworkId
+        ) {
           await tx
             .select({ id: artworks.id })
             .from(artworks)

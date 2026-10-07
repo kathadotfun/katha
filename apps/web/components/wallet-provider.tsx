@@ -72,6 +72,18 @@ export function WalletProvider({
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
       async (operation, signature, signal) => {
+        if (operation.kind === "UPDATE_CUSTODY") {
+          const page = await auth.readCustody(
+            operation.kathaId,
+            { limit: 20, offset: 0 },
+            signal,
+          );
+          return (
+            page.custody.receipt?.status === "FINALIZED" &&
+            page.custody.receipt.signature === signature &&
+            page.custody.receipt.indexed
+          );
+        }
         if (operation.kind === "RECORD_CONDITION") {
           const page = await auth.readCondition(operation.kathaId, signal);
           return (
