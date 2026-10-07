@@ -2,6 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token};
 use katha_registry::{program::KathaRegistry, KathaConfig};
 
+pub mod distribution;
+pub use distribution::*;
 pub mod eligibility;
 pub use eligibility::*;
 pub mod listing;
@@ -111,15 +113,20 @@ pub mod katha_marketplace {
 }
 
 fn validate_settings(commission: u16, royalty: u16, validity: u64) -> Result<()> {
-    // Sum in a wider type before bounding deductions; no u16 overflow or seller underflow.
-    require!(
-        u32::from(commission) + u32::from(royalty) <= BASIS_POINTS_DENOMINATOR,
-        MarketplaceError::InvalidFees
-    );
+    validate_fees(commission, royalty)?;
     // Later inspection-age calculations use the signed Unix timestamp domain.
     require!(
         validity > 0 && validity <= i64::MAX as u64,
         MarketplaceError::InvalidInspectionValidity
+    );
+    Ok(())
+}
+
+fn validate_fees(commission: u16, royalty: u16) -> Result<()> {
+    // Sum in a wider type before bounding deductions; no u16 overflow or seller underflow.
+    require!(
+        u32::from(commission) + u32::from(royalty) <= BASIS_POINTS_DENOMINATOR,
+        MarketplaceError::InvalidFees
     );
     Ok(())
 }
@@ -230,6 +237,12 @@ pub enum MarketplaceError {
     ListingNotExpired,
     #[msg("Core freeze delegate does not match the active listing")]
     InvalidListingDelegates,
+    #[msg("Sale price must be positive")]
+    InvalidSalePrice,
+    #[msg("Payment arithmetic overflow or underflow")]
+    PaymentArithmeticOverflow,
+    #[msg("Payment recipients cannot be default addresses")]
+    InvalidPaymentRecipient,
 }
 
 #[cfg(test)]

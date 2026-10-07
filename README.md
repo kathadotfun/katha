@@ -217,6 +217,7 @@ outside the current scope.
 - [Listing records and sale eligibility](docs/development/marketplace-eligibility.md)
 - [Fixed-price listing creation and Core locking](docs/development/marketplace-listings.md)
 - [Listing cancellation and expiry recovery](docs/development/marketplace-cancellation.md)
+- [Checked primary and secondary sale distributions](docs/development/marketplace-distributions.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

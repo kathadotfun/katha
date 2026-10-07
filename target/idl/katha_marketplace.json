@@ -1421,6 +1421,21 @@
       "code": 6022,
       "name": "InvalidListingDelegates",
       "msg": "Core freeze delegate does not match the active listing"
+    },
+    {
+      "code": 6023,
+      "name": "InvalidSalePrice",
+      "msg": "Sale price must be positive"
+    },
+    {
+      "code": 6024,
+      "name": "PaymentArithmeticOverflow",
+      "msg": "Payment arithmetic overflow or underflow"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidPaymentRecipient",
+      "msg": "Payment recipients cannot be default addresses"
     }
   ],
   "types": [

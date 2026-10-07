@@ -60,6 +60,12 @@ export const KATHA_MARKETPLACE_ERROR__LISTING_NOT_ACTIVE = 0x1784; // 6020
 export const KATHA_MARKETPLACE_ERROR__LISTING_NOT_EXPIRED = 0x1785; // 6021
 /** InvalidListingDelegates: Core freeze delegate does not match the active listing */
 export const KATHA_MARKETPLACE_ERROR__INVALID_LISTING_DELEGATES = 0x1786; // 6022
+/** InvalidSalePrice: Sale price must be positive */
+export const KATHA_MARKETPLACE_ERROR__INVALID_SALE_PRICE = 0x1787; // 6023
+/** PaymentArithmeticOverflow: Payment arithmetic overflow or underflow */
+export const KATHA_MARKETPLACE_ERROR__PAYMENT_ARITHMETIC_OVERFLOW = 0x1788; // 6024
+/** InvalidPaymentRecipient: Payment recipients cannot be default addresses */
+export const KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_RECIPIENT = 0x1789; // 6025
 
 export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS
@@ -76,11 +82,14 @@ export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_DELEGATES
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_RECIPIENT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_SALE_PRICE
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_TREASURY
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_ALREADY_ACTIVE
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_NOT_ACTIVE
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_NOT_EXPIRED
+  | typeof KATHA_MARKETPLACE_ERROR__PAYMENT_ARITHMETIC_OVERFLOW
   | typeof KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP
@@ -103,11 +112,14 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_DELEGATES]: `Core freeze delegate does not match the active listing`,
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS]: `Listing price must be positive and expiry must be in the future`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT]: `Payment mint must use six decimals and have no freeze authority`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_RECIPIENT]: `Payment recipients cannot be default addresses`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA]: `ProgramData does not belong to this Marketplace program`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_SALE_PRICE]: `Sale price must be positive`,
     [KATHA_MARKETPLACE_ERROR__INVALID_TREASURY]: `Registry treasury cannot be the default address`,
     [KATHA_MARKETPLACE_ERROR__LISTING_ALREADY_ACTIVE]: `An active listing already exists; cancel or recover expiry first`,
     [KATHA_MARKETPLACE_ERROR__LISTING_NOT_ACTIVE]: `Listing is not active`,
     [KATHA_MARKETPLACE_ERROR__LISTING_NOT_EXPIRED]: `Listing has not reached its expiry time`,
+    [KATHA_MARKETPLACE_ERROR__PAYMENT_ARITHMETIC_OVERFLOW]: `Payment arithmetic overflow or underflow`,
     [KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION]: `Listing revision does not match the reviewed revision`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY]: `Only the configured Registry authority can initialize Marketplace`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP]: `Bootstrap signer is not the Marketplace upgrade authority`,
