@@ -6,7 +6,202 @@
  * @see https://github.com/codama-idl/codama
  */
 
-import type { Address } from "@solana/kit";
+import {
+  assertIsInstructionWithAccounts,
+  containsBytes,
+  extendClient,
+  fixEncoderSize,
+  getBytesEncoder,
+  SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
+  SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
+  SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
+  SolanaError,
+  type Address,
+  type ClientWithRpc,
+  type ClientWithTransactionPlanning,
+  type ClientWithTransactionSending,
+  type ExtendedClient,
+  type GetAccountInfoApi,
+  type GetMultipleAccountsApi,
+  type Instruction,
+  type InstructionWithData,
+  type ReadonlyUint8Array,
+} from "@solana/kit";
+import {
+  addSelfFetchFunctions,
+  addSelfPlanAndSendFunctions,
+  type SelfFetchFunctions,
+  type SelfPlanAndSendFunctions,
+} from "@solana/kit/program-client-core";
+import {
+  getMarketplaceConfigCodec,
+  type MarketplaceConfig,
+  type MarketplaceConfigArgs,
+} from "../accounts/index.js";
+import {
+  getInitializeMarketplaceInstructionAsync,
+  parseInitializeMarketplaceInstruction,
+  type InitializeMarketplaceAsyncInput,
+  type ParsedInitializeMarketplaceInstruction,
+} from "../instructions/index.js";
+import { findConfigPda, findRegistryConfigPda } from "../pdas/index.js";
 
 export const KATHA_MARKETPLACE_PROGRAM_ADDRESS =
   "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq" as Address<"B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq">;
+
+export enum KathaMarketplaceAccount {
+  MarketplaceConfig,
+}
+
+export function identifyKathaMarketplaceAccount(
+  account: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
+): KathaMarketplaceAccount {
+  const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([169, 22, 247, 131, 182, 200, 81, 124]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceAccount.MarketplaceConfig;
+  }
+  throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT, {
+    accountData: data,
+    programName: "kathaMarketplace",
+  });
+}
+
+export enum KathaMarketplaceEvent {
+  MarketplaceInitialized,
+}
+
+export function identifyKathaMarketplaceEvent(
+  event: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
+): KathaMarketplaceEvent {
+  const data = "data" in event ? event.data : event;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([22, 167, 42, 34, 172, 55, 155, 14]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceEvent.MarketplaceInitialized;
+  }
+  throw new Error(
+    "The provided event could not be identified as a kathaMarketplace event.",
+  );
+}
+
+export enum KathaMarketplaceInstruction {
+  InitializeMarketplace,
+}
+
+export function identifyKathaMarketplaceInstruction(
+  instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
+): KathaMarketplaceInstruction {
+  const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([47, 81, 64, 0, 96, 56, 105, 7]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.InitializeMarketplace;
+  }
+  throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION, {
+    instructionData: data,
+    programName: "kathaMarketplace",
+  });
+}
+
+export type ParsedKathaMarketplaceInstruction<
+  TProgram extends string = "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq",
+> = {
+  instructionType: KathaMarketplaceInstruction.InitializeMarketplace;
+} & ParsedInitializeMarketplaceInstruction<TProgram>;
+
+export function parseKathaMarketplaceInstruction<TProgram extends string>(
+  instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
+): ParsedKathaMarketplaceInstruction<TProgram> {
+  const instructionType = identifyKathaMarketplaceInstruction(instruction);
+  switch (instructionType) {
+    case KathaMarketplaceInstruction.InitializeMarketplace: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.InitializeMarketplace,
+        ...parseInitializeMarketplaceInstruction(instruction),
+      };
+    }
+    default:
+      throw new SolanaError(
+        SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
+        { instructionType: instructionType as string, programName: "kathaMarketplace" },
+      );
+  }
+}
+
+export type KathaMarketplacePlugin = {
+  accounts: KathaMarketplacePluginAccounts;
+  instructions: KathaMarketplacePluginInstructions;
+  pdas: KathaMarketplacePluginPdas;
+  identifyAccount: typeof identifyKathaMarketplaceAccount;
+  identifyInstruction: typeof identifyKathaMarketplaceInstruction;
+  parseInstruction: typeof parseKathaMarketplaceInstruction;
+};
+
+export type KathaMarketplacePluginAccounts = {
+  marketplaceConfig: ReturnType<typeof getMarketplaceConfigCodec> &
+    SelfFetchFunctions<MarketplaceConfigArgs, MarketplaceConfig>;
+};
+
+export type KathaMarketplacePluginInstructions = {
+  initializeMarketplace: (
+    input: InitializeMarketplaceAsyncInput,
+  ) => ReturnType<typeof getInitializeMarketplaceInstructionAsync> &
+    SelfPlanAndSendFunctions;
+};
+
+export type KathaMarketplacePluginPdas = {
+  config: typeof findConfigPda;
+  registryConfig: typeof findRegistryConfigPda;
+};
+
+export type KathaMarketplacePluginRequirements = ClientWithRpc<
+  GetAccountInfoApi & GetMultipleAccountsApi
+> &
+  ClientWithTransactionPlanning &
+  ClientWithTransactionSending;
+
+export function kathaMarketplaceProgram() {
+  return <T extends KathaMarketplacePluginRequirements>(
+    client: T,
+  ): ExtendedClient<T, { kathaMarketplace: KathaMarketplacePlugin }> => {
+    return extendClient(client, {
+      kathaMarketplace: <KathaMarketplacePlugin>{
+        accounts: {
+          marketplaceConfig: addSelfFetchFunctions(client, getMarketplaceConfigCodec()),
+        },
+        instructions: {
+          initializeMarketplace: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInitializeMarketplaceInstructionAsync(input),
+            ),
+        },
+        pdas: { config: findConfigPda, registryConfig: findRegistryConfigPda },
+        identifyAccount: identifyKathaMarketplaceAccount,
+        identifyInstruction: identifyKathaMarketplaceInstruction,
+        parseInstruction: parseKathaMarketplaceInstruction,
+      },
+    });
+  };
+}

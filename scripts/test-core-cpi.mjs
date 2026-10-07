@@ -17,6 +17,7 @@ const registryProgram = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC";
 const coreSha256 = "5680d2371204033f55cdcf0c08d393ed737d99cfe35d83f65befe80f7537484a";
 const coreBinary = join(root, "target/test-fixtures/core-devnet.so");
 const registryBinary = join(root, "target/core-cpi-test/katha_registry.so");
+const marketplaceBinary = join(root, "target/marketplace-test/katha_marketplace.so");
 const toolEnv = { ...process.env, NO_DNA: "1" };
 
 function run(command, args, cwd = root, env = toolEnv) {
@@ -110,6 +111,23 @@ async function main() {
     ],
     join(root, "programs/katha_registry"),
   );
+  if (!adminLifecycle) {
+    await run(
+      "cargo",
+      [
+        "build-sbf",
+        "--tools-version",
+        "v1.57",
+        "--arch",
+        "v3",
+        "--sbf-out-dir",
+        dirname(marketplaceBinary),
+        "--",
+        "--locked",
+      ],
+      join(root, "programs/katha_marketplace"),
+    );
+  }
   const registryBytes = await readFile(registryBinary);
   await run("pnpm", ["--filter", "@katha/solana", "program:typecheck"]);
   const port = await freePort();
@@ -176,6 +194,7 @@ async function main() {
               "tests/core-cpi.test.ts",
               "tests/registry-config.test.ts",
               "tests/marketplace-fixtures.test.ts",
+              "tests/marketplace-config.test.ts",
             ]),
       ],
       root,
@@ -183,6 +202,7 @@ async function main() {
         ...toolEnv,
         KATHA_TEST_CORE_SO: coreBinary,
         KATHA_TEST_REGISTRY_SO: registryBinary,
+        ...(!adminLifecycle ? { KATHA_TEST_MARKETPLACE_SO: marketplaceBinary } : {}),
         KATHA_TEST_SURFPOOL_RPC: url,
         KATHA_TEST_SURFPOOL_WS: wsUrl,
       },

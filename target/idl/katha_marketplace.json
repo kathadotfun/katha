@@ -6,5 +6,359 @@
     "spec": "0.1.0",
     "description": "Katha artwork marketplace program"
   },
-  "instructions": []
+  "instructions": [
+    {
+      "name": "initialize_marketplace",
+      "discriminator": [
+        47,
+        81,
+        64,
+        0,
+        96,
+        56,
+        105,
+        7
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "bootstrap_authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "program",
+          "address": "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "registry_program",
+          "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+        },
+        {
+          "name": "registry_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "payment_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "commission_bps",
+          "type": "u16"
+        },
+        {
+          "name": "secondary_royalty_bps",
+          "type": "u16"
+        },
+        {
+          "name": "inspection_validity_seconds",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "MarketplaceConfig",
+      "discriminator": [
+        169,
+        22,
+        247,
+        131,
+        182,
+        200,
+        81,
+        124
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "MarketplaceInitialized",
+      "discriminator": [
+        22,
+        167,
+        42,
+        34,
+        172,
+        55,
+        155,
+        14
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "UnauthorizedBootstrap",
+      "msg": "Bootstrap signer is not the Marketplace upgrade authority"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidProgramData",
+      "msg": "ProgramData does not belong to this Marketplace program"
+    },
+    {
+      "code": 6002,
+      "name": "UnauthorizedAuthority",
+      "msg": "Only the configured Registry authority can initialize Marketplace"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidAuthority",
+      "msg": "Marketplace authority cannot be the default address"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidTreasury",
+      "msg": "Registry treasury cannot be the default address"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidPaymentMint",
+      "msg": "Payment mint must use six decimals and have no freeze authority"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidFees",
+      "msg": "Combined commission and secondary royalty exceed 10000 basis points"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidInspectionValidity",
+      "msg": "Inspection validity must be positive and fit the signed timestamp domain"
+    }
+  ],
+  "types": [
+    {
+      "name": "KathaConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "registration_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "verifier_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "custody_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "collection_authority_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketplaceConfig",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "registry_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "registry_config",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "commission_bps",
+            "type": "u16"
+          },
+          {
+            "name": "secondary_royalty_bps",
+            "type": "u16"
+          },
+          {
+            "name": "inspection_validity_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketplaceInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "registry_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "registry_config",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "commission_bps",
+            "type": "u16"
+          },
+          {
+            "name": "secondary_royalty_bps",
+            "type": "u16"
+          },
+          {
+            "name": "inspection_validity_seconds",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
 }
