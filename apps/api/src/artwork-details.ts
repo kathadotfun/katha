@@ -1,5 +1,5 @@
 import type { PublicArtworkDetailStore } from "@katha/db";
-import { publicArtworkDetailSchema } from "@katha/shared";
+import { publicArtworkDetailSchema, metadataDocumentSchema } from "@katha/shared";
 import { DomainError } from "./errors.js";
 
 function transaction(record: {
@@ -19,6 +19,18 @@ export function createArtworkDetails(store: PublicArtworkDetailStore) {
       const record = await store.findByKathaId(kathaId);
       if (!record) throw new DomainError("NOT_FOUND");
       const checkpoint = record.checkpoint;
+      const document = record.currentMetadataDocument
+        ? metadataDocumentSchema.parse(JSON.parse(record.currentMetadataDocument))
+        : null;
+      if (
+        document &&
+        (document.kathaId !== record.kathaId ||
+          document.artist.artistId !== record.artist.id ||
+          document.category !== record.category ||
+          document.creationYear !== record.creationYear ||
+          (document.artist.creatorWallet ?? null) !== record.creatorWallet)
+      )
+        throw new DomainError("CONFLICT");
       // Every nested projection is explicit; never return ORM records or indexed payloads.
       return publicArtworkDetailSchema.parse({
         kathaId: record.kathaId,
@@ -45,10 +57,12 @@ export function createArtworkDetails(store: PublicArtworkDetailStore) {
           locality: record.originLocality,
         },
         technique: record.technique,
-        story: record.story,
-        meaning: record.meaning,
-        culturalContext: record.culturalContext,
-        creationProcess: record.creationProcess,
+        story: document?.publicContent.story ?? record.story,
+        meaning: document?.publicContent.meaning ?? record.meaning,
+        culturalContext:
+          document?.publicContent.culturalContext ?? record.culturalContext,
+        creationProcess:
+          document?.publicContent.creationProcess ?? record.creationProcess,
         materials: record.materials.map((material) => material.name),
         media: record.media.map((media) => ({
           id: media.id,

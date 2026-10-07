@@ -88,6 +88,15 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readMetadataRevisions: async () => {
+      throw new Error("Unused metadata review");
+    },
+    saveMetadataRevisionDocument: async () => {
+      throw new Error("Unused metadata document");
+    },
+    prepareMetadataRevision: async () => {
+      throw new Error("Unused metadata preparation");
+    },
     readMinting: async () => {
       throw new Error("Unused mint review");
     },

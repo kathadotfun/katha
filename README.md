@@ -85,7 +85,7 @@ HTTP operation routes are planned. Custody preparation and private owner fulfill
 requests now support separately authorized manual coordination without claiming
 finalized physical delivery. Mint preparation now verifies committed metadata,
 initial inspection and held custody, and reserves one idempotent unsigned Core mint
-intent per artwork and cluster. The protected minting screen now connects explicit wallet
+intent per artwork and cluster. The metadata revision screen compares approved documents, appends public story changes, and connects explicit atomic Registry/Core updates. The protected minting screen now connects explicit wallet
 approval, finalized binding reconciliation and separately confirmed publication after
 matching indexed verification, inspection, metadata and ownership. Metadata commitment preparation now supports
 initial, pre-mint and atomic post-mint Registry/Core revisions from immutable stored
@@ -186,6 +186,7 @@ outside the current scope.
 - [Condition inspection administration](docs/development/condition-inspection-web.md)
 - [Custody and fulfillment administration](docs/development/custody-administration-web.md)
 - [Minting and public publication](docs/development/minting-administration-web.md)
+- [Metadata revision review and submission](docs/development/metadata-administration-web.md)
 - [Artwork media administration](docs/development/artwork-media-administration.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)

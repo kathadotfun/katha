@@ -1,4 +1,5 @@
 import { and, asc, ne, desc, eq } from "drizzle-orm";
+import { unresolvedMetadata } from "./metadata-write-guard.js";
 import { unresolvedCondition } from "./condition-write-guard.js";
 import type { Database } from "./connection.js";
 import { artworks } from "./schema/artworks.js";
@@ -51,6 +52,13 @@ export function createDocumentPreparationStore(
         if (!artwork) return { status: "not_found" as const };
         if (artwork.updatedAt.toISOString() !== expectedUpdatedAt)
           return { status: "conflict" as const };
+        if (kind === "METADATA") {
+          const [pending] = await tx
+            .select({ blocked: unresolvedMetadata(artwork.id, cluster) })
+            .from(artworks)
+            .where(eq(artworks.id, artwork.id));
+          if (pending?.blocked) return { status: "conflict" as const };
+        }
         if (kind === "CONDITION") {
           const [pending] = await tx
             .select({ blocked: unresolvedCondition(artwork.id, cluster) })

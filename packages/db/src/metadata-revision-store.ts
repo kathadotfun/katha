@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+import { artworks } from "./schema/artworks.js";
+import { unresolvedMetadata } from "./metadata-write-guard.js";
 import type { Database } from "./connection.js";
 import {
   loadArtworkRegistrationSnapshot,
@@ -19,6 +22,13 @@ export function createMetadataRevisionStore(
           expected.artwork.kathaId,
           cluster,
         );
+        if (current) {
+          const [guard] = await tx
+            .select({ blocked: unresolvedMetadata(current.artwork.id, cluster) })
+            .from(artworks)
+            .where(eq(artworks.id, current.artwork.id));
+          if (guard?.blocked) return false;
+        }
         return (
           current !== null &&
           current.artist?.verificationStatus === "VERIFIED" &&

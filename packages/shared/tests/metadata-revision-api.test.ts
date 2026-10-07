@@ -33,3 +33,32 @@ it.each([
     metadataRevisionRequestSchema.safeParse({ ...request, ...change }).success,
   ).toBe(false);
 });
+
+it("accepts only approved public story fields for append-only revisions", async () => {
+  const { metadataRevisionDocumentRequestSchema } = await import("../src/index.js");
+  const input = {
+    expectedUpdatedAt: request.expectedUpdatedAt,
+    metadataVersionId: request.metadataVersionId,
+    publicApprovalConfirmed: true,
+    publicContent: {
+      story: "Public story",
+      meaning: "Meaning",
+      culturalContext: "Culture",
+      creationProcess: "Process",
+    },
+  };
+  expect(metadataRevisionDocumentRequestSchema.safeParse(input).success).toBe(true);
+  for (const extra of [
+    { artistId: request.metadataVersionId },
+    { creatorWallet: null },
+    { uri: "https://private" },
+    { publicApprovalConfirmed: false },
+    { publicContent: { ...input.publicContent, privateNotes: "private" } },
+    {
+      publicContent: { ...input.publicContent, meaning: " ", story: "x".repeat(10001) },
+    },
+  ])
+    expect(
+      metadataRevisionDocumentRequestSchema.safeParse({ ...input, ...extra }).success,
+    ).toBe(false);
+});

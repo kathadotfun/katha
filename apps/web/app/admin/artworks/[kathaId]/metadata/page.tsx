@@ -1,0 +1,52 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import { artworkDraftParamsSchema } from "@katha/shared";
+import { MetadataRevisionsPanel } from "../../../../../components/metadata-revisions";
+export const metadata: Metadata = {
+  title: "Metadata revisions — Katha",
+  robots: { index: false, follow: false },
+};
+export default async function MetadataRevisionsPage({
+  params,
+}: {
+  params: Promise<{ kathaId: string }>;
+}) {
+  const parsed = artworkDraftParamsSchema.safeParse(await params);
+  if (!parsed.success) notFound();
+  return (
+    <div className="page-container admin-page">
+      <Link href="/admin" className="text-link">
+        Administration
+      </Link>
+      <Link href={`/admin/artworks/${parsed.data.kathaId}`} className="text-link ml-6">
+        Artwork documentation
+      </Link>
+      <Link
+        href={`/admin/artworks/${parsed.data.kathaId}/verification`}
+        className="text-link ml-6"
+      >
+        Artwork authenticity
+      </Link>
+      <Link
+        href={`/admin/artworks/${parsed.data.kathaId}/custody`}
+        className="text-link ml-6"
+      >
+        Custody coordination
+      </Link>
+      <Link
+        href={`/admin/artworks/${parsed.data.kathaId}/minting`}
+        className="text-link ml-6"
+      >
+        Minting and publication
+      </Link>
+      <p className="eyebrow mt-8">Katha administration</p>
+      <h1 className="mt-4 text-4xl sm:text-5xl">Metadata revisions</h1>
+      <p className="mt-5 max-w-reading text-muted">
+        Keep the public story of Nepal’s cultural Real World Assets accurate while
+        preserving their authorship and historical commitments.
+      </p>
+      <MetadataRevisionsPanel kathaId={parsed.data.kathaId} />
+    </div>
+  );
+}

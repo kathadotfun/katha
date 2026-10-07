@@ -1,3 +1,4 @@
+import { metadataRevisionDocumentRequestSchema } from "@katha/shared";
 import {
   ARTWORK_MEDIA_MAX_BYTES,
   artworkMediaUploadSchema,
@@ -617,6 +618,25 @@ export function createApi(
     });
   }
   if (metadataRevisions) {
+    app.get("/admin/artworks/:kathaId/metadata", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await metadataRevisions.review(c.req.header("Authorization"), kathaId),
+      );
+    });
+    app.post("/admin/artworks/:kathaId/metadata/documents", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await metadataRevisions.save(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, metadataRevisionDocumentRequestSchema),
+        ),
+        201,
+      );
+    });
     app.post("/admin/artworks/:kathaId/operations/metadata", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       parseQuery(c, artworkDetailQuerySchema);

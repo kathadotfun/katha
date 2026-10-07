@@ -7,6 +7,7 @@ import {
   type ConditionTransactionReview,
   type CustodyTransactionReview,
   type MintTransactionReview,
+  type MetadataTransactionReview,
   inspectPreparedTransaction,
   validateSignedTransaction,
 } from "./prepared-transaction.ts";
@@ -204,6 +205,7 @@ export function createTransactionLifecycle(
         condition?: ConditionTransactionReview;
         custody?: CustodyTransactionReview;
         mint?: MintTransactionReview;
+        metadata?: MetadataTransactionReview;
       },
     ) {
       if (

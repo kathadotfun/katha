@@ -44,6 +44,7 @@ export type {
 export {
   buildInitializeCustodyTransaction,
   buildTransitionCustodyTransaction,
+  readMetadataRevisionState,
   buildInitializeMetadataTransaction,
   buildReviseUnmintedMetadataTransaction,
   buildReviseMintedMetadataTransaction,

@@ -103,3 +103,24 @@ snapshot rollback and same-key operation reuse. Reader tests cover finalized sna
 and missing/forged prerequisites. API RPC/simulation is mocked; the existing offline
 Registry/Core harness separately exercises actual pre/post-mint revision, stale writes
 and atomic rollback. No live signing or Devnet deployment is claimed.
+
+## Review and public document edits
+
+`GET /admin/artworks/:kathaId/metadata` requires an administrator session on the
+configured cluster and returns immutable attribution, latest proposed document,
+current finalized document, live Registry/Core state, and document-scoped receipt
+status. Unknown signed attempts are detected across all revisions for this artwork
+and cluster. Forged account relationships or an inconsistent Core URI fail closed.
+
+`POST /admin/artworks/:kathaId/metadata/documents` accepts only
+`expectedUpdatedAt`, `metadataVersionId`, `publicContent` (story, meaning,
+culturalContext and creationProcess), and `publicApprovalConfirmed: true`.
+It preserves all remaining document fields, checks optimistic concurrency under
+an artwork update lock, stores exact approved public bytes, appends a PREPARED
+local version and advances the artwork timestamp. It never updates an earlier
+version, signs a transaction or advances the public finalized content.
+
+The operation endpoint additionally requires administrator membership and current
+review eligibility, including finalized current-document agreement and unresolved
+signature checks. The browser uses [metadata administration](metadata-administration-web.md)
+for separate storage, transaction preparation, wallet approval and reconciliation.

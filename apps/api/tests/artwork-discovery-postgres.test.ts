@@ -46,6 +46,8 @@ import {
   artworkOwnership,
 } from "@katha/db";
 import {
+  metadataDocumentSchema,
+  canonicalDocumentBytes,
   artworkDiscoveryResponseSchema,
   publicArtworkDetailSchema,
 } from "@katha/shared";
@@ -215,8 +217,48 @@ it("discovers only explicitly published, finalized artworks on the configured cl
         await finalize("verifications", verification.id);
     }
     if (options.metadata) {
-      const document = JSON.stringify({ kathaId: record.kathaId });
       for (let version = 1; version <= options.metadataVersions; version++) {
+        const mediaUri = `https://example.com/storage/public/${"a".repeat(64)}.png`;
+        const document = new TextDecoder().decode(
+          canonicalDocumentBytes(
+            metadataDocumentSchema.parse({
+              schemaVersion: 1,
+              kathaId: record.kathaId,
+              name: record.title,
+              category: record.category,
+              artist: {
+                artistId: record.artistId,
+                displayName: artist.displayName,
+                creatorWallet: record.creatorWallet,
+              },
+              creationYear: record.creationYear,
+              origin: {
+                countryCode: "NP",
+                region: record.originRegion,
+                locality: null,
+              },
+              dimensions: { heightMm: 720, widthMm: 510, depthMm: null },
+              materials: ["Canvas", "Mineral pigments"],
+              technique: record.technique,
+              publicContent: {
+                story: version > 1 ? "Finalized revised synthetic story" : record.story,
+                meaning: record.meaning,
+                culturalContext: record.culturalContext,
+                creationProcess: record.creationProcess,
+              },
+              image: mediaUri,
+              media: [
+                {
+                  contentHash: "a".repeat(64),
+                  mimeType: "image/png",
+                  role: "HERO",
+                  uri: mediaUri,
+                },
+              ],
+            }),
+          ),
+        );
+
         const [metadata] = await database.db
           .insert(artworkMetadataVersions)
           .values({
@@ -436,7 +478,7 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     expect(detailResponse.status).toBe(200);
     const detail = publicArtworkDetailSchema.parse(await detailResponse.json());
     expect(detail.materials).toEqual(["Canvas", "Mineral pigments"]);
-    expect(detail.story).toBe("Public synthetic story");
+    expect(detail.story).toBe("Finalized revised synthetic story");
     expect(detail.dimensions).toEqual({ heightMm: 720, widthMm: 510, depthMm: null });
     expect(detail.metadata.version).toBe(2);
     expect(detail.condition).toMatchObject({

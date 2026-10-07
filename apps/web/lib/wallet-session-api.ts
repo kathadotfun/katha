@@ -1,4 +1,11 @@
 import {
+  metadataRevisionRequestSchema,
+  metadataRevisionReviewSchema,
+  metadataRevisionDocumentRequestSchema,
+  type MetadataRevisionRequest,
+  type MetadataRevisionDocumentRequest,
+} from "@katha/shared";
+import {
   artworkMintReviewSchema,
   artworkMintRequestSchema,
   artworkPublicationRequestSchema,
@@ -139,6 +146,68 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readMetadataRevisions(kathaId: string, token: string, signal: AbortSignal) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = metadataRevisionReviewSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/metadata`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== kathaId) throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async saveMetadataRevisionDocument(
+      kathaId: string,
+      input: MetadataRevisionDocumentRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId }),
+        data = metadataRevisionDocumentRequestSchema.parse(input);
+      const result = metadataRevisionReviewSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/metadata/documents`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== kathaId ||
+        result.metadata?.id === data.metadataVersionId ||
+        result.updatedAt === data.expectedUpdatedAt
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareMetadataRevision(
+      kathaId: string,
+      input: MetadataRevisionRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId }),
+        data = metadataRevisionRequestSchema.parse(input);
+      const result = unsignedOperationResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/operations/metadata`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== kathaId ||
+        result.kind !== "REVISE_METADATA" ||
+        !data.supportedTransactionVersions.includes(result.transactionVersion)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readMinting(kathaId: string, token: string, signal: AbortSignal) {
       const path = artworkDraftParamsSchema.parse({ kathaId });
       const result = artworkMintReviewSchema.parse(

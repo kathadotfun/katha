@@ -14,8 +14,10 @@ function createArtworkOperationStatusStore(
     | "VERIFY_ARTWORK"
     | "RECORD_CONDITION"
     | "UPDATE_CUSTODY"
-    | "MINT_ARTWORK",
+    | "MINT_ARTWORK"
+    | "REVISE_METADATA",
   reportHash?: string,
+  metadataId?: string,
 ) {
   return async (kathaId: string) =>
     db.transaction(async (tx) => {
@@ -32,6 +34,11 @@ function createArtworkOperationStatusStore(
             eq(artworks.kathaId, kathaId),
             eq(blockchainOperations.cluster, cluster),
             eq(blockchainOperations.kind, kind),
+            ...(metadataId
+              ? [
+                  sql`exists (select 1 from operation_preparations as preparation where preparation.operation_id = ${blockchainOperations.id} and preparation.canonical_request::jsonb -> 'parameters' ->> 'metadataVersionId' = ${metadataId})`,
+                ]
+              : []),
             ...(reportHash
               ? [sql`${reportHash} = any(${blockchainOperations.expectedHashes})`]
               : []),
@@ -56,13 +63,18 @@ function createArtworkOperationStatusStore(
             eq(blockchainOperations.cluster, cluster),
             eq(transactionReceipts.cluster, cluster),
             eq(blockchainOperations.kind, kind),
+            ...(metadataId
+              ? [
+                  sql`(${transactionReceipts.status} = 'UNKNOWN' or exists (select 1 from operation_preparations as preparation where preparation.operation_id = ${blockchainOperations.id} and preparation.canonical_request::jsonb -> 'parameters' ->> 'metadataVersionId' = ${metadataId}))`,
+                ]
+              : []),
             ...(reportHash
               ? [sql`${reportHash} = any(${blockchainOperations.expectedHashes})`]
               : []),
           ),
         )
         .orderBy(
-          kind === "UPDATE_CUSTODY"
+          kind === "UPDATE_CUSTODY" || kind === "REVISE_METADATA"
             ? sql`case ${transactionReceipts.status} when 'UNKNOWN' then 0 else 1 end`
             : sql`case ${transactionReceipts.status} when 'FINALIZED' then 0 when 'UNKNOWN' then 1 else 2 end`,
           desc(transactionReceipts.observedAt),
@@ -161,4 +173,18 @@ export function createArtworkMintStatusStore(
   cluster: "LOCALNET" | "DEVNET",
 ) {
   return createArtworkOperationStatusStore(db, cluster, "MINT_ARTWORK");
+}
+
+export function createMetadataRevisionStatusStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET",
+) {
+  return (kathaId: string, metadataId: string) =>
+    createArtworkOperationStatusStore(
+      db,
+      cluster,
+      "REVISE_METADATA",
+      undefined,
+      metadataId,
+    )(kathaId);
 }

@@ -16,6 +16,9 @@ import {
 } from "@solana/kit";
 import {
   unsignedOperationResponseSchema,
+  metadataRevisionReviewSchema,
+  metadataDocumentSchema,
+  type MetadataRevisionReview,
   custodyPreparationRequestSchema,
   type CustodyPreparationRequest,
   sha256Hex,
@@ -48,6 +51,10 @@ import {
   ConditionReason,
 } from "@katha/solana/registry";
 
+export type MetadataTransactionReview = Pick<
+  MetadataRevisionReview,
+  "metadata" | "chain"
+>;
 export type MintTransactionReview = {
   asset: string;
   collection: string;
@@ -108,6 +115,7 @@ export async function inspectPreparedTransaction(
     condition?: ConditionTransactionReview;
     custody?: CustodyTransactionReview;
     mint?: MintTransactionReview;
+    metadata?: MetadataTransactionReview;
   },
 ) {
   const operation = unsignedOperationResponseSchema.parse(input);
@@ -201,6 +209,104 @@ export async function inspectPreparedTransaction(
       ).join("") !== context.verification.authorshipEvidenceHash
     )
       throw new Error("Verification commitment mismatch.");
+  }
+
+  if (operation.kind === "REVISE_METADATA") {
+    const review = metadataRevisionReviewSchema
+      .pick({ metadata: true, chain: true })
+      .parse(context.metadata);
+    const { chain, metadata } = review;
+    if (
+      !metadata ||
+      metadata.status !== "PREPARED" ||
+      chain.registrationAuthority !== context.wallet ||
+      chain.version >= 4294967295
+    )
+      throw new Error("Metadata review required");
+    const document = metadataDocumentSchema.parse(
+      JSON.parse(metadata.canonicalDocument),
+    );
+    const bytes = canonicalDocumentBytes(document);
+    if (
+      document.kathaId !== context.kathaId ||
+      new TextDecoder().decode(bytes) !== metadata.canonicalDocument ||
+      (await sha256Hex(bytes)) !== metadata.documentHash ||
+      metadata.documentHash === chain.documentHash
+    )
+      throw new Error("Metadata document mismatch");
+    const [[head], [revision], [currentRevision], [asset], [collectionAuthority]] =
+      await Promise.all([
+        findInitializeMetadataHeadPda({ artwork }),
+        findReviseMintedMetadataRevisionPda({
+          artwork,
+          nextVersion: chain.version + 1,
+        }),
+        findReviseMintedMetadataRevisionPda({
+          artwork,
+          nextVersion: Math.max(1, chain.version),
+        }),
+        findAssetPda({ artwork }),
+        findCollectionAuthorityPda(),
+      ]);
+    const minted = chain.mode === "MINTED",
+      initial = chain.mode === "INITIALIZE";
+    const expectedType = initial
+      ? KathaRegistryInstruction.InitializeMetadata
+      : minted
+        ? KathaRegistryInstruction.ReviseMintedMetadata
+        : KathaRegistryInstruction.ReviseUnmintedMetadata;
+    const accounts = minted
+      ? [
+          config,
+          artwork,
+          head,
+          currentRevision,
+          revision,
+          address(chain.collection),
+          collectionAuthority,
+          asset,
+          address(context.wallet),
+          address("11111111111111111111111111111111"),
+          CORE_PROGRAM_ADDRESS,
+        ]
+      : [
+          config,
+          artwork,
+          head,
+          revision,
+          address(context.wallet),
+          address("11111111111111111111111111111111"),
+        ];
+    const roles = minted ? [0, 0, 1, 0, 1, 0, 0, 1, 3, 0, 0] : [0, 0, 1, 1, 3, 0];
+    if (
+      initial !== (chain.version === 0) ||
+      initial !== (chain.documentHash === null) ||
+      chain.collectionAuthority !== collectionAuthority ||
+      (minted ? chain.asset !== asset : chain.asset !== null) ||
+      parsed.instructionType !== expectedType ||
+      instruction.accounts?.length !== accounts.length ||
+      instruction.accounts.some(
+        (a, i) => a.address !== accounts[i] || a.role !== roles[i],
+      )
+    )
+      throw new Error("Metadata account binding mismatch");
+    if (
+      parsed.instructionType !== KathaRegistryInstruction.InitializeMetadata &&
+      parsed.instructionType !== KathaRegistryInstruction.ReviseMintedMetadata &&
+      parsed.instructionType !== KathaRegistryInstruction.ReviseUnmintedMetadata
+    )
+      throw new Error("Metadata instruction required");
+    const hash = Array.from(parsed.data.documentHash, (v) =>
+      v.toString(16).padStart(2, "0"),
+    ).join("");
+    if (
+      hash !== metadata.documentHash ||
+      parsed.data.uri !== metadata.uri ||
+      (parsed.instructionType !== KathaRegistryInstruction.InitializeMetadata &&
+        (parsed.data.expectedVersion !== chain.version ||
+          parsed.data.nextVersion !== chain.version + 1))
+    )
+      throw new Error("Metadata revision arguments mismatch");
   }
   if (operation.kind === "MINT_ARTWORK") {
     const expected = context.mint;

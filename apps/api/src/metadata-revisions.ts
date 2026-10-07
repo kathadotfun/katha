@@ -1,3 +1,4 @@
+import type { createMetadataAdministration } from "./metadata-administration.js";
 import { metadataRevisionRequestSchema } from "@katha/shared";
 import type { MetadataRevisionStore } from "@katha/db";
 import {
@@ -5,6 +6,7 @@ import {
   buildReviseUnmintedMetadataTransaction,
   buildReviseMintedMetadataTransaction,
   CORE_PROGRAM_ADDRESS,
+  readMetadataRevisionState,
   type MetadataRevisionReader,
   type OperationChain,
 } from "@katha/solana";
@@ -30,8 +32,17 @@ export function createMetadataRevisions(
   chain: OperationChain,
   storage: StorageProvider,
   cluster: "localnet" | "devnet",
+  administration?: ReturnType<typeof createMetadataAdministration>,
 ) {
   return {
+    review(bearer: string | undefined, kathaId: string) {
+      if (!administration) throw new DomainError("CONFLICT");
+      return administration.review(bearer, kathaId);
+    },
+    save(bearer: string | undefined, kathaId: string, input: unknown) {
+      if (!administration) throw new DomainError("CONFLICT");
+      return administration.save(bearer, kathaId, input);
+    },
     async prepare(bearer: string | undefined, kathaId: string, input: unknown) {
       const parsed = metadataRevisionRequestSchema.safeParse(input);
       if (!parsed.success) throw new DomainError("INVALID_REQUEST");
@@ -40,6 +51,9 @@ export function createMetadataRevisions(
         bearer,
         "registrationAuthority",
       );
+      await authorization.requireRole(bearer, "admin");
+      if (administration && !(await administration.review(bearer, kathaId)).canSubmit)
+        throw new DomainError("CONFLICT");
       if (session.cluster !== cluster) throw new DomainError("FORBIDDEN");
       const snapshot = await store.load(kathaId);
       if (!snapshot) throw new DomainError("NOT_FOUND");
@@ -58,6 +72,12 @@ export function createMetadataRevisions(
       let accounts;
       try {
         accounts = await readChain(kathaId);
+      } catch (error) {
+        if (error instanceof TypeError) throw new DomainError("CONFLICT");
+        throw error;
+      }
+      try {
+        await readMetadataRevisionState(accounts, kathaId);
       } catch (error) {
         if (error instanceof TypeError) throw new DomainError("CONFLICT");
         throw error;

@@ -5408,3 +5408,174 @@ it("publishes under artwork locks only with matching finalized mint and indexed 
     await connection.close();
   }
 });
+
+it("appends metadata revisions under parent locks and blocks unresolved signed changes", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const {
+    createMetadataAdministrationStore,
+    createMetadataRevisionStore,
+    createMetadataRevisionStatusStore,
+    operationPreparations,
+  } = await import("../src/index.js");
+  const address = "11111111111111111111111111111112",
+    program = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC";
+  const signature = (
+    "Z" + randomUUID().replaceAll("-", "").replaceAll("0", "1")
+  ).padEnd(88, "Z");
+  let kathaId = "";
+  const document = (story: string) => {
+    const canonicalDocument = JSON.stringify({ kathaId, publicContent: { story } });
+    return {
+      canonicalDocument,
+      documentHash: createHash("sha256").update(canonicalDocument).digest("hex"),
+      uri: "http://localhost/document.json",
+    };
+  };
+  try {
+    const at = new Date("2026-10-01T00:00:00.000Z");
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "metadata-revision-synthetic",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+        verificationStatus: "VERIFIED",
+        verifiedAt: at,
+        verifiedByWallet: address,
+        createdAt: at,
+        updatedAt: at,
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic metadata revision",
+        creationYear: 2026,
+        authorshipEvidenceHash: "a".repeat(64),
+      })
+      .returning();
+    if (!artwork) throw new Error("Artwork missing");
+    kathaId = artwork.kathaId;
+    const [initial] = await db
+      .insert(artworkMetadataVersions)
+      .values({
+        artworkId: artwork.id,
+        authorityWallet: address,
+        status: "PREPARED",
+        version: 1,
+        ...document("Initial"),
+      })
+      .returning();
+    const store = createMetadataAdministrationStore(db, "LOCALNET"),
+      revisions = createMetadataRevisionStore(db, "LOCALNET"),
+      snapshot = await revisions.load(artwork.kathaId);
+    if (!snapshot) throw new Error("Snapshot missing");
+    await expect(
+      store.save(snapshot, address, async () => {
+        throw new Error("Synthetic storage failure");
+      }),
+    ).rejects.toThrow("Synthetic storage failure");
+    expect((await revisions.load(artwork.kathaId))?.metadata?.version).toBe(1);
+    const competing = await Promise.all([
+      store.save(snapshot, address, async () => document("Next A")),
+      store.save(snapshot, address, async () => document("Next B")),
+    ]);
+    expect(competing.sort()).toEqual([false, true]);
+    const latest = await revisions.load(artwork.kathaId);
+    if (!latest?.metadata) throw new Error("Latest missing");
+    expect(latest.metadata.version).toBe(2);
+    expect(latest.artwork.updatedAt.getTime()).toBeGreaterThan(
+      snapshot.artwork.updatedAt.getTime(),
+    );
+    expect(latest.artwork.artistId).toBe(snapshot.artwork.artistId);
+    expect(latest.artwork.authorshipEvidenceHash).toBe(
+      snapshot.artwork.authorshipEvidenceHash,
+    );
+    expect(
+      (
+        await db
+          .select()
+          .from(artworkMetadataVersions)
+          .where(eq(artworkMetadataVersions.id, initial!.id))
+      )[0],
+    ).toEqual(initial);
+    expect(await store.current(artwork.kathaId)).toBeNull();
+    await db.insert(wallets).values({ address }).onConflictDoNothing();
+    const [wallet] = await db
+      .select()
+      .from(wallets)
+      .where(eq(wallets.address, address));
+    if (!wallet) throw new Error("Wallet missing");
+    const canonicalRequest = JSON.stringify({
+      parameters: { metadataVersionId: latest.metadata.id },
+    });
+    const [operation] = await db
+      .insert(blockchainOperations)
+      .values({
+        artworkId: artwork.id,
+        walletId: wallet.id,
+        cluster: "LOCALNET",
+        kind: "REVISE_METADATA",
+        idempotencyKey: "metadata-unknown",
+        requestHash: createHash("sha256").update(canonicalRequest).digest("hex"),
+        programAddress: program,
+        expectedAccounts: [address],
+        expectedHashes: [initial!.documentHash!, latest.metadata.documentHash!],
+      })
+      .returning();
+    if (!operation) throw new Error("Operation missing");
+    await db.insert(operationPreparations).values({
+      operationId: operation.id,
+      canonicalRequest,
+      messageHash: "b".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 0,
+      blockhash: address,
+      lastValidBlockHeight: 100n,
+      simulationSlot: 1n,
+    });
+    await db.insert(transactionReceipts).values({
+      operationId: operation.id,
+      cluster: "LOCALNET",
+      signature: signature,
+      messageHash: "b".repeat(64),
+    });
+    let builds = 0;
+    expect(
+      await store.save(latest, address, async () => {
+        builds++;
+        return document("Blocked");
+      }),
+    ).toBe(false);
+    expect(builds).toBe(0);
+    const status = createMetadataRevisionStatusStore(db, "LOCALNET");
+    expect((await status(artwork.kathaId, latest.metadata.id)).receipt?.signature).toBe(
+      signature,
+    );
+    const earlier = await status(artwork.kathaId, initial!.id);
+    expect(earlier.receipt?.signature).toBe(signature);
+    expect(earlier.finalized).toBe(false);
+    expect(earlier.unresolved).toBe(true);
+    const devStore = createMetadataAdministrationStore(db, "DEVNET");
+    expect(
+      await devStore.save(latest, address, async () => document("Other cluster")),
+    ).toBe(true);
+    const rows = await db
+      .select()
+      .from(artworkMetadataVersions)
+      .where(eq(artworkMetadataVersions.artworkId, artwork.id))
+      .orderBy(asc(artworkMetadataVersions.version));
+    expect(rows.map((row) => row.version)).toEqual([1, 2, 3]);
+  } finally {
+    await connection.close();
+  }
+});

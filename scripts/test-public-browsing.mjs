@@ -1,3 +1,4 @@
+import { metadataFixture } from "../apps/web/tests/fixtures/metadata.ts";
 import { mintingFixture } from "../apps/web/tests/fixtures/minting.ts";
 import { custodyFixture } from "../apps/web/tests/fixtures/custody.ts";
 import { conditionFixture } from "../apps/web/tests/fixtures/condition.ts";
@@ -289,6 +290,65 @@ export async function runPublicBrowsingJourneys({
           });
         },
       );
+
+      const metadataData = await metadataFixture();
+      let metadataPage = {
+        ...metadataData.page,
+        metadata: metadataData.page.current,
+        canSubmit: false,
+      };
+      let metadataSaves = 0,
+        metadataPreparations = 0;
+      for (const action of ["metadata", "metadata/documents", "operations/metadata"]) {
+        await context.route(
+          `${apiOrigin}/admin/artworks/*/${action}`,
+          async (route) => {
+            if (route.request().method() === "OPTIONS")
+              return route.fulfill({ status: 204, headers: adminHeaders });
+            assert.equal(
+              route.request().headers().authorization,
+              `Bearer ${"a".repeat(64)}`,
+            );
+            if (!adminAllowed)
+              return route.fulfill({
+                status: 403,
+                headers: adminHeaders,
+                json: { error: "denied" },
+              });
+            if (action === "metadata/documents") {
+              const input = route.request().postDataJSON();
+              metadataSaves++;
+              assert.equal(input.expectedUpdatedAt, metadataPage.updatedAt);
+              assert.equal(input.metadataVersionId, metadataPage.metadata.id);
+              assert.equal(input.publicApprovalConfirmed, true);
+              assert.equal(input.publicContent.story, "Revised public story");
+              assert.deepEqual(Object.keys(input).sort(), [
+                "expectedUpdatedAt",
+                "metadataVersionId",
+                "publicApprovalConfirmed",
+                "publicContent",
+              ]);
+              metadataPage = {
+                ...metadataData.page,
+                updatedAt: "2026-10-07T00:00:00.001Z",
+              };
+            }
+            if (action === "operations/metadata") {
+              metadataPreparations++;
+              const input = route.request().postDataJSON();
+              assert.equal(input.expectedMetadataVersion, 1);
+              assert.equal(input.expectedMetadataHash, metadataPage.chain.documentHash);
+              assert.equal(input.metadataVersionId, metadataPage.metadata.id);
+              return route.fulfill({
+                status: 201,
+                headers: adminHeaders,
+                json: metadataData.operation,
+              });
+            }
+            return route.fulfill({ headers: adminHeaders, json: metadataPage });
+          },
+        );
+      }
       const mintFixtureData = await mintingFixture(),
         mintPage = mintFixtureData.page;
       let mintPreparations = 0,
@@ -1589,6 +1649,102 @@ export async function runPublicBrowsingJourneys({
         path: `${artifacts}/mint-admin-${width}.png`,
         fullPage: true,
       });
+
+      await adminMain
+        .getByRole("link", { name: "Metadata revisions", exact: true })
+        .click();
+      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
+        "Metadata revisions",
+      );
+      await expect(adminMain).toContainText(metadataPage.chain.documentHash);
+      await audit("metadata current commitment review");
+      const revisionSave = adminMain.getByRole("button", {
+        name: "Save public document revision",
+        exact: true,
+      });
+      await expect(revisionSave).toBeDisabled();
+      await adminMain
+        .getByLabel("Proposed artwork story", { exact: true })
+        .fill("Revised public story");
+      await adminMain
+        .getByRole("checkbox", { name: "I approve these story fields", exact: false })
+        .check();
+      await revisionSave.click();
+      await expect(adminMain).toContainText(metadataData.page.metadata.documentHash);
+      assert.equal(metadataSaves, 1);
+      const prepareRevision = adminMain.getByRole("button", {
+        name: "Prepare metadata revision",
+        exact: true,
+      });
+      await expect(prepareRevision).toBeDisabled();
+      await adminMain
+        .getByRole("checkbox", { name: "I reviewed the saved document", exact: false })
+        .check();
+      await prepareRevision.click();
+      await expect(
+        adminMain.getByRole("button", {
+          name: "Approve in wallet and submit",
+          exact: true,
+        }),
+      ).toBeVisible();
+      assert.equal(metadataPreparations, 1);
+      await audit("atomic metadata revision separate wallet approval");
+      await adminMain
+        .getByRole("button", { name: "Cancel transaction review", exact: true })
+        .click();
+      metadataPage = {
+        ...metadataPage,
+        metadata: { ...metadataPage.metadata, status: "FINALIZED" },
+        current: { ...metadataPage.metadata, status: "FINALIZED" },
+        chain: {
+          ...metadataPage.chain,
+          version: 2,
+          documentHash: metadataPage.metadata.documentHash,
+          uri: metadataPage.metadata.uri,
+        },
+        canSubmit: false,
+        revision: {
+          finalized: true,
+          unresolved: false,
+          receipt: {
+            status: "FINALIZED",
+            signature: "1".repeat(88),
+            slot: "2",
+            indexed: true,
+          },
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload saved state", exact: true })
+        .click();
+      await expect(
+        adminMain.getByRole("button", {
+          name: "Prepare metadata revision",
+          exact: true,
+        }),
+      ).toBeDisabled();
+      await audit("metadata finalized version retained history");
+      await page.screenshot({
+        path: `${artifacts}/metadata-admin-${width}.png`,
+        fullPage: true,
+      });
+      adminAllowed = false;
+      await adminMain
+        .getByRole("button", { name: "Reload saved state", exact: true })
+        .click();
+      await expect(adminMain.getByRole("alert")).toContainText("administrator session");
+      await expect(adminMain).not.toContainText(
+        metadataPage.metadata.canonicalDocument,
+      );
+      await audit("metadata role revocation clears private review");
+      adminAllowed = true;
+      await adminMain
+        .getByRole("link", { name: "Minting and publication", exact: true })
+        .click();
+      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
+        "Minting and publication",
+      );
+      await expect(adminMain).toContainText("Published");
       adminAllowed = false;
       await adminMain
         .getByRole("button", { name: "Reload saved state", exact: true })

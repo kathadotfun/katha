@@ -1,3 +1,8 @@
+import { createMetadataAdministration } from "./metadata-administration.js";
+import {
+  createMetadataAdministrationStore,
+  createMetadataRevisionStatusStore,
+} from "@katha/db";
 import {
   createArtworkRegistrationStatusStore,
   createArtworkVerificationStatusStore,
@@ -243,6 +248,25 @@ function startApi() {
       createOperationChain(rpcConfig),
       storage,
       config.KATHA_CLUSTER,
+      createMetadataAdministration(
+        createMetadataRevisionStore(
+          database.db,
+          config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+        ),
+        createMetadataAdministrationStore(
+          database.db,
+          config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+        ),
+        authorization,
+        createMetadataRevisionReader(rpcConfig),
+        storage,
+        config.KATHA_CLUSTER,
+        config.KATHA_PUBLIC_API_ORIGIN,
+        createMetadataRevisionStatusStore(
+          database.db,
+          config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+        ),
+      ),
     ),
     createOperationReceipts(
       createOperationReceiptStore(database.db),

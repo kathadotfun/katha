@@ -1,3 +1,7 @@
+import type {
+  MetadataRevisionDocumentRequest,
+  MetadataRevisionRequest,
+} from "@katha/shared";
 import type { ArtworkMintRequest, ArtworkPublicationRequest } from "@katha/shared";
 import type {
   ArtworkVerificationRequest,
@@ -122,6 +126,44 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readMetadataRevisions(kathaId: string, signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.readMetadataRevisions(kathaId, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async saveMetadataRevisionDocument(
+      kathaId: string,
+      input: MetadataRevisionDocumentRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.saveMetadataRevisionDocument(kathaId, input, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareMetadataRevision(
+      kathaId: string,
+      input: MetadataRevisionRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.prepareMetadataRevision(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readMinting(kathaId: string, signal: AbortSignal) {
       const result = await authorized(
         (value) => api.readMinting(kathaId, value, signal),

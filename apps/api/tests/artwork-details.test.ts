@@ -219,3 +219,43 @@ it("fails closed for malformed finalized receipts", async () => {
   });
   expect((await app.request(`/artworks/${record.kathaId}`)).status).toBe(500);
 });
+
+it("projects the finalized document story while preserving identity and excluding canonical bytes", async () => {
+  const { registrationFixture } = await import("./fixtures/registration.js");
+  const { metadataDocumentSchema, canonicalDocumentBytes, sha256Hex } =
+    await import("@katha/shared");
+  const f = await registrationFixture();
+  const doc = metadataDocumentSchema.parse({
+    ...JSON.parse(f.snapshot.metadata!.canonicalDocument!),
+    kathaId: record.kathaId,
+    name: record.title,
+    artist: {
+      artistId: record.artist.id,
+      creatorWallet: record.creatorWallet,
+      displayName: record.artist.displayName,
+    },
+    publicContent: {
+      story: "Finalized revised story",
+      meaning: "Revised meaning",
+      culturalContext: "Nepali culture",
+      creationProcess: "Revised process",
+    },
+  });
+  const bytes = canonicalDocumentBytes(doc);
+  const saved = {
+    ...record,
+    currentMetadataDocument: new TextDecoder().decode(bytes),
+    metadata: { ...record.metadata, documentHash: await sha256Hex(bytes) },
+  };
+  const store: PublicArtworkDetailStore = { findByKathaId: vi.fn(async () => saved) };
+  const result = await createArtworkDetails(store).detail(record.kathaId);
+  expect(result.story).toBe(doc.publicContent.story);
+  expect(result.artist.id).toBe(record.artist.id);
+  expect(result.creatorWallet).toBe(record.creatorWallet);
+  expect(JSON.stringify(result)).not.toContain("currentMetadataDocument");
+  doc.artist.artistId = "bbbbbbbb-1111-4111-8111-111111111111";
+  saved.currentMetadataDocument = new TextDecoder().decode(canonicalDocumentBytes(doc));
+  await expect(
+    createArtworkDetails(store).detail(record.kathaId),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+});

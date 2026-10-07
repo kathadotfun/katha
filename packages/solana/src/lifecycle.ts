@@ -45,6 +45,7 @@ import {
   getConditionHeadDecoder,
   getConditionHeadSize,
   getCustodyHeadDecoder,
+  getKathaConfigDecoder,
   getMetadataHeadDecoder,
   getMetadataHeadSize,
   getMetadataRevisionDecoder,
@@ -353,6 +354,65 @@ async function metadataCurrent(accounts: MetadataRevisionAccounts, artwork: Addr
   )
     throw new TypeError("Metadata revision does not match the current head");
   return { head, state, revision, current };
+}
+
+// The review uses the same relationship and Core URI checks as the transaction builder.
+export async function readMetadataRevisionState(
+  accounts: import("./metadata-revision-reader.js").MetadataRevisionSnapshot,
+  kathaId: string,
+) {
+  const authority = getKathaConfigDecoder().decode(
+    accounts.configAccount.data,
+  ).registrationAuthority;
+  const prepared = await readAuthorizedArtwork(
+    { authorityAddress: authority },
+    accounts,
+    kathaId,
+    "registrationAuthority",
+  );
+  const current =
+    accounts.mode === "INITIALIZE"
+      ? null
+      : await metadataCurrent(accounts, prepared.artwork);
+  let asset: Address | null = null;
+  if (accounts.mode === "MINTED") {
+    [asset] = await findAssetPda({ artwork: prepared.artwork });
+    if (
+      prepared.record.coreAsset.__option !== "Some" ||
+      prepared.record.coreAsset.value !== asset
+    )
+      throw new TypeError("Canonical Core binding required");
+    readCoreCollection(
+      accounts.collectionAccount,
+      prepared.configuration.collection,
+      prepared.configuration.collectionAuthority,
+    );
+    const core = readCoreAsset(
+      accounts.assetAccount,
+      asset,
+      prepared.configuration.collection,
+    );
+    if (core.name !== kathaId || core.uri !== current!.current.uri)
+      throw new TypeError("Core URI and Registry revision disagree");
+  } else if (prepared.record.coreAsset.__option !== "None")
+    throw new TypeError("Minted metadata requires Core synchronization");
+  return {
+    prepared,
+    chain: {
+      mode: accounts.mode,
+      version: current?.state.version ?? 0,
+      documentHash: current
+        ? Array.from(current.current.documentHash, (v) =>
+            v.toString(16).padStart(2, "0"),
+          ).join("")
+        : null,
+      uri: current?.current.uri ?? null,
+      registrationAuthority: authority,
+      collection: prepared.configuration.collection,
+      collectionAuthority: prepared.configuration.collectionAuthority,
+      asset,
+    },
+  };
 }
 
 export function buildInitializeMetadataTransaction(

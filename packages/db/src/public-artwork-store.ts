@@ -173,6 +173,7 @@ export function createPublicArtworkDetailStore(
             .limit(1);
           const [metadata] = await tx
             .select({
+              canonicalDocument: artworkMetadataVersions.canonicalDocument,
               version: artworkMetadataVersions.chainVersion,
               uri: artworkMetadataVersions.uri,
               documentHash: artworkMetadataVersions.documentHash,
@@ -264,12 +265,16 @@ export function createPublicArtworkDetailStore(
               ),
             )
             .limit(1);
+          const { canonicalDocument, ...publicMetadata } = metadata;
           return {
             ...record,
+            ...(canonicalDocument
+              ? { currentMetadataDocument: canonicalDocument }
+              : {}),
             materials,
             media,
             verification,
-            metadata,
+            metadata: publicMetadata,
             condition,
             custody: custody ?? null,
             ownership,

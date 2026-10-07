@@ -211,3 +211,9 @@ export {
 } from "./artwork-registration-status-store.js";
 
 export * from "./artwork-publication-store.js";
+
+export {
+  createMetadataAdministrationStore,
+  type MetadataAdministrationStore,
+} from "./metadata-administration-store.js";
+export { createMetadataRevisionStatusStore } from "./artwork-registration-status-store.js";

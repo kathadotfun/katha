@@ -176,6 +176,10 @@ export * from "./artwork-mint-api.js";
 export {
   metadataRevisionRequestSchema,
   type MetadataRevisionRequest,
+  metadataRevisionDocumentRequestSchema,
+  metadataRevisionReviewSchema,
+  type MetadataRevisionDocumentRequest,
+  type MetadataRevisionReview,
 } from "./metadata-revision-api.js";
 export * from "./operation-receipt-api.js";
 export * from "./artwork-provenance-api.js";
