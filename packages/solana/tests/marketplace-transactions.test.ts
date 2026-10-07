@@ -373,3 +373,33 @@ it("requires seller cancellation but permits any signer at the inclusive expiry 
     ),
   ).rejects.toThrow();
 });
+
+it("re-lists completed primary and secondary sales while rejecting impossible historical sale kinds", async () => {
+  const input = {
+    ...revision(),
+    price: "100000000",
+    expiresAt: f.context.chainTime + 3600n,
+  };
+  const context = { ...f.context, authorityAddress: f.seller };
+  for (const completedSales of [1n, 2n]) {
+    listing({
+      status: market.ListingStatus.Purchased,
+      completedSales,
+      saleKind:
+        completedSales === 1n ? market.SaleKind.Primary : market.SaleKind.Secondary,
+    });
+    await expect(
+      buildCreateListingTransaction(context, f.accounts, input),
+    ).resolves.toMatchObject({ nextRevision: 2n });
+  }
+  for (const overrides of [
+    { completedSales: 0n, saleKind: market.SaleKind.Primary },
+    { completedSales: 1n, saleKind: market.SaleKind.Secondary },
+    { completedSales: 2n, saleKind: market.SaleKind.Primary },
+  ]) {
+    listing({ status: market.ListingStatus.Purchased, ...overrides });
+    await expect(
+      buildCreateListingTransaction(context, f.accounts, input),
+    ).rejects.toThrow();
+  }
+});

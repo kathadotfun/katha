@@ -202,6 +202,10 @@ async function artworkState(
         market.getListingRecordSize(),
       );
       ledger = market.getListingRecordDecoder().decode(accounts.listingAccount.data);
+      // A purchased ledger describes the sale that just completed; its counter
+      // already includes that sale. Other statuses describe the current offer.
+      const purchased = ledger.status === market.ListingStatus.Purchased;
+      const priorSales = ledger.completedSales - (purchased ? 1n : 0n);
       if (
         ledger.version !== 1 ||
         ledger.bump !== listingBump ||
@@ -210,10 +214,9 @@ async function artworkState(
         ledger.asset !== asset ||
         ledger.paymentMint !== configuration.paymentMint ||
         ledger.revision !== revision ||
+        priorSales < 0n ||
         ledger.saleKind !==
-          (ledger.completedSales === 0n
-            ? market.SaleKind.Primary
-            : market.SaleKind.Secondary)
+          (priorSales === 0n ? market.SaleKind.Primary : market.SaleKind.Secondary)
       )
         throw new TypeError("Listing binding or reviewed revision is stale");
       nonzeroAddress(ledger.seller);

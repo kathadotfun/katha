@@ -222,6 +222,7 @@ outside the current scope.
 - [Atomic test-token purchases and Core transfer](docs/development/marketplace-purchase.md)
 - [Marketplace transaction preparation](docs/development/marketplace-transactions.md)
 - [Complete local primary sale](docs/development/marketplace-primary-sale.md)
+- [Inspected resale in both custody situations](docs/development/marketplace-resale.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

@@ -200,6 +200,7 @@ async function main() {
               "tests/marketplace-release.test.ts",
               "tests/marketplace-purchase.test.ts",
               "tests/marketplace-primary.test.ts",
+              "tests/marketplace-resale.test.ts",
             ]),
       ],
       root,
