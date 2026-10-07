@@ -244,3 +244,14 @@ export {
   chainOperationKindSchema,
   chainOperationIntentSchema,
 } from "./blockchain-operation.js";
+
+export {
+  purchaseQuoteRequestSchema,
+  purchasePrepareRequestSchema,
+  saleDistributionSchema,
+  purchaseQuoteTermsSchema,
+  purchaseQuoteResponseSchema,
+  purchasePreparationResponseSchema,
+  type PurchaseQuoteTerms,
+  type PurchaseQuoteResponse,
+} from "./artwork-purchase-api.js";

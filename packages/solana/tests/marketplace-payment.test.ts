@@ -1,3 +1,8 @@
+import { canonicalDocumentBytes } from "@katha/shared";
+import {
+  validateSignedPreparation,
+  type ReceiptPreparation,
+} from "../src/operation-receipt.js";
 import { sha256Hex } from "@katha/shared";
 import { type Rpc, type GetTransactionApi, type GetGenesisHashApi } from "@solana/kit";
 import { createOperationReceiptReaderFromRpc } from "../src/operation-receipt.js";
@@ -329,3 +334,78 @@ it("rejects preparations containing another program or an extra independent paym
   }
   expect(f.read).not.toHaveBeenCalled();
 });
+
+it.each([0, 1] as const)(
+  "accepts only the exact persisted buyer-signed purchase receipt v%s",
+  async (version) => {
+    const f = await fixture(version),
+      instruction = f.prepared.instruction;
+    const id = "11111111-1111-4111-8111-111111111111";
+    const expectedAccounts = [
+      ...new Set([
+        f.buyer.address,
+        instruction.programAddress,
+        ...instruction.accounts.map((a) => a.address),
+      ]),
+    ].sort();
+    const canonicalRequest = new TextDecoder().decode(
+      canonicalDocumentBytes({
+        schemaVersion: 1,
+        artworkId: id,
+        kathaId: f.kathaId,
+        kind: "PURCHASE_ARTWORK",
+        idempotencyKey: "purchase-receipt",
+        expectedAccounts,
+        expectedHashes: [],
+        parameters: { price: f.prepared.expectedPrice },
+        cluster: f.context.cluster,
+        walletId: id,
+        authorityWallet: f.buyer.address,
+        feePayer: f.buyer.address,
+        programAddress: instruction.programAddress,
+        instruction: {
+          programAddress: instruction.programAddress,
+          accounts: instruction.accounts.map(({ address, role }) => ({
+            address,
+            role,
+          })),
+          dataHex: Buffer.from(instruction.data).toString("hex"),
+        },
+      }),
+    );
+    const expected: ReceiptPreparation = {
+      ...f.prepared.artifact,
+      canonicalRequest,
+      requestHash: await sha256Hex(new TextEncoder().encode(canonicalRequest)),
+      wallet: f.buyer.address,
+      walletId: id,
+      cluster: f.context.cluster,
+      kind: "PURCHASE_ARTWORK",
+      artworkId: id,
+      idempotencyKey: "purchase-receipt",
+      programAddress: instruction.programAddress,
+      expectedAccounts,
+      expectedHashes: [],
+    };
+    expect((await validateSignedPreparation(f.wire, expected)).messageHash).toBe(
+      f.prepared.artifact.messageHash,
+    );
+    await expect(
+      validateSignedPreparation(f.prepared.artifact.transactionBase64, expected),
+    ).rejects.toThrow();
+    const changed = new TextDecoder().decode(
+      canonicalDocumentBytes({
+        ...JSON.parse(canonicalRequest),
+        kind: "CREATE_LISTING",
+      }),
+    );
+    await expect(
+      validateSignedPreparation(f.wire, {
+        ...expected,
+        kind: "CREATE_LISTING",
+        canonicalRequest: changed,
+        requestHash: await sha256Hex(new TextEncoder().encode(changed)),
+      }),
+    ).rejects.toThrow();
+  },
+);

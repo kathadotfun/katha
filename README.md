@@ -91,6 +91,7 @@ matching indexed verification, inspection, metadata and ownership. Metadata comm
 initial, pre-mint and atomic post-mint Registry/Core revisions from immutable stored
 documents. Receipt reconciliation now verifies signed preparations and exact finalized
 transactions, retaining unresolved attempts without creating domain history.
+Authenticated purchase quotes now read finalized listings, display exact test-token distributions, and bind unsigned purchase preparation to the buyer and reviewed terms. Listing, cancellation and purchase receipts verify exact signed preparations; marketplace sale indexing remains separate work.
 Public provenance now exposes ordered finalized Registry/Core claims and condition
 history with immutable attribution, validated bindings, two-stream gaps/lag and
 persisted ownership-check freshness. Private report content remains excluded. The web scaffold now uses an editorial
@@ -225,6 +226,7 @@ outside the current scope.
 - [Inspected resale in both custody situations](docs/development/marketplace-resale.md)
 - [Devnet payment provider](docs/development/devnet-payment-provider.md)
 - [Artwork listing API](docs/development/artwork-listings-api.md)
+- [Buyer purchase quotes and preparation](docs/development/artwork-purchases-api.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

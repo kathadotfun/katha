@@ -1,3 +1,9 @@
+import { createArtworkPurchases } from "./artwork-purchases.js";
+import { createDevnetPaymentProvider } from "./payment.js";
+import {
+  createMarketplacePurchaseReader,
+  createMarketplacePaymentSettlement,
+} from "@katha/solana";
 import { createArtworkListings } from "./artwork-listings.js";
 import { createMarketplaceListingStore } from "@katha/db";
 import { createMarketplaceListingReader } from "@katha/solana";
@@ -300,6 +306,24 @@ function startApi() {
       sessions,
       createMarketplaceListingReader(rpcConfig),
       createOperationChain(rpcConfig),
+      config.KATHA_CLUSTER,
+    ),
+    createArtworkPurchases(
+      createMarketplaceListingStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+      ),
+      sessions,
+      createMarketplacePurchaseReader(rpcConfig),
+      (paymentMint) =>
+        createDevnetPaymentProvider(
+          sessions,
+          createMarketplacePaymentSettlement(
+            createOperationChain(rpcConfig),
+            createOperationReceiptReader(rpcConfig),
+            { cluster: config.KATHA_CLUSTER, paymentMint },
+          ),
+        ),
       config.KATHA_CLUSTER,
     ),
   );

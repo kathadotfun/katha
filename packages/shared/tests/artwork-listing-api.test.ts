@@ -23,7 +23,7 @@ it("accepts exact decimal strings and distinct listing/cancellation contracts", 
   ).toBe("1");
   expect(chainOperationKindSchema.parse("CREATE_LISTING")).toBe("CREATE_LISTING");
   expect(chainOperationKindSchema.parse("CANCEL_LISTING")).toBe("CANCEL_LISTING");
-  expect(chainOperationKindSchema.safeParse("PURCHASE_ARTWORK").success).toBe(false);
+  expect(chainOperationKindSchema.safeParse("PURCHASE_ARTWORK").success).toBe(true);
   expect(registryOperationKindSchema.safeParse("CREATE_LISTING").success).toBe(false);
 });
 it.each([

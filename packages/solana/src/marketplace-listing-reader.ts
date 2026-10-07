@@ -19,6 +19,7 @@ const SYSVAR = address("Sysvar1111111111111111111111111111111111111");
 export function createMarketplaceListingReaderFromRpc(
   rpc: Rpc<GetAccountInfoApi & GetMultipleAccountsApi & GetGenesisHashApi>,
   cluster: KathaRpcConfig["cluster"],
+  includeSaleTerms = false,
 ) {
   return async (identity: string) => {
     const kathaId = kathaIdSchema.parse(identity),
@@ -39,6 +40,7 @@ export function createMarketplaceListingReaderFromRpc(
     const [asset] = await registry.findAssetPda({ artwork }),
       [listing] = await market.findListingPda({ asset });
     const [condition] = await registry.findHeadPda({ artwork });
+    const [saleTerms] = await market.findSaleTermsPda({ artwork });
     const keys = [
       config,
       registryConfig,
@@ -48,6 +50,7 @@ export function createMarketplaceListingReaderFromRpc(
       listing,
       condition,
       CLOCK,
+      ...(includeSaleTerms ? [saleTerms] : []),
     ];
     const response = await rpc
       .getMultipleAccounts(keys, { commitment: "finalized", encoding: "base64" })
@@ -105,6 +108,7 @@ export function createMarketplaceListingReaderFromRpc(
       chainTime,
       observedSlot: response.context.slot,
       state,
+      saleTermsAccount: accounts[8],
     };
   };
 }
@@ -116,4 +120,29 @@ export function createMarketplaceListingReader(config: KathaRpcConfig) {
 }
 export type MarketplaceListingReader = ReturnType<
   typeof createMarketplaceListingReader
+>;
+
+export function createMarketplacePurchaseReaderFromRpc(
+  rpc: Rpc<GetAccountInfoApi & GetMultipleAccountsApi & GetGenesisHashApi>,
+  cluster: KathaRpcConfig["cluster"],
+) {
+  const read = createMarketplaceListingReaderFromRpc(rpc, cluster, true);
+  return async (identity: string) => {
+    const snapshot = await read(identity);
+    if (!snapshot.saleTermsAccount?.exists)
+      throw new TypeError("Sale terms unavailable");
+    return {
+      ...snapshot,
+      accounts: { ...snapshot.accounts, saleTermsAccount: snapshot.saleTermsAccount },
+    };
+  };
+}
+export function createMarketplacePurchaseReader(config: KathaRpcConfig) {
+  return createMarketplacePurchaseReaderFromRpc(
+    createKathaRpcClient(config).rpc,
+    config.cluster,
+  );
+}
+export type MarketplacePurchaseReader = ReturnType<
+  typeof createMarketplacePurchaseReader
 >;

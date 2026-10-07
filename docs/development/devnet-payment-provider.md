@@ -62,8 +62,8 @@ failed observations do not mean payment completed and do not mutate ownership.
 The official [Solana transaction RPC documentation](https://solana.com/docs/rpc/http/gettransaction)
 describes commitment, version support and missing transaction responses.
 Marketplace event indexing and public sale history remain separate integration work.
-The HTTP receipt allowlist also accepts listing creation/cancellation; purchase
-receipt integration remains separate. See the [listing API](artwork-listings-api.md).
+The HTTP receipt allowlist accepts listing creation/cancellation and purchase.
+See the [listing API](artwork-listings-api.md) and [purchase API](artwork-purchases-api.md).
 
 ## Checks
 

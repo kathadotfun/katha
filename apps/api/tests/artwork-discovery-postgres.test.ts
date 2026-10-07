@@ -476,6 +476,46 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       ),
     ).toEqual({ status: "conflict" });
 
+    const purchaseOperation = {
+      ...operation,
+      kind: "PURCHASE_ARTWORK" as const,
+      idempotencyKey: "synthetic-purchase-guard",
+    };
+    const savedPurchase = await listingStore.save(
+      purchaseOperation,
+      wallet.address,
+      mandala.kathaId,
+      preparation,
+    );
+    expect(savedPurchase.status).toBe("saved");
+    expect(
+      await listingStore.save(
+        purchaseOperation,
+        wallet.address,
+        mandala.kathaId,
+        preparation,
+      ),
+    ).toEqual(savedPurchase);
+    expect(
+      await listingStore.save(
+        { ...purchaseOperation, requestHash: "d".repeat(64) },
+        wallet.address,
+        mandala.kathaId,
+        preparation,
+      ),
+    ).toEqual({ status: "conflict" });
+    expect(
+      await listingStore.save(
+        {
+          ...purchaseOperation,
+          artworkId: hidden[0]!.id,
+          idempotencyKey: "hidden-purchase",
+        },
+        wallet.address,
+        hidden[0]!.kathaId,
+        preparation,
+      ),
+    ).toEqual({ status: "conflict" });
     const tags = createNfcTagStore(database.db);
     const nfcStore = createNfcResolutionStore(database.db, "LOCALNET");
     const nfc = createNfcResolution(nfcStore, "https://katha.fun");

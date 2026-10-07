@@ -65,6 +65,10 @@ export interface PaymentPreparation {
   expectedRevision: bigint;
   expectedPrice: string;
   artifact: Awaited<ReturnType<OperationChain["simulate"]>>;
+  instruction: Awaited<
+    ReturnType<typeof buildPurchaseListingTransaction>
+  >["instruction"];
+  nextRevision: bigint;
 }
 
 /** Test-token settlement is one Marketplace CPI transaction, never a second payment. */
@@ -123,6 +127,8 @@ export function createMarketplacePaymentSettlement(
         expectedRevision: input.expectedRevision,
         expectedPrice: input.expectedPrice,
         artifact,
+        instruction: prepared.instruction,
+        nextRevision: prepared.nextRevision,
       };
     },
     async verify(

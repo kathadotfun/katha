@@ -32,6 +32,8 @@ function fixture() {
     expectedPrice: "100000000",
     expectedRevision: 1n,
     artifact: {} as PaymentPreparation["artifact"],
+    instruction: {} as PaymentPreparation["instruction"],
+    nextRevision: 2n,
   };
   const prepare = vi.fn<MarketplacePaymentSettlement["prepare"]>(async () => prepared);
   const verify = vi.fn<MarketplacePaymentSettlement["verify"]>(async () => ({

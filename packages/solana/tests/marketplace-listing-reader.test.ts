@@ -11,14 +11,17 @@ import {
   snapshot,
 } from "./fixtures/marketplace-transactions.js";
 import { readMarketplaceListingState } from "../src/marketplace.js";
-import { createMarketplaceListingReaderFromRpc } from "../src/marketplace-listing-reader.js";
+import {
+  createMarketplaceListingReaderFromRpc,
+  createMarketplacePurchaseReaderFromRpc,
+} from "../src/marketplace-listing-reader.js";
 import * as market from "../src/generated/marketplace/index.js";
 const mocked = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock("@solana/kit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@solana/kit")>()),
   fetchEncodedAccount: mocked.fetch,
 }));
-async function fixture() {
+async function fixture(purchase = false) {
   const f = await marketplaceTransactionFixture();
   mocked.fetch.mockResolvedValue(f.accounts.registryConfigAccount);
   const clock = new Uint8Array(40);
@@ -45,13 +48,18 @@ async function fixture() {
       clock,
     ),
   ].map((a) => encoded(a as typeof f.accounts.assetAccount));
+  if (purchase) values.push(encoded(f.accounts.saleTermsAccount));
   const getMultipleAccounts = vi.fn(() => ({
     send: async () => ({ context: { slot: 9007199254740993n }, value: values }),
   }));
   const getGenesisHash = vi.fn(() => ({
     send: async () => "11111111111111111111111111111111",
   }));
-  const read = createMarketplaceListingReaderFromRpc(
+  const read = (
+    purchase
+      ? createMarketplacePurchaseReaderFromRpc
+      : createMarketplaceListingReaderFromRpc
+  )(
     { getMultipleAccounts, getGenesisHash } as unknown as Rpc<
       GetAccountInfoApi & GetMultipleAccountsApi & GetGenesisHashApi
     >,
@@ -137,4 +145,17 @@ it("rejects nonsensical ledger state and accepts maximum revision for read-only 
     (await readMarketplaceListingState(f.accounts, f.kathaId, f.context.chainTime))
       .revision,
   ).toBe(18446744073709551615n);
+});
+
+it("includes sale terms in the same finalized purchase snapshot and rejects missing terms", async () => {
+  const f = await fixture(true);
+  const result = await f.read(f.kathaId);
+  expect(f.values).toHaveLength(9);
+  expect(f.getMultipleAccounts.mock.calls[0]).toMatchObject([
+    expect.arrayContaining([f.saleTerms]),
+    { commitment: "finalized", encoding: "base64" },
+  ]);
+  expect(result.accounts).toHaveProperty("saleTermsAccount.address", f.saleTerms);
+  f.values[8] = null;
+  await expect(f.read(f.kathaId)).rejects.toThrow("Sale terms unavailable");
 });

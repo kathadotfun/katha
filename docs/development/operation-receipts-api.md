@@ -1,7 +1,7 @@
 # Finalized operation receipts
 
 `POST /operations/:operationId/receipts` records and reconciles a signed Registry
-operation attempt. An authenticated session may access only its own operation and
+or Marketplace listing/cancellation/purchase operation attempt. An authenticated session may access only its own operation and
 preparation on the configured cluster. Previous registration/verifier/custody roles
 are not rechecked: a historic transaction can remain valid after authority rotation.
 The original preparation and signed transaction bind the authorized signer.
@@ -33,7 +33,7 @@ Before creating a receipt, the SDK:
 - compares every message byte and SHA-256 against the stored preparation;
 - validates canonical request bytes/hash, wallet/cluster/artwork/key, operation kind,
   expected program, account set and commitment hash list against immutable operation rows;
-- decompiles the message and checks fee payer, one Registry instruction, the generated
+- decompiles the message and checks fee payer, one Registry or Marketplace instruction, the generated
   discriminator allowed for the operation kind, ordered accounts, normalized compiled
   account privileges and exact instruction data against canonical preparation intent.
 

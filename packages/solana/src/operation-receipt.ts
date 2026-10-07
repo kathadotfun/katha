@@ -30,9 +30,10 @@ import {
   identifyKathaMarketplaceInstruction,
   KathaMarketplaceInstruction,
 } from "./generated/marketplace/index.js";
-const listingKinds: Record<string, KathaMarketplaceInstruction> = {
+const marketplaceKinds: Record<string, KathaMarketplaceInstruction> = {
   CREATE_LISTING: KathaMarketplaceInstruction.CreateListing,
   CANCEL_LISTING: KathaMarketplaceInstruction.CancelListing,
+  PURCHASE_ARTWORK: KathaMarketplaceInstruction.PurchaseListing,
 };
 export class ReceiptValidationError extends Error {
   constructor() {
@@ -139,8 +140,8 @@ export async function validateSignedPreparation(
       ...intentInput
     } = record;
     const intent = chainOperationIntentSchema.parse(intentInput);
-    const isListing = Object.hasOwn(listingKinds, intent.kind);
-    const expectedProgram = isListing
+    const isMarketplace = Object.hasOwn(marketplaceKinds, intent.kind);
+    const expectedProgram = isMarketplace
       ? KATHA_MARKETPLACE_PROGRAM_ADDRESS
       : KATHA_REGISTRY_PROGRAM_ADDRESS;
     if (
@@ -169,9 +170,9 @@ export async function validateSignedPreparation(
       message.feePayer.address !== wallet ||
       instruction.programAddress !== programAddress ||
       !instruction.data ||
-      !(isListing
+      !(isMarketplace
         ? identifyKathaMarketplaceInstruction(instruction.data) ===
-          listingKinds[intent.kind]
+          marketplaceKinds[intent.kind]
         : kinds[intent.kind]?.includes(
             identifyKathaRegistryInstruction(instruction.data),
           ))

@@ -16,6 +16,7 @@ export const listingOperationKindSchema = z.enum(["CREATE_LISTING", "CANCEL_LIST
 export const chainOperationKindSchema = z.union([
   registryOperationKindSchema,
   listingOperationKindSchema,
+  z.literal("PURCHASE_ARTWORK"),
 ]);
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 export const operationIntentSchema = z.strictObject({

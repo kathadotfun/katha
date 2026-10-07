@@ -85,8 +85,8 @@ Reconcile the exact signed preparation with the existing authenticated endpoint:
 `transactionBase64`. Its allowlist now accepts CREATE_LISTING and CANCEL_LISTING
 alongside Registry operations. The verifier binds the genuine wallet signature,
 exact message and canonical instruction kind/program/accounts/data before lookup
-of matching finalized RPC evidence. PURCHASE_ARTWORK remains outside this endpoint
-until purchase integration. Unknown or failed receipts do not finalize the operation
+of matching finalized RPC evidence. PURCHASE_ARTWORK is also supported through the
+[buyer purchase API](artwork-purchases-api.md). Unknown or failed receipts do not finalize the operation
 or create listing, sale, ownership or custody history. Query finalized chain state
 after confirmation; Marketplace history indexing is a separate step.
 
