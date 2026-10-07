@@ -220,16 +220,21 @@ export function createOperationReceiptReaderFromRpc(
       .send({ abortSignal: signal });
     if (!result) return { status: "UNKNOWN" };
     if (result.transaction[1] !== "base64") throw new ReceiptValidationError();
-    const tx = wire(result.transaction[0]),
-      expected = wire(signedWire);
-    if (
-      getSignatureFromTransaction(tx) !== transactionSignature ||
-      !Buffer.from(tx.messageBytes).equals(Buffer.from(expected.messageBytes)) ||
-      !Buffer.from(bytes(result.transaction[0])).equals(bytes(signedWire)) ||
-      result.version !==
-        getCompiledTransactionMessageDecoder().decode(tx.messageBytes).version
-    )
+    try {
+      const tx = wire(result.transaction[0]),
+        expected = wire(signedWire);
+      if (
+        getSignatureFromTransaction(tx) !== transactionSignature ||
+        !Buffer.from(tx.messageBytes).equals(Buffer.from(expected.messageBytes)) ||
+        !Buffer.from(bytes(result.transaction[0])).equals(bytes(signedWire)) ||
+        result.version !==
+          getCompiledTransactionMessageDecoder().decode(tx.messageBytes).version
+      )
+        throw new ReceiptValidationError();
+    } catch {
+      // Malformed or unsigned RPC bytes are a mismatch, not a network outage.
       throw new ReceiptValidationError();
+    }
     if (!result.meta || result.meta.err === undefined) return { status: "UNKNOWN" };
     if (
       typeof result.slot !== "bigint" ||

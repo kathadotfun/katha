@@ -164,3 +164,12 @@ export {
   type MarketplaceListingInput,
   type MarketplacePurchaseInput,
 } from "./marketplace.js";
+
+export {
+  createMarketplacePaymentSettlement,
+  PaymentValidationError,
+  type MarketplacePaymentSettlement,
+  type PaymentArtworkState,
+  type PaymentPreparation,
+  type PaymentPurchaseInput,
+} from "./marketplace-payment.js";
