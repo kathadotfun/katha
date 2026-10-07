@@ -32,7 +32,9 @@ Status is `Inactive`, `Active`, `Cancelled`, `Expired` or `Purchased`. It does n
 replace custody, verification, approval or Core ownership. Listing revisions use
 checked incrementing arithmetic. Price must be positive and expiry strictly later
 than a positive chain timestamp; amounts fit `u64` and never use floating point.
-`create_listing` now activates this ledger through validated Core locking.
+`create_listing` activates this ledger through validated Core locking.
+[Cancellation and expiry recovery](marketplace-cancellation.md) preserve it and
+increment its revision when unlocking.
 
 The ledger must persist across cancellation, expiry and purchase. Completed sales
 will classify a new offer as primary (zero) or secondary (positive); returning the

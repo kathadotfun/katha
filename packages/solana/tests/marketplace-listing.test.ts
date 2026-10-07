@@ -20,7 +20,7 @@ async function setup() {
       artistPayout: f.roles.artist.address,
     }),
   ]);
-  const [listing, bump] = await marketplace.findListingAddressPda({
+  const [listing, bump] = await marketplace.findListingPda({
     asset: f.artwork.asset,
   });
   const create = (overrides: Partial<marketplace.CreateListingAsyncInput> = {}) =>

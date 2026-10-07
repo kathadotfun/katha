@@ -26,7 +26,7 @@ async function setup() {
   const [saleTerms] = await marketplace.findSaleTermsPda({
     artwork: f.artwork.artwork,
   });
-  const [listing, listingBump] = await marketplace.findListingAddressPda({
+  const [listing, listingBump] = await marketplace.findListingPda({
     asset: f.artwork.asset,
   });
   const check = (overrides: Partial<marketplace.CheckSaleEligibilityAsyncInput> = {}) =>

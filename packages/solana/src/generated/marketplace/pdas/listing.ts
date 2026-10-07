@@ -14,12 +14,12 @@ import {
   type ProgramDerivedAddress,
 } from "@solana/kit";
 
-export type ListingAddressSeeds = {
+export type ListingSeeds = {
   asset: Address;
 };
 
-export async function findListingAddressPda(
-  seeds: ListingAddressSeeds,
+export async function findListingPda(
+  seeds: ListingSeeds,
   config: { programAddress?: Address | undefined } = {},
 ): Promise<ProgramDerivedAddress> {
   const {

@@ -1,6 +1,8 @@
 // Test-only Metaplex adapter. Umi types stay inside this file; callers use Kit.
 import {
   deserializeAssetV1,
+  PluginType,
+  getRevokePluginAuthorityV1InstructionDataSerializer,
   getAddPluginV1InstructionDataSerializer,
   getTransferV1InstructionDataSerializer,
   getUpdatePluginV1InstructionDataSerializer,
@@ -54,13 +56,14 @@ export function thawAsOwner(
   asset: Address,
   collection: Address,
   actor: TransactionSigner,
+  frozen = false,
 ) {
   return common(
     asset,
     collection,
     actor,
     getUpdatePluginV1InstructionDataSerializer().serialize({
-      plugin: { __kind: "FreezeDelegate", fields: [{ frozen: false }] },
+      plugin: { __kind: "FreezeDelegate", fields: [{ frozen }] },
     }),
   );
 }
@@ -120,4 +123,19 @@ export function readListingDelegates(account: EncodedAccount) {
         }
       : null,
   };
+}
+
+export function revokeTransferAsOwner(
+  asset: Address,
+  collection: Address,
+  actor: TransactionSigner,
+) {
+  return common(
+    asset,
+    collection,
+    actor,
+    getRevokePluginAuthorityV1InstructionDataSerializer().serialize({
+      pluginType: PluginType.TransferDelegate,
+    }),
+  );
 }

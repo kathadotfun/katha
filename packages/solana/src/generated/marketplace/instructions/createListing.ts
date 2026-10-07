@@ -49,7 +49,7 @@ import {
   findConditionHeadPda,
   findConfigPda,
   findCustodyHeadPda,
-  findListingAddressPda,
+  findListingPda,
   findRegistryConfigPda,
   findSaleTermsPda,
   findVerificationPda,
@@ -472,7 +472,7 @@ export async function getCreateListingInstructionAsync<
     );
   }
   if (!accounts.listing.value) {
-    accounts.listing.value = await findListingAddressPda(
+    accounts.listing.value = await findListingPda(
       {
         asset: getAddressFromResolvedInstructionAccount("asset", accounts.asset.value),
       },

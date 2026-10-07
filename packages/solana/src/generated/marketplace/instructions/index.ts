@@ -6,7 +6,9 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./cancelListing.js";
 export * from "./checkSaleEligibility.js";
 export * from "./createListing.js";
+export * from "./expireListing.js";
 export * from "./initializeMarketplace.js";
 export * from "./initializeSaleTerms.js";

@@ -6,6 +6,8 @@ pub mod eligibility;
 pub use eligibility::*;
 pub mod listing;
 pub use listing::*;
+pub mod release;
+pub use release::*;
 
 declare_id!("B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq");
 
@@ -16,6 +18,14 @@ pub const BASIS_POINTS_DENOMINATOR: u32 = 10_000;
 #[program]
 pub mod katha_marketplace {
     use super::*;
+
+    pub fn cancel_listing(ctx: Context<ReleaseListing>, expected_revision: u64) -> Result<()> {
+        ctx.accounts.release(expected_revision, false)
+    }
+
+    pub fn expire_listing(ctx: Context<ReleaseListing>, expected_revision: u64) -> Result<()> {
+        ctx.accounts.release(expected_revision, true)
+    }
 
     pub fn create_listing(
         ctx: Context<CreateListing>,
@@ -214,6 +224,12 @@ pub enum MarketplaceError {
     StaleListingRevision,
     #[msg("Pre-existing Core plugins conflict with marketplace delegation")]
     ConflictingCorePlugins,
+    #[msg("Listing is not active")]
+    ListingNotActive,
+    #[msg("Listing has not reached its expiry time")]
+    ListingNotExpired,
+    #[msg("Core freeze delegate does not match the active listing")]
+    InvalidListingDelegates,
 }
 
 #[cfg(test)]

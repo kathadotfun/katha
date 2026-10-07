@@ -5,8 +5,11 @@ use katha_registry::{
     ConditionHead, CustodyHead, KathaConfig,
 };
 use mpl_core::{
-    instructions::AddPluginV1CpiBuilder,
-    types::{FreezeDelegate, Plugin, PluginAuthority, TransferDelegate},
+    instructions::{
+        AddPluginV1CpiBuilder, ApprovePluginAuthorityV1CpiBuilder, UpdatePluginV1CpiBuilder,
+    },
+    types::{FreezeDelegate, Plugin, PluginAuthority, PluginType, TransferDelegate},
+    AuthorityType,
 };
 
 #[derive(Accounts)]
@@ -129,11 +132,19 @@ impl<'info> CreateListing<'info> {
             seller: self.seller.key(),
         }
         .validate(kind, now)?;
-        {
+        let reusable = {
             let data = self.asset.try_borrow_data()?;
             let asset = mpl_core::Asset::from_bytes(&data)
                 .map_err(|_| error!(MarketplaceError::InvalidArtwork))?;
-            require_no_plugins(&data, asset.plugin_header.as_ref())?;
+            if existing.is_none() {
+                require_no_plugins(&data, asset.plugin_header.as_ref())?;
+            } else {
+                require_reusable_plugins(&data, &asset)?;
+            }
+            let reusable = (
+                asset.plugin_list.transfer_delegate.is_some(),
+                asset.plugin_list.freeze_delegate.is_some(),
+            );
             let data = self.collection.try_borrow_data()?;
             let collection = mpl_core::Collection::from_bytes(&data)
                 .map_err(|_| error!(MarketplaceError::InvalidArtwork))?;
@@ -143,7 +154,8 @@ impl<'info> CreateListing<'info> {
                 MarketplaceError::InvalidArtwork
             );
             require_no_plugins(&data, collection.plugin_header.as_ref())?;
-        }
+            reusable
+        };
         let asset_key = self.asset.key();
         let seeds: &[&[u8]] = &[LISTING_SEED, asset_key.as_ref(), &[bump]];
         if existing.is_none() {
@@ -189,21 +201,54 @@ impl<'info> CreateListing<'info> {
         let seller = self.seller.to_account_info();
         let system = self.system_program.to_account_info();
         // Install transfer authorization first, then freeze. No intermediate state commits.
-        for plugin in [
-            Plugin::TransferDelegate(TransferDelegate {}),
-            Plugin::FreezeDelegate(FreezeDelegate { frozen: true }),
+        for (plugin, plugin_type, reuse) in [
+            (
+                Plugin::TransferDelegate(TransferDelegate {}),
+                PluginType::TransferDelegate,
+                reusable.0,
+            ),
+            (
+                Plugin::FreezeDelegate(FreezeDelegate { frozen: true }),
+                PluginType::FreezeDelegate,
+                reusable.1,
+            ),
         ] {
-            AddPluginV1CpiBuilder::new(&core)
-                .asset(&asset)
-                .collection(Some(&collection))
-                .payer(&seller)
-                .authority(Some(&seller))
-                .system_program(&system)
-                .plugin(plugin)
-                .init_authority(PluginAuthority::Address {
-                    address: self.listing.key(),
-                })
-                .invoke()?;
+            if reuse {
+                // Cleanup returns owner-managed permissions; reapprove them rather than reallocating.
+                ApprovePluginAuthorityV1CpiBuilder::new(&core)
+                    .asset(&asset)
+                    .collection(Some(&collection))
+                    .payer(&seller)
+                    .authority(Some(&seller))
+                    .system_program(&system)
+                    .plugin_type(plugin_type.clone())
+                    .new_authority(PluginAuthority::Address {
+                        address: self.listing.key(),
+                    })
+                    .invoke()?;
+                if plugin_type == PluginType::FreezeDelegate {
+                    UpdatePluginV1CpiBuilder::new(&core)
+                        .asset(&asset)
+                        .collection(Some(&collection))
+                        .payer(&seller)
+                        .authority(Some(&self.listing.to_account_info()))
+                        .system_program(&system)
+                        .plugin(plugin)
+                        .invoke_signed(&[seeds])?;
+                }
+            } else {
+                AddPluginV1CpiBuilder::new(&core)
+                    .asset(&asset)
+                    .collection(Some(&collection))
+                    .payer(&seller)
+                    .authority(Some(&seller))
+                    .system_program(&system)
+                    .plugin(plugin)
+                    .init_authority(PluginAuthority::Address {
+                        address: self.listing.key(),
+                    })
+                    .invoke()?;
+            }
         }
         let record = ListingRecord {
             version: 1,
@@ -246,6 +291,39 @@ impl<'info> CreateListing<'info> {
         });
         Ok(())
     }
+}
+
+fn require_reusable_plugins(data: &[u8], asset: &mpl_core::Asset) -> Result<()> {
+    if let Some(header) = asset.plugin_header.as_ref() {
+        let offset = usize::try_from(header.plugin_registry_offset)
+            .map_err(|_| error!(MarketplaceError::ConflictingCorePlugins))?;
+        let registry = mpl_core::PluginRegistryV1Safe::from_bytes(
+            data.get(offset..)
+                .ok_or_else(|| error!(MarketplaceError::ConflictingCorePlugins))?,
+        )
+        .map_err(|_| error!(MarketplaceError::ConflictingCorePlugins))?;
+        require!(
+            registry.external_registry.is_empty()
+                && registry.registry.iter().all(|entry| entry.plugin_type
+                    == PluginType::FreezeDelegate as u8
+                    || entry.plugin_type == PluginType::TransferDelegate as u8),
+            MarketplaceError::ConflictingCorePlugins
+        );
+    }
+    if let Some(plugin) = asset.plugin_list.freeze_delegate.as_ref() {
+        require!(
+            !plugin.freeze_delegate.frozen
+                && plugin.base.authority.authority_type == AuthorityType::Owner,
+            MarketplaceError::ConflictingCorePlugins
+        );
+    }
+    if let Some(plugin) = asset.plugin_list.transfer_delegate.as_ref() {
+        require!(
+            plugin.base.authority.authority_type == AuthorityType::Owner,
+            MarketplaceError::ConflictingCorePlugins
+        );
+    }
+    Ok(())
 }
 
 fn require_no_plugins(

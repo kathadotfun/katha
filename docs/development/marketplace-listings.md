@@ -20,10 +20,13 @@ then a frozen [Freeze Delegate](https://www.metaplex.com/docs/smart-contracts/co
 Both have the listing PDA as explicit address authority. Core retains the seller
 as owner. The owner cannot transfer the frozen asset or thaw it using the owner's
 signature. No custody transition occurs and immutable artist attribution stays intact.
-The program currently exposes no instruction using its delegate signatures.
+The [cancellation and expiry instructions](marketplace-cancellation.md) use the
+listing PDA signature to release these temporary delegates.
 
-Only assets and the Registry-bound collection with empty internal and external
-plugin registries can enter this path. This narrow MVP boundary prevents an existing
+First listings require assets and the Registry-bound collection with empty
+internal and external plugin registries. An existing inactive ledger also permits
+owner-managed Transfer Delegate and unfrozen Freeze Delegate plugins left by
+cleanup, reapproving these to the listing PDA before freezing. This narrow MVP boundary prevents an existing
 delegate, permanent authority or external hook from bypassing/conflicting with the
 lock. It accepts an empty plugin registry left after plugin removal, but does not
 silently replace existing plugins. The collection's update authority must match
@@ -39,8 +42,8 @@ positive count classifies a new offer as secondary even if the asset returned to
 its original owner. Creation does not increment the completed-sale count.
 
 An active record is rejected, including one whose expiry has passed. Expiry does
-not itself execute an unlock. Explicit cancellation/expiry recovery is subsequent
-program work; creation cannot replace an active offer.
+not itself execute an unlock. Explicit [cancellation/expiry recovery](marketplace-cancellation.md) releases the
+lock; creation cannot replace an active offer.
 
 For a new ledger the handler verifies System ownership and empty data, tops up
 rent, allocates its bounded space and assigns Marketplace ownership using the

@@ -197,6 +197,7 @@ async function main() {
               "tests/marketplace-config.test.ts",
               "tests/marketplace-eligibility.test.ts",
               "tests/marketplace-listing.test.ts",
+              "tests/marketplace-release.test.ts",
             ]),
       ],
       root,

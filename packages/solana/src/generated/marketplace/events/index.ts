@@ -7,4 +7,5 @@
  */
 
 export * from "./listingCreated.js";
+export * from "./listingReleased.js";
 export * from "./marketplaceInitialized.js";

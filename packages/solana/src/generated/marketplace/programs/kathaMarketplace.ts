@@ -45,20 +45,28 @@ import {
   type MarketplaceConfigArgs,
 } from "../accounts/index.js";
 import {
+  getCancelListingInstructionAsync,
   getCheckSaleEligibilityInstructionAsync,
   getCreateListingInstructionAsync,
+  getExpireListingInstructionAsync,
   getInitializeMarketplaceInstructionAsync,
   getInitializeSaleTermsInstructionAsync,
+  parseCancelListingInstruction,
   parseCheckSaleEligibilityInstruction,
   parseCreateListingInstruction,
+  parseExpireListingInstruction,
   parseInitializeMarketplaceInstruction,
   parseInitializeSaleTermsInstruction,
+  type CancelListingAsyncInput,
   type CheckSaleEligibilityAsyncInput,
   type CreateListingAsyncInput,
+  type ExpireListingAsyncInput,
   type InitializeMarketplaceAsyncInput,
   type InitializeSaleTermsAsyncInput,
+  type ParsedCancelListingInstruction,
   type ParsedCheckSaleEligibilityInstruction,
   type ParsedCreateListingInstruction,
+  type ParsedExpireListingInstruction,
   type ParsedInitializeMarketplaceInstruction,
   type ParsedInitializeSaleTermsInstruction,
 } from "../instructions/index.js";
@@ -67,7 +75,7 @@ import {
   findConditionHeadPda,
   findConfigPda,
   findCustodyHeadPda,
-  findListingAddressPda,
+  findListingPda,
   findRegistryConfigPda,
   findSaleTermsPda,
   findVerificationPda,
@@ -127,6 +135,7 @@ export function identifyKathaMarketplaceAccount(
 
 export enum KathaMarketplaceEvent {
   ListingCreated,
+  ListingReleased,
   MarketplaceInitialized,
 }
 
@@ -149,6 +158,17 @@ export function identifyKathaMarketplaceEvent(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([118, 128, 112, 84, 174, 125, 237, 193]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceEvent.ListingReleased;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([22, 167, 42, 34, 172, 55, 155, 14]),
       ),
       0,
@@ -162,8 +182,10 @@ export function identifyKathaMarketplaceEvent(
 }
 
 export enum KathaMarketplaceInstruction {
+  CancelListing,
   CheckSaleEligibility,
   CreateListing,
+  ExpireListing,
   InitializeMarketplace,
   InitializeSaleTerms,
 }
@@ -172,6 +194,17 @@ export function identifyKathaMarketplaceInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): KathaMarketplaceInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([41, 183, 50, 232, 230, 233, 157, 70]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.CancelListing;
+  }
   if (
     containsBytes(
       data,
@@ -193,6 +226,17 @@ export function identifyKathaMarketplaceInstruction(
     )
   ) {
     return KathaMarketplaceInstruction.CreateListing;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([206, 60, 47, 146, 232, 175, 14, 182]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.ExpireListing;
   }
   if (
     containsBytes(
@@ -226,11 +270,17 @@ export type ParsedKathaMarketplaceInstruction<
   TProgram extends string = "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq",
 > =
   | ({
+      instructionType: KathaMarketplaceInstruction.CancelListing;
+    } & ParsedCancelListingInstruction<TProgram>)
+  | ({
       instructionType: KathaMarketplaceInstruction.CheckSaleEligibility;
     } & ParsedCheckSaleEligibilityInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.CreateListing;
     } & ParsedCreateListingInstruction<TProgram>)
+  | ({
+      instructionType: KathaMarketplaceInstruction.ExpireListing;
+    } & ParsedExpireListingInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.InitializeMarketplace;
     } & ParsedInitializeMarketplaceInstruction<TProgram>)
@@ -243,6 +293,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
 ): ParsedKathaMarketplaceInstruction<TProgram> {
   const instructionType = identifyKathaMarketplaceInstruction(instruction);
   switch (instructionType) {
+    case KathaMarketplaceInstruction.CancelListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.CancelListing,
+        ...parseCancelListingInstruction(instruction),
+      };
+    }
     case KathaMarketplaceInstruction.CheckSaleEligibility: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -255,6 +312,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
       return {
         instructionType: KathaMarketplaceInstruction.CreateListing,
         ...parseCreateListingInstruction(instruction),
+      };
+    }
+    case KathaMarketplaceInstruction.ExpireListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.ExpireListing,
+        ...parseExpireListingInstruction(instruction),
       };
     }
     case KathaMarketplaceInstruction.InitializeMarketplace: {
@@ -298,6 +362,9 @@ export type KathaMarketplacePluginAccounts = {
 };
 
 export type KathaMarketplacePluginInstructions = {
+  cancelListing: (
+    input: CancelListingAsyncInput,
+  ) => ReturnType<typeof getCancelListingInstructionAsync> & SelfPlanAndSendFunctions;
   checkSaleEligibility: (
     input: CheckSaleEligibilityAsyncInput,
   ) => ReturnType<typeof getCheckSaleEligibilityInstructionAsync> &
@@ -305,6 +372,9 @@ export type KathaMarketplacePluginInstructions = {
   createListing: (
     input: CreateListingAsyncInput,
   ) => ReturnType<typeof getCreateListingInstructionAsync> & SelfPlanAndSendFunctions;
+  expireListing: (
+    input: ExpireListingAsyncInput,
+  ) => ReturnType<typeof getExpireListingInstructionAsync> & SelfPlanAndSendFunctions;
   initializeMarketplace: (
     input: InitializeMarketplaceAsyncInput,
   ) => ReturnType<typeof getInitializeMarketplaceInstructionAsync> &
@@ -318,12 +388,12 @@ export type KathaMarketplacePluginInstructions = {
 export type KathaMarketplacePluginPdas = {
   config: typeof findConfigPda;
   registryConfig: typeof findRegistryConfigPda;
+  asset: typeof findAssetPda;
+  listing: typeof findListingPda;
   verification: typeof findVerificationPda;
   conditionHead: typeof findConditionHeadPda;
   custodyHead: typeof findCustodyHeadPda;
   saleTerms: typeof findSaleTermsPda;
-  asset: typeof findAssetPda;
-  listingAddress: typeof findListingAddressPda;
 };
 
 export type KathaMarketplacePluginRequirements = ClientWithRpc<
@@ -344,6 +414,11 @@ export function kathaMarketplaceProgram() {
           marketplaceConfig: addSelfFetchFunctions(client, getMarketplaceConfigCodec()),
         },
         instructions: {
+          cancelListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelListingInstructionAsync(input),
+            ),
           checkSaleEligibility: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -353,6 +428,11 @@ export function kathaMarketplaceProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getCreateListingInstructionAsync(input),
+            ),
+          expireListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getExpireListingInstructionAsync(input),
             ),
           initializeMarketplace: (input) =>
             addSelfPlanAndSendFunctions(
@@ -368,12 +448,12 @@ export function kathaMarketplaceProgram() {
         pdas: {
           config: findConfigPda,
           registryConfig: findRegistryConfigPda,
+          asset: findAssetPda,
+          listing: findListingPda,
           verification: findVerificationPda,
           conditionHead: findConditionHeadPda,
           custodyHead: findCustodyHeadPda,
           saleTerms: findSaleTermsPda,
-          asset: findAssetPda,
-          listingAddress: findListingAddressPda,
         },
         identifyAccount: identifyKathaMarketplaceAccount,
         identifyInstruction: identifyKathaMarketplaceInstruction,

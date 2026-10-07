@@ -44,7 +44,7 @@ import {
   findConditionHeadPda,
   findConfigPda,
   findCustodyHeadPda,
-  findListingAddressPda,
+  findListingPda,
   findRegistryConfigPda,
   findSaleTermsPda,
   findVerificationPda,
@@ -412,7 +412,7 @@ export async function getCheckSaleEligibilityInstructionAsync<
     );
   }
   if (!accounts.listingAddress.value) {
-    accounts.listingAddress.value = await findListingAddressPda(
+    accounts.listingAddress.value = await findListingPda(
       {
         asset: getAddressFromResolvedInstructionAccount("asset", accounts.asset.value),
       },
@@ -420,7 +420,7 @@ export async function getCheckSaleEligibilityInstructionAsync<
     );
   }
   if (!accounts.listing.value) {
-    accounts.listing.value = await findListingAddressPda(
+    accounts.listing.value = await findListingPda(
       {
         asset: getAddressFromResolvedInstructionAccount("asset", accounts.asset.value),
       },
