@@ -133,6 +133,9 @@ export async function prepareActivityEvents(
       }
       result.push({
         ...base,
+        ...(activity.metadataUri === undefined
+          ? {}
+          : { metadataUri: activity.metadataUri }),
         programAddress: activity.programAddress,
         kind: name === "ArtworkMinted" ? "OWNERSHIP" : "REGISTRY",
         kathaId,

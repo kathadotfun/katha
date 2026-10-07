@@ -4515,7 +4515,12 @@ it("binds indexer networks, repairs gaps by retained history and never invents o
       ...registered,
       slot: 15n,
       signature: sig(3),
-      payload: { name: "ArtworkVerified" },
+      payload: {
+        name: "ArtworkVerified",
+        authorshipEvidenceHash: artwork.authorshipEvidenceHash,
+        verifier: key(7),
+        verifiedAt: "1",
+      },
     };
     const repair = {
       ...stream,
@@ -5306,6 +5311,31 @@ it("publishes under artwork locks only with matching finalized mint and indexed 
       })
       .returning();
     if (!event) throw new Error("Event missing");
+    // Actual Registry mints are indexed ownership events, never generic Registry rows.
+    expect((await store.review(artwork.kathaId))?.indexedMint).toBeNull();
+    const { createArtworkMintStatusStore } = await import("../src/index.js");
+    const mintStatus = createArtworkMintStatusStore(db, "LOCALNET");
+    expect((await mintStatus(artwork.kathaId)).receipt?.indexed).toBe(false);
+    await db.insert(indexedEvents).values({
+      ...event,
+      id: randomUUID(),
+      outerInstructionIndex: 2,
+      kind: "OWNERSHIP",
+      payload: { name: "CoreTransfer" },
+    });
+    expect((await store.review(artwork.kathaId))?.indexedMint).toBeNull();
+    expect((await mintStatus(artwork.kathaId)).receipt?.indexed).toBe(false);
+    await db.insert(indexedEvents).values({
+      ...event,
+      id: randomUUID(),
+      outerInstructionIndex: 3,
+      kind: "OWNERSHIP",
+      payload: { name: "ArtworkMinted" },
+    });
+    expect((await store.review(artwork.kathaId))?.indexedMint?.signature).toBe(
+      signature,
+    );
+    expect((await mintStatus(artwork.kathaId)).receipt?.indexed).toBe(true);
     const [ownerEvent] = await db
       .insert(indexedEvents)
       .values({
@@ -5575,6 +5605,319 @@ it("appends metadata revisions under parent locks and blocks unresolved signed c
       .where(eq(artworkMetadataVersions.artworkId, artwork.id))
       .orderBy(asc(artworkMetadataVersions.version));
     expect(rows.map((row) => row.version)).toEqual([1, 2, 3]);
+  } finally {
+    await connection.close();
+  }
+});
+
+it("projects finalized attestations atomically, rejects mismatches, and repairs retained events on replay", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url) throw new Error("Use pnpm db:test");
+  const connection = createDatabase(url);
+  const { createActivityStore } = await import("../src/activity-store.js");
+  const { db } = connection;
+  const key = (n: number) => "1".repeat(31) + n;
+  const signature = (n: number) => "y".repeat(63) + n;
+  const programs = { registry: key(1), core: key(2), collection: key(3) };
+  // A separate cluster/program pair avoids the checkpoints owned by other fixtures.
+  const stream = {
+    cluster: "DEVNET" as const,
+    programAddress: programs.registry,
+    fromSlot: 0n,
+  };
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "projection-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Missing artist");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic projections",
+        creationYear: 2026,
+        authorshipEvidenceHash: "c".repeat(64),
+      })
+      .returning();
+    if (!artwork) throw new Error("Missing artwork");
+    const store = createActivityStore(db, programs);
+    const base = {
+      programAddress: programs.registry,
+      transactionIndex: 0,
+      outerInstructionIndex: 0,
+      innerInstructionIndex: -1,
+      eventIndex: 0,
+      kathaId: artwork.kathaId,
+      chainRecordedAt: new Date(2000),
+      kind: "REGISTRY" as const,
+      assetAddress: null,
+    };
+    const registered = {
+      ...base,
+      slot: 1n,
+      signature: signature(1),
+      payload: {
+        name: "ArtworkRegistered",
+        collection: programs.collection,
+        artistId: artist.id,
+        creationYear: 2026,
+        category: "PAUBHA",
+        creatorWallet: null,
+        authorshipEvidenceHash: artwork.authorshipEvidenceHash,
+      },
+    };
+    const registrationHead = { signature: registered.signature, slot: registered.slot };
+    await store.commit({
+      ...stream,
+      expected: null,
+      head: registrationHead,
+      events: [registered],
+    });
+    const verified = {
+      ...base,
+      slot: 2n,
+      signature: signature(2),
+      payload: {
+        name: "ArtworkVerified",
+        authorshipEvidenceHash: artwork.authorshipEvidenceHash,
+        verifier: key(4),
+        verifiedAt: "1",
+      },
+    };
+    const verifiedHead = { signature: verified.signature, slot: verified.slot };
+    await expect(
+      store.commit({
+        ...stream,
+        expected: registrationHead,
+        head: verifiedHead,
+        events: [
+          {
+            ...verified,
+            payload: { ...verified.payload, authorshipEvidenceHash: "d".repeat(64) },
+          },
+        ],
+      }),
+    ).rejects.toThrow("conflict");
+    expect(await store.cursor(stream)).toEqual(registrationHead);
+    expect(
+      await db
+        .select()
+        .from(verifications)
+        .where(eq(verifications.artworkId, artwork.id)),
+    ).toHaveLength(0);
+    await store.commit({
+      ...stream,
+      expected: registrationHead,
+      head: verifiedHead,
+      events: [verified],
+    });
+    await store.commit({
+      ...stream,
+      expected: registrationHead,
+      head: verifiedHead,
+      events: [verified],
+    });
+    const [verification] = await db
+      .select()
+      .from(verifications)
+      .where(eq(verifications.artworkId, artwork.id));
+    expect(verification?.status).toBe("FINALIZED");
+    expect(verification?.evidenceHash).toBe(artwork.authorshipEvidenceHash);
+    expect(verification?.chainSignature).toBe(verified.signature);
+
+    const document = JSON.stringify({ kathaId: artwork.kathaId });
+    const hash = createHash("sha256").update(document).digest("hex");
+    const metadata = {
+      ...base,
+      slot: 3n,
+      signature: signature(3),
+      metadataUri: "https://example.com/synthetic.json",
+      payload: {
+        name: "MetadataCommitted",
+        version: 1,
+        documentHash: hash,
+        committedBy: key(4),
+        committedAt: "2",
+      },
+    };
+    const metadataHead = { signature: metadata.signature, slot: metadata.slot };
+    // Chain evidence can arrive before the local immutable document. It cannot invent one.
+    await store.commit({
+      ...stream,
+      expected: verifiedHead,
+      head: metadataHead,
+      events: [metadata],
+    });
+    expect(
+      await db
+        .select()
+        .from(artworkMetadataVersions)
+        .where(eq(artworkMetadataVersions.artworkId, artwork.id)),
+    ).toHaveLength(0);
+    const [prepared] = await db
+      .insert(artworkMetadataVersions)
+      .values({
+        artworkId: artwork.id,
+        version: 1,
+        status: "PREPARED",
+        authorityWallet: key(4),
+        canonicalDocument: document,
+        documentHash: hash,
+        uri: "https://example.com/synthetic.json",
+      })
+      .returning();
+    if (!prepared) throw new Error("Missing metadata");
+    await expect(
+      store.commit({
+        ...stream,
+        expected: verifiedHead,
+        head: metadataHead,
+        events: [{ ...metadata, metadataUri: "https://example.com/wrong.json" }],
+      }),
+    ).rejects.toThrow("conflict");
+    const [stillPrepared] = await db
+      .select()
+      .from(artworkMetadataVersions)
+      .where(eq(artworkMetadataVersions.id, prepared.id));
+    expect(stillPrepared?.status).toBe("PREPARED");
+    expect(
+      await store.commit({
+        ...stream,
+        expected: verifiedHead,
+        head: metadataHead,
+        events: [metadata],
+      }),
+    ).toEqual({ inserted: 0, replay: true });
+    const [finalized] = await db
+      .select()
+      .from(artworkMetadataVersions)
+      .where(eq(artworkMetadataVersions.id, prepared.id));
+    expect(finalized?.status).toBe("FINALIZED");
+    expect(finalized?.chainVersion).toBe(1);
+    expect(finalized?.canonicalDocument).toBe(document);
+    await expect(
+      store.commit({
+        ...stream,
+        expected: metadataHead,
+        head: { signature: signature(4), slot: 4n },
+        events: [
+          {
+            ...metadata,
+            slot: 4n,
+            signature: signature(4),
+            payload: { ...metadata.payload, version: 2, committedBy: key(5) },
+          },
+        ],
+      }),
+    ).rejects.toThrow("conflict");
+    expect(await store.cursor(stream)).toEqual(metadataHead);
+
+    const reportId = randomUUID(),
+      inspectorId = randomUUID();
+    const conditionDocument = JSON.stringify({
+      kathaId: artwork.kathaId,
+      reportId,
+      inspectorId,
+      grade: "EXCELLENT",
+      reason: "INITIAL_VERIFICATION",
+      verifierWallet: key(4),
+      notes: "Synthetic condition only",
+      mediaHashes: ["e".repeat(64)],
+      inspectedAt: new Date(1000).toISOString(),
+      reportedAt: new Date(1000).toISOString(),
+    });
+    const reportHash = createHash("sha256").update(conditionDocument).digest("hex");
+    await db.insert(conditionReports).values({
+      id: reportId,
+      artworkId: artwork.id,
+      version: 1,
+      status: "PREPARED",
+      authorityWallet: key(4),
+      canonicalDocument: conditionDocument,
+      documentHash: reportHash,
+      inspectorId,
+      grade: "EXCELLENT",
+      reason: "INITIAL_VERIFICATION",
+      inspectedAt: new Date(1000),
+      reportedAt: new Date(1000),
+      notes: "Synthetic condition only",
+      mediaHashes: ["e".repeat(64)],
+    });
+    const condition = {
+      ...base,
+      slot: 4n,
+      signature: signature(4),
+      payload: {
+        name: "ConditionRecorded",
+        reportId: reportId.replaceAll("-", ""),
+        inspectorId: inspectorId.replaceAll("-", ""),
+        version: 1,
+        reportHash,
+        grade: 0,
+        reason: 0,
+        verifier: key(4),
+        inspectedAt: "1",
+        recordedAt: "2",
+        ownerScope: { __option: "None" },
+        custodyRevisionScope: { __option: "None" },
+      },
+    };
+    const conditionHead = { slot: condition.slot, signature: condition.signature };
+    for (const mismatch of [
+      { reportHash: "f".repeat(64) },
+      { verifier: key(5) },
+      { grade: 1 },
+      { inspectorId: randomUUID().replaceAll("-", "") },
+      { ownerScope: { __option: "Some", value: key(5) } },
+    ]) {
+      await expect(
+        store.commit({
+          ...stream,
+          expected: metadataHead,
+          head: conditionHead,
+          events: [{ ...condition, payload: { ...condition.payload, ...mismatch } }],
+        }),
+      ).rejects.toThrow("conflict");
+      expect(await store.cursor(stream)).toEqual(metadataHead);
+      const [report] = await db
+        .select()
+        .from(conditionReports)
+        .where(eq(conditionReports.id, reportId));
+      expect(report?.status).toBe("PREPARED");
+    }
+    await store.commit({
+      ...stream,
+      expected: metadataHead,
+      head: conditionHead,
+      events: [condition],
+    });
+    await store.commit({
+      ...stream,
+      expected: metadataHead,
+      head: conditionHead,
+      events: [condition],
+    });
+    const [report] = await db
+      .select()
+      .from(conditionReports)
+      .where(eq(conditionReports.id, reportId));
+    expect(report?.status).toBe("FINALIZED");
+    expect(report?.chainSignature).toBe(condition.signature);
+    expect(report?.canonicalDocument).toBe(conditionDocument);
+    expect(
+      await db
+        .select()
+        .from(indexedEvents)
+        .where(eq(indexedEvents.artworkId, artwork.id)),
+    ).toHaveLength(4);
   } finally {
     await connection.close();
   }

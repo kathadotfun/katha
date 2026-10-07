@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { setTimeout } from "node:timers/promises";
 
+const adminLifecycle = process.argv[2] === "--admin-lifecycle";
+if (process.argv.slice(2).some((arg) => arg !== "--admin-lifecycle"))
+  throw new Error("Unknown database test option");
 const container = `katha-db-test-${randomUUID()}`;
 let started = false;
 const docker = (...args) =>
@@ -69,16 +72,29 @@ try {
   const match = /^127\.0\.0\.1:(\d+)$/.exec(binding);
   if (!match) throw new Error("Expected a single loopback-only test port");
   const url = `postgres://katha_test:synthetic-test-only@127.0.0.1:${match[1]}/katha_test`;
-  execFileSync("pnpm", ["--filter", "@katha/db", "test:integration"], {
-    stdio: "inherit",
-    timeout: 120_000,
-    env: { ...process.env, DATABASE_URL: url, KATHA_TEST_DATABASE_URL: url },
-  });
-  execFileSync("pnpm", ["--filter", "@katha/api", "test:integration"], {
-    stdio: "inherit",
-    timeout: 30_000,
-    env: { ...process.env, KATHA_TEST_DATABASE_URL: url },
-  });
+  if (adminLifecycle) {
+    execFileSync("pnpm", ["--filter", "@katha/db", "exec", "drizzle-kit", "migrate"], {
+      stdio: "inherit",
+      timeout: 30_000,
+      env: { ...process.env, DATABASE_URL: url },
+    });
+    execFileSync(process.execPath, ["scripts/test-core-cpi.mjs", "--admin-lifecycle"], {
+      stdio: "inherit",
+      timeout: 240_000,
+      env: { ...process.env, KATHA_TEST_DATABASE_URL: url },
+    });
+  } else {
+    execFileSync("pnpm", ["--filter", "@katha/db", "test:integration"], {
+      stdio: "inherit",
+      timeout: 120_000,
+      env: { ...process.env, DATABASE_URL: url, KATHA_TEST_DATABASE_URL: url },
+    });
+    execFileSync("pnpm", ["--filter", "@katha/api", "test:integration"], {
+      stdio: "inherit",
+      timeout: 30_000,
+      env: { ...process.env, KATHA_TEST_DATABASE_URL: url },
+    });
+  }
 } finally {
   cleanup();
 }

@@ -1,5 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
+import { projectActivityAttestations } from "./activity-attestations.js";
 import { indexerNetworks } from "./schema/indexer-recovery.js";
 import { artworks } from "./schema/artworks.js";
 import {
@@ -18,7 +19,7 @@ export type ActivityCursor = { signature: string; slot: bigint } | null;
 export type StoredActivity = Omit<
   NewIndexedEventRecord,
   "id" | "cluster" | "artworkId" | "indexedAt"
-> & { kathaId: string | null };
+> & { kathaId: string | null; metadataUri?: string };
 export type ActivityBatch = ActivityStream & {
   expected: ActivityCursor;
   head: ActivityCursor;
@@ -157,7 +158,9 @@ export function createActivityStore(
           throw new ActivityStoreConflict();
         let inserted = 0;
         for (const event of [...batch.events].sort(ordered)) {
-          const { kathaId, ...data } = event;
+          const { kathaId, metadataUri, ...data } = event;
+          if (metadataUri !== undefined && event.payload.name !== "MetadataCommitted")
+            throw new ActivityStoreConflict();
           if (
             !batch.head ||
             event.slot < batch.fromSlot ||
@@ -279,6 +282,8 @@ export function createActivityStore(
               canonical(existing.payload) !== canonical(event.payload)
             )
               throw new ActivityStoreConflict();
+            if (artworkId && event.programAddress === programs.registry)
+              await projectActivityAttestations(tx, batch.cluster, artworkId, event);
             continue;
           }
           // A replay must reproduce retained evidence, never sneak in new events.
@@ -289,6 +294,8 @@ export function createActivityStore(
             .returning();
           if (!saved) throw new ActivityStoreConflict();
           inserted++;
+          if (artworkId && event.programAddress === programs.registry)
+            await projectActivityAttestations(tx, batch.cluster, artworkId, event);
           if (event.kind === "OWNERSHIP") {
             const ownerWallet = event.payload.ownerWallet;
             if (typeof ownerWallet !== "string" || !artworkId || !event.assetAddress)

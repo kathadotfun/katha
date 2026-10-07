@@ -115,7 +115,13 @@ function createArtworkOperationStatusStore(
                   eq(indexedEvents.cluster, cluster),
                   eq(indexedEvents.programAddress, programAddress ?? ""),
                   eq(indexedEvents.signature, receipt.signature),
-                  eq(indexedEvents.kind, "REGISTRY"),
+                  eq(
+                    indexedEvents.kind,
+                    kind === "MINT_ARTWORK" ? "OWNERSHIP" : "REGISTRY",
+                  ),
+                  ...(kind === "MINT_ARTWORK"
+                    ? [sql`${indexedEvents.payload}->>'name' = 'ArtworkMinted'`]
+                    : []),
                 ),
               )
               .limit(1)

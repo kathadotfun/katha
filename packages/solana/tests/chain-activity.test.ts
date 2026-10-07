@@ -10,6 +10,9 @@ import {
   getPlatformInitializedEventEncoder,
   getArtworkRegisteredEventEncoder,
   getMetadataCommittedEventEncoder,
+  getInitializeMetadataInstructionDataEncoder,
+  getReviseUnmintedMetadataInstructionDataEncoder,
+  getReviseMintedMetadataInstructionDataEncoder,
   getConditionRecordedEventEncoder,
   getCustodyUpdatedEventEncoder,
   ArtworkCategory,
@@ -502,3 +505,49 @@ it.each([
   }
   expect(() => decode(f)).toThrow();
 });
+
+it.each(["INITIALIZE", "UNMINTED", "MINTED"] as const)(
+  "extracts the exact signed metadata URI for %s and rejects hash/trailing-byte mismatches",
+  (mode) => {
+    const hash = new Uint8Array(32).fill(7),
+      uri = "https://example.com/synthetic.json";
+    const args = { documentHash: hash, uri, expectedVersion: 1, nextVersion: 2 };
+    const bytes =
+      mode === "INITIALIZE"
+        ? getInitializeMetadataInstructionDataEncoder().encode(args)
+        : mode === "UNMINTED"
+          ? getReviseUnmintedMetadataInstructionDataEncoder().encode(args)
+          : getReviseMintedMetadataInstructionDataEncoder().encode(args);
+    const fixture = () => {
+      const f = activityFixture();
+      f.transaction.message.instructions[0]!.data = base58(bytes);
+      f.meta.logMessages[1] = `Program data: ${Buffer.from(getMetadataCommittedEventEncoder().encode({ artwork: ARTWORK, kathaId: "KATHA-PAUBHA-000001", revision: COLLECTION, version: mode === "INITIALIZE" ? 1 : 2, documentHash: hash, committedBy: SYSTEM, committedAt: 1n })).toString("base64")}`;
+      return f;
+    };
+    expect(decode(fixture()).activities[0]).toMatchObject({
+      metadataUri: uri,
+      event: { name: "MetadataCommitted" },
+    });
+    const trailing = fixture();
+    trailing.transaction.message.instructions[0]!.data = base58([...bytes, 0]);
+    expect(() => decode(trailing)).toThrow("Incomplete or invalid");
+    const mismatch = fixture();
+    mismatch.transaction.message.instructions[0]!.data = base58(
+      mode === "INITIALIZE"
+        ? getInitializeMetadataInstructionDataEncoder().encode({
+            ...args,
+            documentHash: new Uint8Array(32),
+          })
+        : mode === "UNMINTED"
+          ? getReviseUnmintedMetadataInstructionDataEncoder().encode({
+              ...args,
+              documentHash: new Uint8Array(32),
+            })
+          : getReviseMintedMetadataInstructionDataEncoder().encode({
+              ...args,
+              documentHash: new Uint8Array(32),
+            }),
+    );
+    expect(() => decode(mismatch)).toThrow("Incomplete or invalid");
+  },
+);

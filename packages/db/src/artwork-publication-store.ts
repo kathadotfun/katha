@@ -84,7 +84,7 @@ async function review(
         eq(indexedEvents.cluster, cluster),
         eq(indexedEvents.artworkId, base.artwork.id),
         eq(indexedEvents.programAddress, blockchainOperations.programAddress),
-        eq(indexedEvents.kind, "REGISTRY"),
+        eq(indexedEvents.kind, "OWNERSHIP"),
         sql`${indexedEvents.payload}->>'name' = 'ArtworkMinted'`,
       ),
     )

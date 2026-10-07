@@ -213,7 +213,7 @@ export function createPublicArtworkDetailStore(
             )
             .orderBy(desc(conditionReports.chainVersion))
             .limit(1);
-          const [custody] = await tx
+          const [manualCustody] = await tx
             .select({
               state: custodyEvents.toState,
               occurredAt: custodyEvents.occurredAt,
@@ -222,6 +222,42 @@ export function createPublicArtworkDetailStore(
             .where(eq(custodyEvents.artworkId, record.id))
             .orderBy(desc(custodyEvents.revision))
             .limit(1);
+          const [chainCustody] = await tx
+            .select({
+              payload: indexedEvents.payload,
+              occurredAt: indexedEvents.chainRecordedAt,
+            })
+            .from(indexedEvents)
+            .where(
+              and(
+                eq(indexedEvents.artworkId, record.id),
+                eq(indexedEvents.cluster, cluster),
+                eq(indexedEvents.kind, "REGISTRY"),
+                sql`${indexedEvents.payload}->>'name' = 'CustodyUpdated'`,
+              ),
+            )
+            .orderBy(
+              desc(indexedEvents.slot),
+              desc(indexedEvents.transactionIndex),
+              desc(indexedEvents.outerInstructionIndex),
+              desc(indexedEvents.innerInstructionIndex),
+              desc(indexedEvents.eventIndex),
+            )
+            .limit(1);
+          const states = [
+            "UNKNOWN",
+            "KATHA_HELD",
+            "COLLECTOR_HELD",
+            "IN_TRANSIT",
+          ] as const;
+          const state = chainCustody
+            ? states[Number(chainCustody.payload.toState)]
+            : undefined;
+          // Signed custody attestations describe a manual observation, not a sensor reading.
+          const custody =
+            state && chainCustody
+              ? { state, occurredAt: chainCustody.occurredAt }
+              : manualCustody;
           const [ownership] = await tx
             .select({
               ownerWallet: artworkOwnership.ownerWallet,

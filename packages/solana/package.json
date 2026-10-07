@@ -30,7 +30,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --exclude tests/core-cpi.test.ts --exclude tests/registry-config.test.ts",
+    "test": "vitest run --exclude tests/core-cpi.test.ts --exclude tests/registry-config.test.ts --exclude tests/admin-lifecycle.test.ts",
     "program:typecheck": "tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {

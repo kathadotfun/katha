@@ -8,6 +8,9 @@ import {
   KATHA_REGISTRY_PROGRAM_ADDRESS,
   identifyKathaRegistryInstruction,
   KathaRegistryInstruction,
+  getInitializeMetadataInstructionDataCodec,
+  getReviseUnmintedMetadataInstructionDataCodec,
+  getReviseMintedMetadataInstructionDataCodec,
 } from "./generated/registry/index.js";
 import { decodeRegistryEvent, type RegistryActivityEvent } from "./registry-events.js";
 
@@ -77,7 +80,12 @@ interface Position {
 }
 export type DecodedActivity = Position &
   (
-    | { programAddress: Address; kind: "REGISTRY"; event: RegistryActivityEvent }
+    | {
+        programAddress: Address;
+        kind: "REGISTRY";
+        event: RegistryActivityEvent;
+        metadataUri?: string;
+      }
     | { programAddress: Address; kind: "CORE_TRANSFER"; transfer: CoreTransferActivity }
   );
 export interface ActivityTransaction {
@@ -296,7 +304,33 @@ export function decodeFinalizedActivity(
             !frame.invocation.accounts.includes(event.value.artwork))
         )
           fail();
+        let metadataUri: string | undefined;
+        if (event.name === "MetadataCommitted") {
+          const kind = identifyKathaRegistryInstruction(frame.invocation.data);
+          const read = <T>(codec: {
+            decode(data: Uint8Array): T;
+            encode(data: T): ArrayLike<number>;
+          }) => {
+            const value = codec.decode(frame.invocation.data);
+            if (!Buffer.from(codec.encode(value)).equals(frame.invocation.data)) fail();
+            return value;
+          };
+          const instruction =
+            kind === KathaRegistryInstruction.InitializeMetadata
+              ? read(getInitializeMetadataInstructionDataCodec())
+              : kind === KathaRegistryInstruction.ReviseUnmintedMetadata
+                ? read(getReviseUnmintedMetadataInstructionDataCodec())
+                : read(getReviseMintedMetadataInstructionDataCodec());
+          if (
+            !Buffer.from(instruction.documentHash).equals(
+              Buffer.from(event.value.documentHash),
+            )
+          )
+            fail();
+          metadataUri = instruction.uri;
+        }
         frame.activities.push({
+          ...(metadataUri === undefined ? {} : { metadataUri }),
           programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS,
           kind: "REGISTRY",
           event,

@@ -8,6 +8,9 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
+const adminLifecycle = process.argv[2] === "--admin-lifecycle";
+if (process.argv.slice(2).some((arg) => arg !== "--admin-lifecycle"))
+  throw new Error("Unknown program test option");
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const coreProgram = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d";
 const registryProgram = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC";
@@ -167,8 +170,9 @@ async function main() {
         "exec",
         "vitest",
         "run",
-        "tests/core-cpi.test.ts",
-        "tests/registry-config.test.ts",
+        ...(adminLifecycle
+          ? ["tests/admin-lifecycle.test.ts"]
+          : ["tests/core-cpi.test.ts", "tests/registry-config.test.ts"]),
       ],
       root,
       {
