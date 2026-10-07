@@ -21,7 +21,11 @@ import { createMetadataRevisions } from "./metadata-revisions.js";
 import { createMetadataRevisionStore } from "@katha/db";
 import { createMetadataRevisionReader } from "@katha/solana";
 import { createArtworkMinting } from "./artwork-minting.js";
-import { createArtworkMintStore } from "@katha/db";
+import {
+  createArtworkPublicationStore,
+  createArtworkMintStatusStore,
+  createArtworkMintStore,
+} from "@katha/db";
 import { createArtworkMintReader } from "@katha/solana";
 import { createCustodyOperations } from "./custody-operations.js";
 import { createCustodyOperationStore } from "@katha/db";
@@ -218,6 +222,16 @@ function startApi() {
       createOperationChain(rpcConfig),
       storage,
       config.KATHA_CLUSTER,
+      {
+        store: createArtworkPublicationStore(
+          database.db,
+          config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+        ),
+        readStatus: createArtworkMintStatusStore(
+          database.db,
+          config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+        ),
+      },
     ),
     createMetadataRevisions(
       createMetadataRevisionStore(

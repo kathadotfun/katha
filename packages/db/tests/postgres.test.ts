@@ -5099,3 +5099,312 @@ it("appends immutable private condition evidence after content freeze and isolat
     await connection.close();
   }
 });
+
+it("publishes under artwork locks only with matching finalized mint and indexed ownership", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const { createArtworkPublicationStore, createPublicArtworkStore } =
+    await import("../src/index.js");
+  const address = "11111111111111111111111111111112",
+    asset = "11111111111111111111111111111113",
+    signature = "AB".repeat(44),
+    at = new Date("2026-10-01T00:00:00.000Z");
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "publication-synthetic",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+        verificationStatus: "VERIFIED",
+        verifiedByWallet: address,
+        verifiedAt: at,
+        createdAt: at,
+        updatedAt: at,
+      })
+      .returning();
+    if (!artist) throw new Error("Artist missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic publication",
+        creationYear: 2026,
+        authorshipEvidenceHash: "a".repeat(64),
+      })
+      .returning();
+    if (!artwork) throw new Error("Artwork missing");
+    const document = JSON.stringify({
+      kathaId: artwork.kathaId,
+      synthetic: "publication",
+    });
+    const hash = createHash("sha256").update(document).digest("hex");
+    const commitment = (value: object) => {
+      const canonicalDocument = JSON.stringify(value);
+      return {
+        canonicalDocument,
+        documentHash: createHash("sha256").update(canonicalDocument).digest("hex"),
+      };
+    };
+    const reportId = randomUUID();
+    const prepared = {
+      artworkId: artwork.id,
+      status: "PREPARED" as const,
+      authorityWallet: address,
+      canonicalDocument: document,
+      documentHash: hash,
+      createdAt: at,
+      updatedAt: at,
+    };
+    const finalized = {
+      status: "FINALIZED" as const,
+      chainCluster: "LOCALNET" as const,
+      chainSignature: "AC".repeat(44),
+      chainSlot: 1n,
+      chainRecordedAt: at,
+      finalizedAt: at,
+    };
+    const [verification] = await db
+      .insert(verifications)
+      .values({
+        ...prepared,
+        ...commitment({
+          kathaId: artwork.kathaId,
+          evidenceHash: "a".repeat(64),
+          verifierWallet: address,
+          notes: null,
+          inspectedAt: at.toISOString(),
+        }),
+        inspectedAt: at,
+        evidenceHash: "a".repeat(64),
+      })
+      .returning();
+    const [metadata] = await db
+      .insert(artworkMetadataVersions)
+      .values({ ...prepared, version: 1, uri: "http://localhost/publication.json" })
+      .returning();
+    const [report] = await db
+      .insert(conditionReports)
+      .values({
+        ...prepared,
+        id: reportId,
+        ...commitment({
+          kathaId: artwork.kathaId,
+          reportId,
+          inspectorId: artist.id,
+          verifierWallet: address,
+          grade: "GOOD",
+          reason: "INITIAL_VERIFICATION",
+          inspectedAt: at.toISOString(),
+          reportedAt: at.toISOString(),
+          notes: "Synthetic private notes",
+          mediaHashes: ["a".repeat(64)],
+        }),
+        version: 1,
+        inspectorId: artist.id,
+        grade: "GOOD",
+        reason: "INITIAL_VERIFICATION",
+        inspectedAt: at,
+        reportedAt: at,
+        notes: "Synthetic private notes",
+        mediaHashes: ["a".repeat(64)],
+      })
+      .returning();
+    if (!verification || !metadata || !report) throw new Error("Attestation missing");
+    await db
+      .update(verifications)
+      .set(finalized)
+      .where(eq(verifications.id, verification.id));
+    await db
+      .update(artworkMetadataVersions)
+      .set({ ...finalized, chainVersion: 1 })
+      .where(eq(artworkMetadataVersions.id, metadata.id));
+    await db
+      .update(conditionReports)
+      .set({ ...finalized, chainVersion: 1 })
+      .where(eq(conditionReports.id, report.id));
+    const [wallet] = await db
+      .insert(wallets)
+      .values({ address })
+      .onConflictDoUpdate({ target: wallets.address, set: { address } })
+      .returning();
+    if (!wallet) throw new Error("Wallet missing");
+    const [operation] = await db
+      .insert(blockchainOperations)
+      .values({
+        artworkId: artwork.id,
+        walletId: wallet.id,
+        cluster: "LOCALNET",
+        kind: "MINT_ARTWORK",
+        idempotencyKey: "synthetic-publication",
+        requestHash: hash,
+        programAddress: address,
+        expectedAccounts: [asset],
+        expectedHashes: [hash],
+        status: "PREPARED",
+      })
+      .returning();
+    if (!operation) throw new Error("Operation missing");
+    const [attempt] = await db
+      .insert(transactionReceipts)
+      .values({
+        operationId: operation.id,
+        cluster: "LOCALNET",
+        signature,
+        messageHash: hash,
+      })
+      .returning();
+    if (!attempt) throw new Error("Attempt missing");
+    const [unknown] = await db
+      .insert(transactionReceipts)
+      .values({
+        operationId: operation.id,
+        cluster: "LOCALNET",
+        signature: "AD".repeat(44),
+        messageHash: hash,
+      })
+      .returning();
+    if (!unknown) throw new Error("Unknown attempt missing");
+    await db
+      .update(transactionReceipts)
+      .set({
+        status: "FINALIZED",
+        slot: 1n,
+        chainRecordedAt: at,
+        finalizedAt: new Date(),
+      })
+      .where(eq(transactionReceipts.id, attempt.id));
+    const store = createArtworkPublicationStore(db, "LOCALNET"),
+      publicStore = createPublicArtworkStore(db, "LOCALNET"),
+      binding = { asset, owner: address, signature };
+    const first = await store.review(artwork.kathaId);
+    if (!first) throw new Error("Review missing");
+    expect(await store.publish(first, binding)).toBeNull();
+    expect(
+      await publicStore.list({ limit: 20, offset: 0, artistId: artist.id }),
+    ).toHaveLength(0);
+    const [event] = await db
+      .insert(indexedEvents)
+      .values({
+        cluster: "LOCALNET",
+        programAddress: address,
+        signature,
+        slot: 1n,
+        transactionIndex: 0,
+        outerInstructionIndex: 0,
+        kind: "REGISTRY",
+        artworkId: artwork.id,
+        assetAddress: asset,
+        payload: { name: "ArtworkMinted" },
+        chainRecordedAt: at,
+      })
+      .returning();
+    if (!event) throw new Error("Event missing");
+    const [ownerEvent] = await db
+      .insert(indexedEvents)
+      .values({
+        cluster: "LOCALNET",
+        programAddress: asset,
+        signature,
+        slot: 1n,
+        transactionIndex: 0,
+        outerInstructionIndex: 1,
+        kind: "OWNERSHIP",
+        artworkId: artwork.id,
+        assetAddress: asset,
+        payload: { ownerWallet: address },
+        chainRecordedAt: at,
+      })
+      .returning();
+    if (!ownerEvent) throw new Error("Owner event missing");
+    await db.insert(artworkOwnership).values({
+      cluster: "LOCALNET",
+      artworkId: artwork.id,
+      assetAddress: asset,
+      sourceEventId: ownerEvent.id,
+      ownerWallet: address,
+    });
+    const unresolved = await store.review(artwork.kathaId);
+    if (!unresolved) throw new Error("Review missing");
+    expect(unresolved.indexedEligible).toBe(false);
+    expect(await store.publish(unresolved, binding)).toBeNull();
+    await db
+      .update(transactionReceipts)
+      .set({ status: "FAILED", failureCode: "TRANSACTION_FAILED" })
+      .where(eq(transactionReceipts.id, unknown.id));
+    await db.insert(conditionReports).values({
+      artworkId: artwork.id,
+      version: 2,
+      status: "DRAFT",
+      authorityWallet: address,
+      inspectorId: artist.id,
+      grade: "GOOD",
+      reason: "INITIAL_VERIFICATION",
+      inspectedAt: at,
+      reportedAt: at,
+      notes: "Unfinished synthetic retry",
+      mediaHashes: ["a".repeat(64)],
+    });
+    const ready = await store.review(artwork.kathaId);
+    if (!ready) throw new Error("Review missing");
+    expect(ready.indexedEligible).toBe(true);
+    expect(ready.initialReport?.id).toBe(report.id);
+    for (const wrong of [
+      { ...binding, signature: "CD".repeat(44) },
+      { ...binding, owner: asset },
+      { ...binding, asset: address },
+    ])
+      expect(await store.publish(ready, wrong)).toBeNull();
+    const devnet = createArtworkPublicationStore(db, "DEVNET"),
+      wrongCluster = await devnet.review(artwork.kathaId);
+    if (!wrongCluster) throw new Error("Review missing");
+    expect(await devnet.publish(wrongCluster, binding)).toBeNull();
+    await db
+      .update(artworks)
+      .set({ updatedAt: sql`${artworks.updatedAt} + interval '1 millisecond'` })
+      .where(eq(artworks.id, artwork.id));
+    expect(await store.publish(ready, binding)).toBeNull();
+    const fresh = await store.review(artwork.kathaId);
+    if (!fresh) throw new Error("Review missing");
+    const results = await Promise.all([
+      store.publish(fresh, binding),
+      store.publish(fresh, binding),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    const published = await store.review(artwork.kathaId);
+    if (!published) throw new Error("Review missing");
+    expect(published.artwork.publishedAt).toBeInstanceOf(Date);
+    expect(await store.publish(published, binding)).toEqual(published.artwork);
+    expect(
+      await publicStore.list({ limit: 20, offset: 0, artistId: artist.id }),
+    ).toHaveLength(1);
+    expect(published.artwork.authorshipEvidenceHash).toBe(
+      artwork.authorshipEvidenceHash,
+    );
+    const [revision] = await db
+      .insert(artworkMetadataVersions)
+      .values({
+        artworkId: artwork.id,
+        version: 2,
+        status: "PREPARED",
+        authorityWallet: address,
+        canonicalDocument: document,
+        documentHash: hash,
+        uri: "http://localhost/revision.json",
+      })
+      .returning();
+    expect(revision).toBeDefined();
+    const changed = await store.review(artwork.kathaId);
+    if (!changed) throw new Error("Review missing");
+    expect(changed.indexedEligible).toBe(false);
+    expect(await store.publish(changed, binding)).toBeNull();
+  } finally {
+    await connection.close();
+  }
+});

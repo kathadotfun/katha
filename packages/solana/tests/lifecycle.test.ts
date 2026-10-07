@@ -60,6 +60,7 @@ import {
   buildReviseUnmintedMetadataTransaction,
   buildReviseMintedMetadataTransaction,
   buildMintArtworkTransaction,
+  readArtworkMintState,
   simulateRegistryTransaction,
   RegistryLifecycleError,
   type ArtworkMintAccounts,
@@ -725,4 +726,65 @@ describe("Registry lifecycle preparation", () => {
       code: "SIMULATION_FAILED",
     });
   });
+});
+
+it("reads finalized canonical mint bindings and rejects occupied, missing or mismatched Core assets", async () => {
+  const f = await fixtures();
+  expect(await readArtworkMintState(context, f.accounts, kathaId)).toMatchObject({
+    minted: false,
+    owner: null,
+    asset: f.asset,
+  });
+  expect(await readArtworkMintState(context, f.mintedAccounts, kathaId)).toMatchObject({
+    minted: true,
+    owner: payer,
+    asset: f.asset,
+  });
+  await expect(
+    readArtworkMintState(
+      context,
+      { ...f.accounts, assetAccount: f.mintedAccounts.assetAccount },
+      kathaId,
+    ),
+  ).rejects.toThrow();
+  await expect(
+    readArtworkMintState(
+      context,
+      { ...f.mintedAccounts, assetAccount: { exists: false, address: f.asset } },
+      kathaId,
+    ),
+  ).rejects.toThrow();
+  for (const change of [
+    { name: "Forged title" },
+    { uri: "http://localhost/forged.json" },
+    {
+      updateAuthority: {
+        __kind: "Collection" as const,
+        fields: [publicKey(payer)] as [ReturnType<typeof publicKey>],
+      },
+    },
+  ]) {
+    const data = getAssetV1AccountDataSerializer().serialize({
+      key: Key.AssetV1,
+      owner: publicKey(payer),
+      updateAuthority: {
+        __kind: "Collection",
+        fields: [publicKey(f.accounts.collectionAccount.address)],
+      },
+      name: kathaId,
+      uri,
+      seq: null,
+      ...change,
+    });
+    await expect(
+      readArtworkMintState(
+        context,
+        {
+          ...f.mintedAccounts,
+          assetAccount: account(f.asset, data, undefined, CORE_PROGRAM_ADDRESS),
+        },
+        kathaId,
+      ),
+    ).rejects.toThrow();
+  }
 });

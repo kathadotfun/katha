@@ -490,8 +490,9 @@ export function buildReviseMintedMetadataTransaction(
   return validated(() => reviseMetadata(context, accounts, input, true));
 }
 
-export function buildMintArtworkTransaction(
-  context: RegistryTransactionContext,
+/** Validate finalized mint prerequisites and the canonical Core binding without preparing a transaction. */
+export function readArtworkMintState(
+  context: Pick<RegistryTransactionContext, "authorityAddress">,
   accounts: ArtworkMintAccounts,
   kathaId: KathaId,
 ) {
@@ -502,8 +503,6 @@ export function buildMintArtworkTransaction(
       kathaId,
       "registrationAuthority",
     );
-    if (prepared.record.coreAsset.__option !== "None")
-      throw new TypeError("Artwork is already minted");
     const metadata = await metadataCurrent(accounts, prepared.artwork);
     const [verification, verificationBump] = await findVerificationPda({
       artwork: prepared.artwork,
@@ -585,11 +584,59 @@ export function buildMintArtworkTransaction(
       prepared.configuration.collectionAuthority,
     );
     const [asset] = await findAssetPda({ artwork: prepared.artwork });
-    if (
-      accounts.assetAccount.address !== asset ||
-      accounts.assetAccount.exists !== false
-    )
-      throw new TypeError("Canonical Core asset must be absent before minting");
+    if (accounts.assetAccount.address !== asset)
+      throw new TypeError("Wrong canonical Core asset");
+    const minted = prepared.record.coreAsset.__option === "Some";
+    let owner: Address | null = null;
+    if (minted) {
+      if (
+        prepared.record.coreAsset.__option !== "Some" ||
+        prepared.record.coreAsset.value !== asset ||
+        !accounts.assetAccount.exists
+      )
+        throw new TypeError("Invalid Registry asset binding");
+      const core = readCoreAsset(
+        accounts.assetAccount,
+        asset,
+        prepared.configuration.collection,
+      );
+      if (core.name !== kathaId || core.uri !== metadata.current.uri)
+        throw new TypeError("Core metadata mismatch");
+      owner = nonzeroAddress(core.owner);
+    } else if (accounts.assetAccount.exists)
+      throw new TypeError("Unbound canonical asset already exists");
+    return {
+      prepared,
+      metadata,
+      verification,
+      conditionHead,
+      initialCondition,
+      initial,
+      condition,
+      custody,
+      asset,
+      minted,
+      owner,
+    };
+  });
+}
+export function buildMintArtworkTransaction(
+  context: RegistryTransactionContext,
+  accounts: ArtworkMintAccounts,
+  kathaId: KathaId,
+) {
+  return validated(async () => {
+    const {
+      prepared,
+      metadata,
+      verification,
+      conditionHead,
+      initialCondition,
+      custody,
+      asset,
+      minted,
+    } = await readArtworkMintState(context, accounts, kathaId);
+    if (minted) throw new TypeError("Artwork is already minted");
     const instruction = getMintArtworkInstruction({
       config: prepared.config,
       artwork: prepared.artwork,

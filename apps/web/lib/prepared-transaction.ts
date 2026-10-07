@@ -1,3 +1,4 @@
+import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
 import {
   getBase64Encoder,
   getBase64Decoder,
@@ -37,6 +38,9 @@ import {
   findHeadPda,
   findReportPda,
   findAssetPda,
+  findCollectionAuthorityPda,
+  findInitializeMetadataHeadPda,
+  findReviseMintedMetadataRevisionPda,
   findInitializeCustodyHeadPda,
   CustodyAction,
   findTransitionCustodyTransitionPda,
@@ -44,6 +48,13 @@ import {
   ConditionReason,
 } from "@katha/solana/registry";
 
+export type MintTransactionReview = {
+  asset: string;
+  collection: string;
+  collectionAuthority: string;
+  initialConditionReportId: string;
+  metadataVersion: number;
+};
 export type CustodyTransactionReview = Pick<
   CustodyPreparationRequest,
   "transition" | "collectorWallet" | "expectedCustodyRevision"
@@ -96,6 +107,7 @@ export async function inspectPreparedTransaction(
     verification?: { authorshipEvidenceHash: string };
     condition?: ConditionTransactionReview;
     custody?: CustodyTransactionReview;
+    mint?: MintTransactionReview;
   },
 ) {
   const operation = unsignedOperationResponseSchema.parse(input);
@@ -189,6 +201,88 @@ export async function inspectPreparedTransaction(
       ).join("") !== context.verification.authorshipEvidenceHash
     )
       throw new Error("Verification commitment mismatch.");
+  }
+  if (operation.kind === "MINT_ARTWORK") {
+    const expected = context.mint;
+    if (
+      !expected ||
+      !Number.isInteger(expected.metadataVersion) ||
+      expected.metadataVersion < 1 ||
+      expected.metadataVersion > 0xffffffff ||
+      !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(
+        expected.initialConditionReportId,
+      )
+    )
+      throw new Error("Mint review required");
+    const reportId = Uint8Array.from(
+      expected.initialConditionReportId.replaceAll("-", "").match(/../g)!,
+      (v) => Number.parseInt(v, 16),
+    );
+    const [
+      [verification],
+      [metadataHead],
+      [metadataRevision],
+      [conditionHead],
+      [initialCondition],
+      [custodyHead],
+      [collectionAuthority],
+      [asset],
+    ] = await Promise.all([
+      findVerificationPda({ artwork }),
+      findInitializeMetadataHeadPda({ artwork }),
+      findReviseMintedMetadataRevisionPda({
+        artwork,
+        nextVersion: expected.metadataVersion,
+      }),
+      findHeadPda({ artwork }),
+      findReportPda({ reportId }),
+      findInitializeCustodyHeadPda({ artwork }),
+      findCollectionAuthorityPda(),
+      findAssetPda({ artwork }),
+    ]);
+    const accounts = [
+      config,
+      artwork,
+      verification,
+      metadataHead,
+      metadataRevision,
+      conditionHead,
+      initialCondition,
+      custodyHead,
+      address(expected.collection),
+      collectionAuthority,
+      asset,
+      address(context.wallet),
+      address("11111111111111111111111111111111"),
+      CORE_PROGRAM_ADDRESS,
+    ];
+    const roles = [
+      AccountRole.READONLY,
+      AccountRole.WRITABLE,
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+      AccountRole.WRITABLE,
+      AccountRole.READONLY,
+      AccountRole.WRITABLE,
+      AccountRole.WRITABLE_SIGNER,
+      AccountRole.READONLY,
+      AccountRole.READONLY,
+    ];
+    if (
+      parsed.instructionType !== KathaRegistryInstruction.MintArtwork ||
+      instruction.data.length !== 8 ||
+      expected.asset !== asset ||
+      expected.collectionAuthority !== collectionAuthority ||
+      instruction.accounts?.length !== accounts.length ||
+      instruction.accounts.some(
+        (item, i) => item.address !== accounts[i] || item.role !== roles[i],
+      )
+    )
+      throw new Error("Mint binding mismatch");
   }
   if (operation.kind === "UPDATE_CUSTODY") {
     const expected = custodyPreparationRequestSchema

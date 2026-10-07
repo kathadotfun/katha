@@ -25,7 +25,10 @@ import {
 import type { MetadataRevisionsBoundary } from "./metadata-revisions.js";
 import { metadataRevisionRequestSchema } from "@katha/shared";
 import type { ArtworkMintingBoundary } from "./artwork-minting.js";
-import { artworkMintRequestSchema } from "@katha/shared";
+import {
+  artworkMintRequestSchema,
+  artworkPublicationRequestSchema,
+} from "@katha/shared";
 import type { CustodyOperationsBoundary } from "./custody-operations.js";
 import {
   custodyPreparationRequestSchema,
@@ -584,6 +587,22 @@ export function createApi(
     });
   }
   if (minting) {
+    app.get("/admin/artworks/:kathaId/minting", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(await minting.review(c.req.header("Authorization"), kathaId));
+    });
+    app.post("/admin/artworks/:kathaId/publication", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await minting.publish(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, artworkPublicationRequestSchema),
+        ),
+      );
+    });
     app.post("/admin/artworks/:kathaId/operations/mint", async (c) => {
       const { kathaId } = parseParams(c, artworkDraftParamsSchema);
       parseQuery(c, artworkDetailQuerySchema);

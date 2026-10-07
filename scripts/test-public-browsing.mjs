@@ -1,3 +1,4 @@
+import { mintingFixture } from "../apps/web/tests/fixtures/minting.ts";
 import { custodyFixture } from "../apps/web/tests/fixtures/custody.ts";
 import { conditionFixture } from "../apps/web/tests/fixtures/condition.ts";
 import { canonicalDocumentBytes, sha256Hex } from "../packages/shared/dist/index.js";
@@ -288,6 +289,57 @@ export async function runPublicBrowsingJourneys({
           });
         },
       );
+      const mintFixtureData = await mintingFixture(),
+        mintPage = mintFixtureData.page;
+      let mintPreparations = 0,
+        publications = 0,
+        rejectPublication = true;
+      for (const action of ["minting", "operations/mint", "publication"]) {
+        await context.route(
+          `${apiOrigin}/admin/artworks/*/${action}`,
+          async (route) => {
+            if (route.request().method() === "OPTIONS")
+              return route.fulfill({ status: 204, headers: adminHeaders });
+            assert.equal(
+              route.request().headers().authorization,
+              `Bearer ${"a".repeat(64)}`,
+            );
+            if (!adminAllowed)
+              return route.fulfill({
+                status: 403,
+                headers: adminHeaders,
+                json: { error: "denied" },
+              });
+            if (action === "operations/mint") {
+              mintPreparations++;
+              const input = route.request().postDataJSON();
+              assert.equal(input.initialConditionReportId, mintPage.initialReport.id);
+              assert.equal(input.metadataVersionId, mintPage.metadata.id);
+              assert.equal(input.expectedCustodyRevision, "1");
+              return route.fulfill({
+                headers: adminHeaders,
+                json: mintFixtureData.operation,
+              });
+            }
+            if (action === "publication") {
+              publications++;
+              const input = route.request().postDataJSON();
+              assert.equal(input.publicationConfirmed, true);
+              assert.equal(input.expectedUpdatedAt, mintPage.updatedAt);
+              if (rejectPublication)
+                return route.fulfill({
+                  status: 409,
+                  headers: adminHeaders,
+                  json: { error: "PRIVATE_PUBLICATION_ERROR" },
+                });
+              mintPage.published = true;
+              mintPage.canPublish = false;
+              mintPage.updatedAt = "2026-10-07T00:00:00.000Z";
+            }
+            return route.fulfill({ headers: adminHeaders, json: mintPage });
+          },
+        );
+      }
       const custodyFixtureData = await custodyFixture("DISPATCH_FROM_KATHA");
       const custodyPage = custodyFixtureData.page;
       custodyPage.chain.ownerWallet = "11111111111111111111111111111113";
@@ -1454,6 +1506,101 @@ export async function runPublicBrowsingJourneys({
         adminMain.getByRole("heading", { name: "Custody coordination", exact: true }),
       ).toHaveCount(1);
       await audit("custody administration");
+      await adminMain
+        .getByRole("link", { name: "Mint and publish", exact: true })
+        .click();
+      await expect(adminMain).toContainText("Not minted");
+      await audit("Core mint review");
+      const prepareMint = adminMain.getByRole("button", {
+        name: "Prepare Core mint",
+        exact: true,
+      });
+      await expect(prepareMint).toBeDisabled();
+      await adminMain
+        .getByLabel(
+          "I reviewed the public metadata, verified initial inspection and custody, and the configured collection and initial digital owner.",
+        )
+        .check();
+      await prepareMint.click();
+      await expect(adminMain).toContainText(
+        "Review transaction before wallet approval",
+      );
+      assert.equal(mintPreparations, 1);
+      assert.equal(publications, 0);
+      await audit("mint simulation requires separate wallet approval");
+      await adminMain
+        .getByRole("button", { name: "Cancel transaction review", exact: true })
+        .click();
+      mintPage.canMint = false;
+      mintPage.chain.minted = true;
+      mintPage.chain.owner = mintFixtureData.operation.feePayer;
+      mintPage.blockedReasons = ["INDEXING_PENDING"];
+      await adminMain
+        .getByRole("button", { name: "Reload saved state", exact: true })
+        .click();
+      const publishArtwork = adminMain.getByRole("button", {
+        name: "Publish artwork",
+        exact: true,
+      });
+      await expect(publishArtwork).toBeDisabled();
+      await audit("publication waits for indexing");
+      mintPage.canPublish = true;
+      mintPage.blockedReasons = [];
+      mintPage.mint = {
+        finalized: true,
+        unresolved: false,
+        receipt: {
+          status: "FINALIZED",
+          signature: "AB".repeat(44),
+          slot: "10",
+          indexed: true,
+        },
+      };
+      await adminMain
+        .getByRole("button", { name: "Reload saved state", exact: true })
+        .click();
+      await expect(publishArtwork).toBeDisabled();
+      await adminMain
+        .getByLabel(
+          "I reviewed the finalized asset and approved public artwork documentation for publication.",
+        )
+        .check();
+      await publishArtwork.click();
+      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
+      await expect(publishArtwork).toBeDisabled();
+      assert.equal(publications, 1);
+      await audit("publication conflict requires reload");
+      rejectPublication = false;
+      await adminMain
+        .getByRole("button", { name: "Reload saved state", exact: true })
+        .click();
+      await adminMain
+        .getByLabel(
+          "I reviewed the finalized asset and approved public artwork documentation for publication.",
+        )
+        .check();
+      await publishArtwork.click();
+      await expect(
+        adminMain.getByRole("link", { name: "View published artwork", exact: true }),
+      ).toHaveAttribute("href", `/art/${mintPage.kathaId}`);
+      assert.equal(publications, 2);
+      await audit("explicit verified publication");
+      await page.screenshot({
+        path: `${artifacts}/mint-admin-${width}.png`,
+        fullPage: true,
+      });
+      adminAllowed = false;
+      await adminMain
+        .getByRole("button", { name: "Reload saved state", exact: true })
+        .click();
+      await expect(adminMain.getByRole("alert")).toContainText("administrator session");
+      await expect(adminMain).not.toContainText(mintPage.metadata.canonicalDocument);
+      await audit("mint permission revoked clears review");
+      adminAllowed = true;
+      await adminMain
+        .getByRole("link", { name: "Custody coordination", exact: true })
+        .click();
+      await expect(adminMain).toContainText("katha held · revision 1");
       const fulfillmentDetails = adminMain
         .locator("details")
         .filter({ hasText: "delivery · requested" });

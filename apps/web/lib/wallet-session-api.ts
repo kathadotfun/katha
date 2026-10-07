@@ -1,4 +1,11 @@
 import {
+  artworkMintReviewSchema,
+  artworkMintRequestSchema,
+  artworkPublicationRequestSchema,
+  type ArtworkMintRequest,
+  type ArtworkPublicationRequest,
+} from "@katha/shared";
+import {
   conditionInspectionReviewSchema,
   conditionPreparationRequestSchema,
   conditionAttestationRequestSchema,
@@ -132,6 +139,65 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readMinting(kathaId: string, token: string, signal: AbortSignal) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = artworkMintReviewSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/minting`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareMint(
+      kathaId: string,
+      input: ArtworkMintRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId }),
+        data = artworkMintRequestSchema.parse(input);
+      const result = unsignedOperationResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/operations/mint`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.kind !== "MINT_ARTWORK" ||
+        !data.supportedTransactionVersions.includes(result.transactionVersion)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async publishArtwork(
+      kathaId: string,
+      input: ArtworkPublicationRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId }),
+        data = artworkPublicationRequestSchema.parse(input);
+      const result = artworkMintReviewSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/publication`,
+          data,
+          token,
+          signal,
+        ),
+      );
+      if (result.kathaId !== path.kathaId || !result.published)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readCustody(
       kathaId: string,
       pagination: Pagination,

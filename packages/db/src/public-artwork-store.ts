@@ -17,16 +17,22 @@ import {
 } from "./schema/blockchain-read-models.js";
 
 // Discovery and detail must use the same publication boundary.
-export function publicationPredicate(cluster: "LOCALNET" | "DEVNET") {
+export function publicationEligibilityPredicate(cluster: "LOCALNET" | "DEVNET") {
   return and(
-    isNotNull(artworks.publishedAt),
-    sql`${artworks.publishedAt} <= statement_timestamp()`,
     isNotNull(artworks.authorshipEvidenceHash),
     eq(artists.verificationStatus, "VERIFIED"),
     sql`EXISTS (SELECT 1 FROM ${verifications} WHERE ${verifications.artworkId} = ${artworks.id} AND ${verifications.status} = 'FINALIZED' AND ${verifications.chainCluster} = ${cluster})`,
     sql`EXISTS (SELECT 1 FROM ${artworkMetadataVersions} WHERE ${artworkMetadataVersions.artworkId} = ${artworks.id} AND ${artworkMetadataVersions.status} = 'FINALIZED' AND ${artworkMetadataVersions.chainCluster} = ${cluster})`,
     sql`EXISTS (SELECT 1 FROM ${conditionReports} WHERE ${conditionReports.artworkId} = ${artworks.id} AND ${conditionReports.status} = 'FINALIZED' AND ${conditionReports.chainCluster} = ${cluster} AND ${conditionReports.reason} = 'INITIAL_VERIFICATION')`,
     sql`EXISTS (SELECT 1 FROM ${artworkOwnership} WHERE ${artworkOwnership.artworkId} = ${artworks.id} AND ${artworkOwnership.cluster} = ${cluster})`,
+  );
+}
+
+export function publicationPredicate(cluster: "LOCALNET" | "DEVNET") {
+  return and(
+    isNotNull(artworks.publishedAt),
+    sql`${artworks.publishedAt} <= statement_timestamp()`,
+    publicationEligibilityPredicate(cluster),
   );
 }
 

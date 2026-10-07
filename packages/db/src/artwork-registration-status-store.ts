@@ -9,7 +9,12 @@ import { indexedEvents } from "./schema/blockchain-read-models.js";
 function createArtworkOperationStatusStore(
   db: Database,
   cluster: "LOCALNET" | "DEVNET",
-  kind: "REGISTER_ARTWORK" | "VERIFY_ARTWORK" | "RECORD_CONDITION" | "UPDATE_CUSTODY",
+  kind:
+    | "REGISTER_ARTWORK"
+    | "VERIFY_ARTWORK"
+    | "RECORD_CONDITION"
+    | "UPDATE_CUSTODY"
+    | "MINT_ARTWORK",
   reportHash?: string,
 ) {
   return async (kathaId: string) =>
@@ -149,4 +154,11 @@ export function createCustodyOperationStatusStore(
   cluster: "LOCALNET" | "DEVNET",
 ) {
   return createArtworkOperationStatusStore(db, cluster, "UPDATE_CUSTODY");
+}
+
+export function createArtworkMintStatusStore(
+  db: Database,
+  cluster: "LOCALNET" | "DEVNET",
+) {
+  return createArtworkOperationStatusStore(db, cluster, "MINT_ARTWORK");
 }

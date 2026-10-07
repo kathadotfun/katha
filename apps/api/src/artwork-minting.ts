@@ -26,6 +26,10 @@ import type { AuthorizationBoundary } from "./authorization.js";
 import { StorageError, type StorageProvider } from "./storage.js";
 import { validateArtworkDocumentation } from "./artwork-documentation.js";
 import { createBlockchainOperations } from "./blockchain-operations.js";
+import {
+  createArtworkMintAdministration,
+  type ArtworkMintAdministration,
+} from "./artwork-mint-administration.js";
 import { DomainError } from "./errors.js";
 export function createArtworkMinting(
   store: ArtworkMintStore,
@@ -34,8 +38,30 @@ export function createArtworkMinting(
   chain: OperationChain,
   storage: StorageProvider,
   cluster: "localnet" | "devnet",
+  administration?: {
+    store: Parameters<typeof createArtworkMintAdministration>[0];
+    readStatus: Parameters<typeof createArtworkMintAdministration>[5];
+  },
 ) {
+  const admin = administration
+    ? createArtworkMintAdministration(
+        administration.store,
+        authorization,
+        readChain,
+        storage,
+        cluster,
+        administration.readStatus,
+      )
+    : null;
   return {
+    review(...args: Parameters<ArtworkMintAdministration["review"]>) {
+      if (!admin) throw new DomainError("NOT_FOUND");
+      return admin.review(...args);
+    },
+    publish(...args: Parameters<ArtworkMintAdministration["publish"]>) {
+      if (!admin) throw new DomainError("NOT_FOUND");
+      return admin.publish(...args);
+    },
     async prepare(bearer: string | undefined, kathaId: string, input: unknown) {
       const parsed = artworkMintRequestSchema.safeParse(input);
       if (!parsed.success) throw new DomainError("INVALID_REQUEST");

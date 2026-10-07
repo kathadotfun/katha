@@ -88,6 +88,15 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readMinting: async () => {
+      throw new Error("Unused mint review");
+    },
+    prepareMint: async () => {
+      throw new Error("Unused mint preparation");
+    },
+    publishArtwork: async () => {
+      throw new Error("Unused publication");
+    },
     readCustody: async () => {
       throw new Error("Unused custody");
     },

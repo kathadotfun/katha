@@ -81,7 +81,8 @@ atomically. An existing asset or binding prevents a second successful mint.
 
 Preparation neither creates the asset nor publishes the artwork, reconciles a receipt
 or writes finalized ownership/history. The connected wallet must review and sign.
-Receipt reconciliation remains scheduled separately. RPC/simulation does not reserve
+The admin minting screen reconciles protected receipts and supports explicit
+publication after finalized indexing; see [minting administration](minting-administration-web.md). RPC/simulation does not reserve
 chain state. The program rechecks live authorization and prerequisites; metadata
 revision account relationships protect against a changed head. Reviewed condition and
 custody versions are preparation checks; the existing mint instruction can observe

@@ -1,3 +1,4 @@
+import type { ArtworkMintRequest, ArtworkPublicationRequest } from "@katha/shared";
 import type {
   ArtworkVerificationRequest,
   CustodyPreparationRequest,
@@ -121,6 +122,40 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readMinting(kathaId: string, signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.readMinting(kathaId, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async prepareMint(kathaId: string, input: ArtworkMintRequest, signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.prepareMint(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async publishArtwork(
+      kathaId: string,
+      input: ArtworkPublicationRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.publishArtwork(kathaId, input, value, signal),
+        signal,
+      );
+      if (result.cluster !== snapshot.session?.cluster)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readCustody(kathaId: string, pagination: Pagination, signal: AbortSignal) {
       const result = await authorized(
         (value) => api.readCustody(kathaId, pagination, value, signal),

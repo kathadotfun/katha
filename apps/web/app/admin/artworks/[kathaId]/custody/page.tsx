@@ -28,6 +28,12 @@ export default async function CustodyPage({
       >
         Artwork authenticity
       </Link>
+      <Link
+        href={`/admin/artworks/${parsed.data.kathaId}/minting`}
+        className="text-link ml-6"
+      >
+        Mint and publish
+      </Link>
       <p className="eyebrow mt-8">Katha administration</p>
       <h1 className="mt-4 text-4xl sm:text-5xl">Custody coordination</h1>
       <p className="mt-5 max-w-reading text-muted">

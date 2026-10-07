@@ -72,6 +72,15 @@ export function WalletProvider({
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
       async (operation, signature, signal) => {
+        if (operation.kind === "MINT_ARTWORK") {
+          const page = await auth.readMinting(operation.kathaId, signal);
+          return Boolean(
+            page.chain?.minted &&
+            page.mint.receipt?.status === "FINALIZED" &&
+            page.mint.receipt.signature === signature &&
+            page.mint.receipt.indexed,
+          );
+        }
         if (operation.kind === "UPDATE_CUSTODY") {
           const page = await auth.readCustody(
             operation.kathaId,

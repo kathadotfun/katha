@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { artworkMintRequestSchema } from "../src/index.js";
+import {
+  artworkMintRequestSchema,
+  artworkPublicationRequestSchema,
+} from "../src/index.js";
 const request = {
   idempotencyKey: "synthetic-mint",
   expectedUpdatedAt: "2026-10-05T00:00:00.000Z",
@@ -40,4 +43,21 @@ it.each([
   expect(artworkMintRequestSchema.safeParse({ ...request, ...change }).success).toBe(
     false,
   );
+});
+
+it("requires an explicit publication confirmation with exact optimistic concurrency", () => {
+  const input = {
+    expectedUpdatedAt: request.expectedUpdatedAt,
+    publicationConfirmed: true,
+  };
+  expect(artworkPublicationRequestSchema.parse(input)).toEqual(input);
+  for (const change of [
+    { publicationConfirmed: false },
+    { expectedUpdatedAt: "stale" },
+    { notes: "private" },
+    { wallet: "forged" },
+  ])
+    expect(
+      artworkPublicationRequestSchema.safeParse({ ...input, ...change }).success,
+    ).toBe(false);
 });
