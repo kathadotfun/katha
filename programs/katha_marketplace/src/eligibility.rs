@@ -35,7 +35,7 @@ pub enum SaleKind {
 }
 
 /// One persistent bounded ledger per asset; cancellation must preserve completed_sales.
-/// No instruction creates or activates this account until the listing feature.
+/// Creating an offer preserves completed sales across listing revisions.
 #[account]
 pub struct ListingRecord {
     pub version: u8,
@@ -133,8 +133,64 @@ pub struct CheckSaleEligibility<'info> {
     pub listing: Option<Box<Account<'info, ListingRecord>>>,
 }
 
-impl CheckSaleEligibility<'_> {
+impl<'info> CheckSaleEligibility<'info> {
     pub fn validate(&self, now: i64) -> Result<()> {
+        let kind = match &self.listing {
+            Some(listing) => {
+                require!(
+                    listing.version == 1
+                        && listing.artist_payout == self.sale_terms.artist_payout
+                        && listing.payment_mint == self.config.payment_mint,
+                    MarketplaceError::InvalidListing
+                );
+                if listing.completed_sales == 0 {
+                    SaleKind::Primary
+                } else {
+                    SaleKind::Secondary
+                }
+            }
+            None => {
+                require!(
+                    self.listing_address.data_is_empty()
+                        && *self.listing_address.owner == anchor_lang::system_program::ID,
+                    MarketplaceError::InvalidListing
+                );
+                SaleKind::Primary
+            }
+        };
+        self.live_eligibility().validate(kind, now)
+    }
+
+    pub fn live_eligibility(&self) -> LiveEligibility<'_, 'info> {
+        LiveEligibility {
+            config: &self.config,
+            registry_config: &self.registry_config,
+            artwork: &self.artwork,
+            verification: &self.verification,
+            condition_head: &self.condition_head,
+            condition_report: &self.condition_report,
+            custody_head: &self.custody_head,
+            sale_terms: &self.sale_terms,
+            asset: self.asset.to_account_info(),
+            seller: self.seller.key(),
+        }
+    }
+}
+
+pub struct LiveEligibility<'a, 'info> {
+    pub config: &'a MarketplaceConfig,
+    pub registry_config: &'a KathaConfig,
+    pub artwork: &'a ArtworkRecord,
+    pub verification: &'a ArtworkVerification,
+    pub condition_head: &'a ConditionHead,
+    pub condition_report: &'a ConditionAttestation,
+    pub custody_head: &'a CustodyHead,
+    pub sale_terms: &'a ArtworkSaleTerms,
+    pub asset: AccountInfo<'info>,
+    pub seller: Pubkey,
+}
+impl LiveEligibility<'_, '_> {
+    pub fn validate(&self, kind: SaleKind, now: i64) -> Result<()> {
         require!(
             self.config.version == 1
                 && self.sale_terms.version == 1
@@ -160,35 +216,12 @@ impl CheckSaleEligibility<'_> {
         );
         require_keys_eq!(
             asset.base.owner,
-            self.seller.key(),
+            self.seller,
             MarketplaceError::UnauthorizedSeller
         );
-        let kind = match &self.listing {
-            Some(listing) => {
-                require!(
-                    listing.version == 1
-                        && listing.artist_payout == self.sale_terms.artist_payout
-                        && listing.payment_mint == self.config.payment_mint,
-                    MarketplaceError::InvalidListing
-                );
-                if listing.completed_sales == 0 {
-                    SaleKind::Primary
-                } else {
-                    SaleKind::Secondary
-                }
-            }
-            None => {
-                require!(
-                    self.listing_address.data_is_empty()
-                        && *self.listing_address.owner == anchor_lang::system_program::ID,
-                    MarketplaceError::InvalidListing
-                );
-                SaleKind::Primary
-            }
-        };
         if kind == SaleKind::Primary {
             require_keys_eq!(
-                self.seller.key(),
+                self.seller,
                 self.artwork.registered_by,
                 MarketplaceError::InvalidListing
             );
@@ -197,7 +230,7 @@ impl CheckSaleEligibility<'_> {
             &self.condition_head,
             &self.condition_report,
             &self.custody_head,
-            self.seller.key(),
+            self.seller,
             self.registry_config.custody_authority,
             kind,
             self.config.inspection_validity_seconds,

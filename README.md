@@ -36,7 +36,7 @@ product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
 orchestration, a minimal Next.js web scaffold, a Hono API service, an initial
 shared TypeScript package, a Node-only Drizzle database package, a Solana client
-package, an Anchor Registry, a Marketplace configuration and eligibility program, and a local
+package, an Anchor Registry, a Marketplace configuration, eligibility and listing program, and a local
 PostgreSQL service. The Solana package includes Kit clients, a Core adapter,
 generated program clients, unsigned transaction builders, and simulation.
 Local tests cover Registry configuration, artwork registration and verification,
@@ -215,6 +215,7 @@ outside the current scope.
 - [Local marketplace settlement fixtures](docs/development/marketplace-fixtures.md)
 - [Authorized Marketplace configuration](docs/development/marketplace-configuration.md)
 - [Listing records and sale eligibility](docs/development/marketplace-eligibility.md)
+- [Fixed-price listing creation and Core locking](docs/development/marketplace-listings.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

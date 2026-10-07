@@ -7,5 +7,6 @@
  */
 
 export * from "./checkSaleEligibility.js";
+export * from "./createListing.js";
 export * from "./initializeMarketplace.js";
 export * from "./initializeSaleTerms.js";

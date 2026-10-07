@@ -48,8 +48,15 @@ export const KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION = 0x177e; // 6014
 export const KATHA_MARKETPLACE_ERROR__INVALID_LISTING = 0x177f; // 6015
 /** InvalidListingTerms: Listing price must be positive and expiry must be in the future */
 export const KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS = 0x1780; // 6016
+/** ListingAlreadyActive: An active listing already exists; cancel or recover expiry first */
+export const KATHA_MARKETPLACE_ERROR__LISTING_ALREADY_ACTIVE = 0x1781; // 6017
+/** StaleListingRevision: Listing revision does not match the reviewed revision */
+export const KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION = 0x1782; // 6018
+/** ConflictingCorePlugins: Pre-existing Core plugins conflict with marketplace delegation */
+export const KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS = 0x1783; // 6019
 
 export type KathaMarketplaceError =
+  | typeof KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS
   | typeof KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK
@@ -64,6 +71,8 @@ export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_TREASURY
+  | typeof KATHA_MARKETPLACE_ERROR__LISTING_ALREADY_ACTIVE
+  | typeof KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER;
@@ -71,6 +80,7 @@ export type KathaMarketplaceError =
 let kathaMarketplaceErrorMessages: Record<KathaMarketplaceError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   kathaMarketplaceErrorMessages = {
+    [KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS]: `Pre-existing Core plugins conflict with marketplace delegation`,
     [KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION]: `Collector inspection is expired or has an invalid timestamp`,
     [KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT]: `Artist payout must be configured and immutable`,
     [KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK]: `Artwork or Registry account does not match Marketplace configuration`,
@@ -85,6 +95,8 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT]: `Payment mint must use six decimals and have no freeze authority`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA]: `ProgramData does not belong to this Marketplace program`,
     [KATHA_MARKETPLACE_ERROR__INVALID_TREASURY]: `Registry treasury cannot be the default address`,
+    [KATHA_MARKETPLACE_ERROR__LISTING_ALREADY_ACTIVE]: `An active listing already exists; cancel or recover expiry first`,
+    [KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION]: `Listing revision does not match the reviewed revision`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY]: `Only the configured Registry authority can initialize Marketplace`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP]: `Bootstrap signer is not the Marketplace upgrade authority`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER]: `Seller must sign as the current Core owner`,

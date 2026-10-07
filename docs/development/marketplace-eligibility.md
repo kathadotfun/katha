@@ -1,8 +1,8 @@
 # Listing records and sale eligibility
 
 Marketplace now defines a bounded, versioned `ListingRecord` and provides a
-read-only `check_sale_eligibility` instruction. Listing creation, asset locking,
-cancellation and purchase are subsequent features. A successful preview does not
+read-only `check_sale_eligibility` instruction. Listing creation and asset locking are described in [listing creation](marketplace-listings.md).
+Cancellation and purchase are subsequent features. A successful preview does not
 reserve eligibility; those instructions must revalidate live accounts when executed.
 
 ## Immutable artist payout
@@ -32,7 +32,7 @@ Status is `Inactive`, `Active`, `Cancelled`, `Expired` or `Purchased`. It does n
 replace custody, verification, approval or Core ownership. Listing revisions use
 checked incrementing arithmetic. Price must be positive and expiry strictly later
 than a positive chain timestamp; amounts fit `u64` and never use floating point.
-No instruction creates or activates a listing in this implementation yet.
+`create_listing` now activates this ledger through validated Core locking.
 
 The ledger must persist across cancellation, expiry and purchase. Completed sales
 will classify a new offer as primary (zero) or secondary (positive); returning the

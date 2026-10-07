@@ -4,6 +4,8 @@ use katha_registry::{program::KathaRegistry, KathaConfig};
 
 pub mod eligibility;
 pub use eligibility::*;
+pub mod listing;
+pub use listing::*;
 
 declare_id!("B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq");
 
@@ -14,6 +16,16 @@ pub const BASIS_POINTS_DENOMINATOR: u32 = 10_000;
 #[program]
 pub mod katha_marketplace {
     use super::*;
+
+    pub fn create_listing(
+        ctx: Context<CreateListing>,
+        price: u64,
+        expires_at: i64,
+        expected_revision: u64,
+    ) -> Result<()> {
+        ctx.accounts
+            .create(price, expires_at, expected_revision, ctx.bumps.listing)
+    }
 
     pub fn initialize_sale_terms(
         ctx: Context<InitializeSaleTerms>,
@@ -196,6 +208,12 @@ pub enum MarketplaceError {
     InvalidListing,
     #[msg("Listing price must be positive and expiry must be in the future")]
     InvalidListingTerms,
+    #[msg("An active listing already exists; cancel or recover expiry first")]
+    ListingAlreadyActive,
+    #[msg("Listing revision does not match the reviewed revision")]
+    StaleListingRevision,
+    #[msg("Pre-existing Core plugins conflict with marketplace delegation")]
+    ConflictingCorePlugins,
 }
 
 #[cfg(test)]

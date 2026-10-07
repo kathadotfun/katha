@@ -312,6 +312,314 @@
       "args": []
     },
     {
+      "name": "create_listing",
+      "discriminator": [
+        18,
+        168,
+        45,
+        24,
+        191,
+        31,
+        117,
+        54
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry_program",
+          "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+        },
+        {
+          "name": "registry_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "condition_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  100,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "condition_report"
+        },
+        {
+          "name": "custody_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "sale_terms",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101,
+                  45,
+                  116,
+                  101,
+                  114,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  114,
+                  101,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "seller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "listing",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collection",
+          "writable": true
+        },
+        {
+          "name": "core_program",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        },
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "initialize_marketplace",
       "discriminator": [
         47,
@@ -593,6 +901,19 @@
   ],
   "events": [
     {
+      "name": "ListingCreated",
+      "discriminator": [
+        94,
+        164,
+        167,
+        255,
+        246,
+        186,
+        12,
+        96
+      ]
+    },
+    {
       "name": "MarketplaceInitialized",
       "discriminator": [
         22,
@@ -691,6 +1012,21 @@
       "code": 6016,
       "name": "InvalidListingTerms",
       "msg": "Listing price must be positive and expiry must be in the future"
+    },
+    {
+      "code": 6017,
+      "name": "ListingAlreadyActive",
+      "msg": "An active listing already exists; cancel or recover expiry first"
+    },
+    {
+      "code": 6018,
+      "name": "StaleListingRevision",
+      "msg": "Listing revision does not match the reviewed revision"
+    },
+    {
+      "code": 6019,
+      "name": "ConflictingCorePlugins",
+      "msg": "Pre-existing Core plugins conflict with marketplace delegation"
     }
   ],
   "types": [
@@ -1108,10 +1444,87 @@
       }
     },
     {
+      "name": "ListingCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "artist_payout",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "sale_kind",
+            "type": {
+              "defined": {
+                "name": "SaleKind"
+              }
+            }
+          },
+          {
+            "name": "condition_report",
+            "type": "pubkey"
+          },
+          {
+            "name": "condition_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "condition_version",
+            "type": "u32"
+          },
+          {
+            "name": "custody_revision",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "ListingRecord",
       "docs": [
         "One persistent bounded ledger per asset; cancellation must preserve completed_sales.",
-        "No instruction creates or activates this account until the listing feature."
+        "Creating an offer preserves completed sales across listing revisions."
       ],
       "type": {
         "kind": "struct",

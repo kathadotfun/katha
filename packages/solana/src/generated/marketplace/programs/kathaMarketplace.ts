@@ -46,15 +46,19 @@ import {
 } from "../accounts/index.js";
 import {
   getCheckSaleEligibilityInstructionAsync,
+  getCreateListingInstructionAsync,
   getInitializeMarketplaceInstructionAsync,
   getInitializeSaleTermsInstructionAsync,
   parseCheckSaleEligibilityInstruction,
+  parseCreateListingInstruction,
   parseInitializeMarketplaceInstruction,
   parseInitializeSaleTermsInstruction,
   type CheckSaleEligibilityAsyncInput,
+  type CreateListingAsyncInput,
   type InitializeMarketplaceAsyncInput,
   type InitializeSaleTermsAsyncInput,
   type ParsedCheckSaleEligibilityInstruction,
+  type ParsedCreateListingInstruction,
   type ParsedInitializeMarketplaceInstruction,
   type ParsedInitializeSaleTermsInstruction,
 } from "../instructions/index.js";
@@ -122,6 +126,7 @@ export function identifyKathaMarketplaceAccount(
 }
 
 export enum KathaMarketplaceEvent {
+  ListingCreated,
   MarketplaceInitialized,
 }
 
@@ -129,6 +134,17 @@ export function identifyKathaMarketplaceEvent(
   event: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): KathaMarketplaceEvent {
   const data = "data" in event ? event.data : event;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([94, 164, 167, 255, 246, 186, 12, 96]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceEvent.ListingCreated;
+  }
   if (
     containsBytes(
       data,
@@ -147,6 +163,7 @@ export function identifyKathaMarketplaceEvent(
 
 export enum KathaMarketplaceInstruction {
   CheckSaleEligibility,
+  CreateListing,
   InitializeMarketplace,
   InitializeSaleTerms,
 }
@@ -165,6 +182,17 @@ export function identifyKathaMarketplaceInstruction(
     )
   ) {
     return KathaMarketplaceInstruction.CheckSaleEligibility;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([18, 168, 45, 24, 191, 31, 117, 54]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.CreateListing;
   }
   if (
     containsBytes(
@@ -201,6 +229,9 @@ export type ParsedKathaMarketplaceInstruction<
       instructionType: KathaMarketplaceInstruction.CheckSaleEligibility;
     } & ParsedCheckSaleEligibilityInstruction<TProgram>)
   | ({
+      instructionType: KathaMarketplaceInstruction.CreateListing;
+    } & ParsedCreateListingInstruction<TProgram>)
+  | ({
       instructionType: KathaMarketplaceInstruction.InitializeMarketplace;
     } & ParsedInitializeMarketplaceInstruction<TProgram>)
   | ({
@@ -217,6 +248,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
       return {
         instructionType: KathaMarketplaceInstruction.CheckSaleEligibility,
         ...parseCheckSaleEligibilityInstruction(instruction),
+      };
+    }
+    case KathaMarketplaceInstruction.CreateListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.CreateListing,
+        ...parseCreateListingInstruction(instruction),
       };
     }
     case KathaMarketplaceInstruction.InitializeMarketplace: {
@@ -264,6 +302,9 @@ export type KathaMarketplacePluginInstructions = {
     input: CheckSaleEligibilityAsyncInput,
   ) => ReturnType<typeof getCheckSaleEligibilityInstructionAsync> &
     SelfPlanAndSendFunctions;
+  createListing: (
+    input: CreateListingAsyncInput,
+  ) => ReturnType<typeof getCreateListingInstructionAsync> & SelfPlanAndSendFunctions;
   initializeMarketplace: (
     input: InitializeMarketplaceAsyncInput,
   ) => ReturnType<typeof getInitializeMarketplaceInstructionAsync> &
@@ -307,6 +348,11 @@ export function kathaMarketplaceProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getCheckSaleEligibilityInstructionAsync(input),
+            ),
+          createListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCreateListingInstructionAsync(input),
             ),
           initializeMarketplace: (input) =>
             addSelfPlanAndSendFunctions(
