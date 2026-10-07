@@ -326,7 +326,7 @@ fn require_reusable_plugins(data: &[u8], asset: &mpl_core::Asset) -> Result<()> 
     Ok(())
 }
 
-fn require_no_plugins(
+pub(crate) fn require_no_plugins(
     data: &[u8],
     header: Option<&mpl_core::accounts::PluginHeaderV1>,
 ) -> Result<()> {

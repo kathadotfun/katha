@@ -8,6 +8,8 @@ pub mod eligibility;
 pub use eligibility::*;
 pub mod listing;
 pub use listing::*;
+pub mod purchase;
+pub use purchase::*;
 pub mod release;
 pub use release::*;
 
@@ -20,6 +22,14 @@ pub const BASIS_POINTS_DENOMINATOR: u32 = 10_000;
 #[program]
 pub mod katha_marketplace {
     use super::*;
+
+    pub fn purchase_listing(
+        ctx: Context<PurchaseListing>,
+        expected_revision: u64,
+        expected_price: u64,
+    ) -> Result<()> {
+        ctx.accounts.purchase(expected_revision, expected_price)
+    }
 
     pub fn cancel_listing(ctx: Context<ReleaseListing>, expected_revision: u64) -> Result<()> {
         ctx.accounts.release(expected_revision, false)
@@ -243,6 +253,14 @@ pub enum MarketplaceError {
     PaymentArithmeticOverflow,
     #[msg("Payment recipients cannot be default addresses")]
     InvalidPaymentRecipient,
+    #[msg("Reviewed listing price no longer matches")]
+    StaleListingPrice,
+    #[msg("Buyer cannot purchase their own listing")]
+    InvalidBuyer,
+    #[msg("Payment account owner, mint, state or alias is invalid")]
+    InvalidPaymentAccount,
+    #[msg("Buyer has insufficient test-token funds")]
+    InsufficientPaymentFunds,
 }
 
 #[cfg(test)]

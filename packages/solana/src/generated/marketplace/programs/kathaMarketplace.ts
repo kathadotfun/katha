@@ -51,12 +51,14 @@ import {
   getExpireListingInstructionAsync,
   getInitializeMarketplaceInstructionAsync,
   getInitializeSaleTermsInstructionAsync,
+  getPurchaseListingInstructionAsync,
   parseCancelListingInstruction,
   parseCheckSaleEligibilityInstruction,
   parseCreateListingInstruction,
   parseExpireListingInstruction,
   parseInitializeMarketplaceInstruction,
   parseInitializeSaleTermsInstruction,
+  parsePurchaseListingInstruction,
   type CancelListingAsyncInput,
   type CheckSaleEligibilityAsyncInput,
   type CreateListingAsyncInput,
@@ -69,6 +71,8 @@ import {
   type ParsedExpireListingInstruction,
   type ParsedInitializeMarketplaceInstruction,
   type ParsedInitializeSaleTermsInstruction,
+  type ParsedPurchaseListingInstruction,
+  type PurchaseListingAsyncInput,
 } from "../instructions/index.js";
 import {
   findAssetPda,
@@ -134,6 +138,7 @@ export function identifyKathaMarketplaceAccount(
 }
 
 export enum KathaMarketplaceEvent {
+  ArtworkPurchased,
   ListingCreated,
   ListingReleased,
   MarketplaceInitialized,
@@ -143,6 +148,17 @@ export function identifyKathaMarketplaceEvent(
   event: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): KathaMarketplaceEvent {
   const data = "data" in event ? event.data : event;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([120, 165, 96, 144, 194, 233, 125, 109]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceEvent.ArtworkPurchased;
+  }
   if (
     containsBytes(
       data,
@@ -188,6 +204,7 @@ export enum KathaMarketplaceInstruction {
   ExpireListing,
   InitializeMarketplace,
   InitializeSaleTerms,
+  PurchaseListing,
 }
 
 export function identifyKathaMarketplaceInstruction(
@@ -260,6 +277,17 @@ export function identifyKathaMarketplaceInstruction(
   ) {
     return KathaMarketplaceInstruction.InitializeSaleTerms;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([246, 29, 226, 161, 105, 118, 198, 150]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.PurchaseListing;
+  }
   throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION, {
     instructionData: data,
     programName: "kathaMarketplace",
@@ -286,7 +314,10 @@ export type ParsedKathaMarketplaceInstruction<
     } & ParsedInitializeMarketplaceInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.InitializeSaleTerms;
-    } & ParsedInitializeSaleTermsInstruction<TProgram>);
+    } & ParsedInitializeSaleTermsInstruction<TProgram>)
+  | ({
+      instructionType: KathaMarketplaceInstruction.PurchaseListing;
+    } & ParsedPurchaseListingInstruction<TProgram>);
 
 export function parseKathaMarketplaceInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
@@ -333,6 +364,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
       return {
         instructionType: KathaMarketplaceInstruction.InitializeSaleTerms,
         ...parseInitializeSaleTermsInstruction(instruction),
+      };
+    }
+    case KathaMarketplaceInstruction.PurchaseListing: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.PurchaseListing,
+        ...parsePurchaseListingInstruction(instruction),
       };
     }
     default:
@@ -383,6 +421,9 @@ export type KathaMarketplacePluginInstructions = {
     input: InitializeSaleTermsAsyncInput,
   ) => ReturnType<typeof getInitializeSaleTermsInstructionAsync> &
     SelfPlanAndSendFunctions;
+  purchaseListing: (
+    input: PurchaseListingAsyncInput,
+  ) => ReturnType<typeof getPurchaseListingInstructionAsync> & SelfPlanAndSendFunctions;
 };
 
 export type KathaMarketplacePluginPdas = {
@@ -443,6 +484,11 @@ export function kathaMarketplaceProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getInitializeSaleTermsInstructionAsync(input),
+            ),
+          purchaseListing: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getPurchaseListingInstructionAsync(input),
             ),
         },
         pdas: {

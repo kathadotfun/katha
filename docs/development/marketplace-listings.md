@@ -53,8 +53,8 @@ match its version, accounts, payout, mint and bump; it is never reinitialized.
 
 Ledger allocation, both Core plugin additions, record serialization and event
 emission commit together. Any error rolls back the entire transaction, including
-Core reallocations and rent movements. Payment settlement and ownership transfer
-are later instructions, with eligibility rechecked at purchase.
+Core reallocations and rent movements. [Purchase](marketplace-purchase.md) settles payments and transfers ownership
+atomically after rechecking eligibility.
 
 ## Local verification
 

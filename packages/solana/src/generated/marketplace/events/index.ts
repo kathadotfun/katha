@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./artworkPurchased.js";
 export * from "./listingCreated.js";
 export * from "./listingReleased.js";
 export * from "./marketplaceInitialized.js";

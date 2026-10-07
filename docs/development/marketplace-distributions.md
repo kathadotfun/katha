@@ -2,7 +2,7 @@
 
 The Marketplace Rust module `distribution.rs` provides pure checked arithmetic
 for purchase settlement. It does not transfer tokens, change ownership, authorize
-purchases or expose a new instruction. Settlement will call it with the validated
+purchases or expose a new instruction. The [purchase instruction](marketplace-purchase.md) calls it with the validated
 listing price, sale kind and Marketplace configuration; arbitrary client fee or
 recipient values must never replace those trusted records.
 
@@ -47,8 +47,8 @@ nonzero seller, artist, treasury occurrence.
 
 This combines payout amounts only. Token-account ownership/mint validation, buyer
 signatures, balances, self-purchase rules and aliasing with the buyer's source
-account belong to the atomic purchase instruction. They are not implemented by
-this pure calculation step.
+account belong to the atomic purchase instruction. The [purchase instruction](marketplace-purchase.md) implements these transaction
+boundaries.
 
 ## Verification
 

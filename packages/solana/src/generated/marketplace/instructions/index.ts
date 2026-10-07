@@ -12,3 +12,4 @@ export * from "./createListing.js";
 export * from "./expireListing.js";
 export * from "./initializeMarketplace.js";
 export * from "./initializeSaleTerms.js";
+export * from "./purchaseListing.js";
