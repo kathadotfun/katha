@@ -114,13 +114,14 @@ function marketAccount(
 }
 
 async function artworkState(
-  context: MarketplaceTransactionContext,
+  context: Pick<MarketplaceTransactionContext, "chainTime" | "authorityAddress">,
   accounts: MarketplaceArtworkAccounts,
   input: MarketplaceRevisionInput,
+  maxRevision = U64_MAX - 1n,
 ) {
   const now = bounded(context.chainTime, I64_MAX, "Chain timestamp");
   if (now === 0n) throw new TypeError("Chain timestamp must be positive");
-  const revision = bounded(input.expectedRevision, U64_MAX - 1n, "Listing revision");
+  const revision = bounded(input.expectedRevision, maxRevision, "Listing revision");
   const actor = nonzeroAddress(context.authorityAddress);
   const kathaId = kathaIdSchema.parse(input.kathaId);
   const { config: registryConfig, state: platform } = await readRegistryConfiguration(
@@ -459,4 +460,62 @@ export async function buildPurchaseListingTransaction(
     addresses,
     nextRevision: state.revision + 1n,
   });
+}
+
+/** Validated read state; an active offer is not a promise of purchase eligibility. */
+export async function readMarketplaceListingState(
+  accounts: MarketplaceListingAccounts,
+  kathaId: string,
+  chainTime: bigint,
+) {
+  const { state: platform } = await readRegistryConfiguration(
+    accounts.registryConfigAccount,
+  );
+  let revision = 0n;
+  if (accounts.listingAccount.exists && accounts.listingAccount.data.length > 0) {
+    const [listing] = await market.findListingPda({
+      asset: accounts.assetAccount.address,
+    });
+    marketAccount(
+      accounts.listingAccount,
+      listing,
+      market.KathaMarketplaceAccount.ListingRecord,
+      market.getListingRecordSize(),
+    );
+    revision = market
+      .getListingRecordDecoder()
+      .decode(accounts.listingAccount.data).revision;
+  }
+  const state = await artworkState(
+    { authorityAddress: platform.authority, chainTime },
+    accounts,
+    { kathaId, expectedRevision: revision },
+    U64_MAX,
+  );
+  await conditionHead(accounts, state.addresses.artwork);
+  const ledger = state.ledger;
+  if (
+    ledger &&
+    (ledger.revision === 0n ||
+      ledger.price === 0n ||
+      ledger.createdAt <= 0n ||
+      ledger.createdAt > chainTime ||
+      ledger.expiresAt <= ledger.createdAt ||
+      ledger.conditionVersion === 0 ||
+      ledger.custodyRevision === 0n ||
+      ledger.status === market.ListingStatus.Inactive)
+  )
+    throw new TypeError("Invalid listing state");
+  return {
+    owner: state.core.owner,
+    asset: state.addresses.asset,
+    revision,
+    artistId: state.record.artistId,
+    ledger,
+    listing: state.addresses.listing,
+    active:
+      ledger?.status === market.ListingStatus.Active &&
+      ledger.seller === state.core.owner &&
+      chainTime < ledger.expiresAt,
+  };
 }

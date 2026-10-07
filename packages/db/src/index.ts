@@ -217,3 +217,7 @@ export {
   type MetadataAdministrationStore,
 } from "./metadata-administration-store.js";
 export { createMetadataRevisionStatusStore } from "./artwork-registration-status-store.js";
+export {
+  createMarketplaceListingStore,
+  type MarketplaceListingStore,
+} from "./marketplace-listing-store.js";

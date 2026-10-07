@@ -2,7 +2,7 @@ import { assertKathaRpcCluster } from "./rpc-cluster.js";
 import {
   sha256Hex,
   canonicalDocumentBytes,
-  operationIntentSchema,
+  chainOperationIntentSchema,
   preparedInstructionSchema,
 } from "@katha/shared";
 import {
@@ -25,6 +25,15 @@ import {
   identifyKathaRegistryInstruction,
   KathaRegistryInstruction,
 } from "./generated/registry/index.js";
+import {
+  KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+  identifyKathaMarketplaceInstruction,
+  KathaMarketplaceInstruction,
+} from "./generated/marketplace/index.js";
+const listingKinds: Record<string, KathaMarketplaceInstruction> = {
+  CREATE_LISTING: KathaMarketplaceInstruction.CreateListing,
+  CANCEL_LISTING: KathaMarketplaceInstruction.CancelListing,
+};
 export class ReceiptValidationError extends Error {
   constructor() {
     super("Receipt does not match preparation");
@@ -129,7 +138,11 @@ export async function validateSignedPreparation(
       instruction: bound,
       ...intentInput
     } = record;
-    const intent = operationIntentSchema.parse(intentInput);
+    const intent = chainOperationIntentSchema.parse(intentInput);
+    const isListing = Object.hasOwn(listingKinds, intent.kind);
+    const expectedProgram = isListing
+      ? KATHA_MARKETPLACE_PROGRAM_ADDRESS
+      : KATHA_REGISTRY_PROGRAM_ADDRESS;
     if (
       (await sha256Hex(new TextEncoder().encode(expected.canonicalRequest))) !==
         expected.requestHash ||
@@ -141,7 +154,7 @@ export async function validateSignedPreparation(
       authorityWallet !== wallet ||
       feePayer !== wallet ||
       programAddress !== expected.programAddress ||
-      programAddress !== KATHA_REGISTRY_PROGRAM_ADDRESS ||
+      programAddress !== expectedProgram ||
       intent.artworkId !== expected.artworkId ||
       intent.kind !== expected.kind ||
       intent.idempotencyKey !== expected.idempotencyKey ||
@@ -156,7 +169,12 @@ export async function validateSignedPreparation(
       message.feePayer.address !== wallet ||
       instruction.programAddress !== programAddress ||
       !instruction.data ||
-      !kinds[intent.kind]?.includes(identifyKathaRegistryInstruction(instruction.data))
+      !(isListing
+        ? identifyKathaMarketplaceInstruction(instruction.data) ===
+          listingKinds[intent.kind]
+        : kinds[intent.kind]?.includes(
+            identifyKathaRegistryInstruction(instruction.data),
+          ))
     )
       throw new ReceiptValidationError();
     const accounts = [

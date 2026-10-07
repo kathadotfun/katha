@@ -8,6 +8,7 @@ import {
 } from "@katha/db";
 import { artworkProvenanceResponseSchema } from "@katha/shared";
 import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
+import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "@katha/solana/marketplace";
 import {
   KATHA_REGISTRY_PROGRAM_ADDRESS,
   findArtworkPda,
@@ -28,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { expect, it } from "vitest";
 import {
   createDatabase,
+  createMarketplaceListingStore,
   validateDatabaseUrl,
   createArtistStore,
   createPublicArtworkStore,
@@ -415,6 +417,65 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       .values({ address: wallet.address })
       .returning();
     if (!tagActor) throw new Error("Missing synthetic tag actor");
+    // Listing preparations use the exact catalogue publication gate and wallet-scoped persistence.
+    const listingStore = createMarketplaceListingStore(database.db, "LOCALNET");
+    expect(await listingStore.load(mandala.kathaId)).toMatchObject({
+      id: mandala.id,
+      kathaId: mandala.kathaId,
+    });
+    for (const work of [...hidden, devnet])
+      expect(await listingStore.load(work.kathaId)).toBeNull();
+    const operation = {
+      artworkId: mandala.id,
+      walletId: tagActor.id,
+      cluster: "LOCALNET" as const,
+      kind: "CREATE_LISTING" as const,
+      idempotencyKey: "synthetic-listing-guard",
+      requestHash: "a".repeat(64),
+      programAddress: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+      expectedAccounts: [wallet.address],
+      expectedHashes: [],
+    };
+    const preparation = {
+      canonicalRequest: '{"syntheticDatabaseFixture":true}',
+      messageHash: "b".repeat(64),
+      transactionBase64: "AQ==",
+      transactionVersion: 0,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 100n,
+      simulationSlot: 20n,
+      simulationUnits: 5000n,
+    };
+    operation.requestHash = createHash("sha256")
+      .update(preparation.canonicalRequest)
+      .digest("hex");
+    const savedListing = await listingStore.save(
+      operation,
+      wallet.address,
+      mandala.kathaId,
+      preparation,
+    );
+    expect(savedListing.status).toBe("saved");
+    expect(
+      await listingStore.save(operation, wallet.address, mandala.kathaId, preparation),
+    ).toEqual(savedListing);
+    expect(
+      await listingStore.save(
+        { ...operation, requestHash: "c".repeat(64) },
+        wallet.address,
+        mandala.kathaId,
+        preparation,
+      ),
+    ).toEqual({ status: "conflict" });
+    expect(
+      await listingStore.save(
+        { ...operation, artworkId: hidden[0]!.id, idempotencyKey: "hidden-listing" },
+        wallet.address,
+        hidden[0]!.kathaId,
+        preparation,
+      ),
+    ).toEqual({ status: "conflict" });
+
     const tags = createNfcTagStore(database.db);
     const nfcStore = createNfcResolutionStore(database.db, "LOCALNET");
     const nfc = createNfcResolution(nfcStore, "https://katha.fun");

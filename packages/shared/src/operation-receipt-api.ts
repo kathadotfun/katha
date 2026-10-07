@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { registryOperationKindSchema } from "./blockchain-operation.js";
+import { chainOperationKindSchema } from "./blockchain-operation.js";
 import { walletClusterSchema } from "./wallet-session.js";
 import { tokenAmountSchema } from "./marketplace.js";
 export const operationReceiptParamsSchema = z.strictObject({
@@ -18,7 +18,7 @@ export const operationReceiptResponseSchema = z
     receiptId: z.uuid(),
     operationId: z.uuid(),
     preparationId: z.uuid(),
-    kind: registryOperationKindSchema,
+    kind: chainOperationKindSchema,
     cluster: walletClusterSchema,
     signature: z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{64,88}$/),
     messageHash: z.string().regex(/^[0-9a-f]{64}$/),

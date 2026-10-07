@@ -12,6 +12,11 @@ export const registryOperationKindSchema = z.enum([
   "MINT_ARTWORK",
   "REVISE_METADATA",
 ]);
+export const listingOperationKindSchema = z.enum(["CREATE_LISTING", "CANCEL_LISTING"]);
+export const chainOperationKindSchema = z.union([
+  registryOperationKindSchema,
+  listingOperationKindSchema,
+]);
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 export const operationIntentSchema = z.strictObject({
   artworkId: z.uuid(),
@@ -26,6 +31,9 @@ export const operationIntentSchema = z.strictObject({
   expectedHashes: z.array(hash).max(32),
   // Internal callers supply only already validated domain inputs, never raw HTTP JSON.
   parameters: z.record(z.string().min(1).max(100), z.json()),
+});
+export const chainOperationIntentSchema = operationIntentSchema.extend({
+  kind: chainOperationKindSchema,
 });
 // Internal canonical preparation shape; receipt validation compares compiled privileges.
 export const preparedInstructionSchema = z.strictObject({

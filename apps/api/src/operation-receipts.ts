@@ -1,7 +1,7 @@
 import {
   operationReceiptRequestSchema,
   operationReceiptResponseSchema,
-  registryOperationKindSchema,
+  chainOperationKindSchema,
 } from "@katha/shared";
 import type { OperationReceiptStore } from "@katha/db";
 import {
@@ -30,7 +30,7 @@ export function createOperationReceipts(
       if (
         operation.cluster !== (cluster === "localnet" ? "LOCALNET" : "DEVNET") ||
         walletAddress !== session.walletAddress ||
-        !registryOperationKindSchema.safeParse(operation.kind).success
+        !chainOperationKindSchema.safeParse(operation.kind).success
       )
         throw new DomainError("CONFLICT");
       let bound;

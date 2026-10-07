@@ -224,6 +224,7 @@ outside the current scope.
 - [Complete local primary sale](docs/development/marketplace-primary-sale.md)
 - [Inspected resale in both custody situations](docs/development/marketplace-resale.md)
 - [Devnet payment provider](docs/development/devnet-payment-provider.md)
+- [Artwork listing API](docs/development/artwork-listings-api.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

@@ -1,3 +1,6 @@
+import { createArtworkListings } from "./artwork-listings.js";
+import { createMarketplaceListingStore } from "@katha/db";
+import { createMarketplaceListingReader } from "@katha/solana";
 import { createMetadataAdministration } from "./metadata-administration.js";
 import {
   createMetadataAdministrationStore,
@@ -288,6 +291,16 @@ function startApi() {
         config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
       ),
       config.KATHA_PUBLIC_APP_ORIGIN,
+    ),
+    createArtworkListings(
+      createMarketplaceListingStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+      ),
+      sessions,
+      createMarketplaceListingReader(rpcConfig),
+      createOperationChain(rpcConfig),
+      config.KATHA_CLUSTER,
     ),
   );
   const port = config.API_PORT;

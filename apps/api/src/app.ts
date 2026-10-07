@@ -1,3 +1,5 @@
+import type { ArtworkListingsBoundary } from "./artwork-listings.js";
+import { listingCreateRequestSchema, listingCancelRequestSchema } from "@katha/shared";
 import { metadataRevisionDocumentRequestSchema } from "@katha/shared";
 import {
   ARTWORK_MEDIA_MAX_BYTES,
@@ -115,6 +117,7 @@ export function createApi(
   provenance?: ArtworkProvenanceBoundary,
   nfcTags?: NfcTagsBoundary,
   nfcResolution?: NfcResolutionBoundary,
+  listings?: ArtworkListingsBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -418,6 +421,40 @@ export function createApi(
       c.header("X-Content-Type-Options", "nosniff");
       c.header("Cache-Control", "no-store");
       return c.body(new Uint8Array(result.bytes));
+    });
+  }
+  if (listings) {
+    app.get("/artworks/:kathaId/listing", async (c) => {
+      c.header("Cache-Control", "no-store");
+      const { kathaId } = parseParams(c, artworkDetailParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(await listings.get(kathaId));
+    });
+    app.post("/artworks/:kathaId/operations/listing", async (c) => {
+      c.header("Cache-Control", "no-store");
+      const { kathaId } = parseParams(c, artworkDetailParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await listings.prepareListing(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, listingCreateRequestSchema),
+        ),
+        201,
+      );
+    });
+    app.post("/artworks/:kathaId/operations/cancellation", async (c) => {
+      c.header("Cache-Control", "no-store");
+      const { kathaId } = parseParams(c, artworkDetailParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await listings.prepareCancellation(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, listingCancelRequestSchema),
+        ),
+        201,
+      );
     });
   }
   if (registration) {
