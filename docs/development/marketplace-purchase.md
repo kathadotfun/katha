@@ -84,3 +84,7 @@ rollback. All fixtures and signing identities are temporary and synthetic.
 Core delegate behavior follows the official [Transfer Delegate](https://www.metaplex.com/docs/smart-contracts/core/plugins/transfer-delegate)
 and [Freeze Delegate](https://www.metaplex.com/docs/smart-contracts/core/plugins/freeze-delegate)
 interfaces; token transfers use the classic [SPL Token program](https://www.solana-program.com/docs/token).
+
+For the serialized race cases, full-range amount boundaries, payout overlaps and
+log-proven Token/Core failure recovery, see
+[settlement failure tests](marketplace-failure-tests.md).

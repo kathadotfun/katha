@@ -1,26 +1,45 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import { AccountRole, type Address } from "@solana/kit";
-import { fetchToken } from "@solana-program/token";
+import { AccountRole, address, type Address, type Instruction } from "@solana/kit";
+import { fetchToken, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { setupMarketplaceConfiguration } from "./fixtures/marketplace-configuration.js";
 import {
   readListingDelegates,
   revokeTransferAsOwner,
+  transferAsOwner,
 } from "./fixtures/core-plugins.js";
 import * as market from "../src/generated/marketplace/index.js";
 import * as registry from "../src/generated/registry/index.js";
 
 const uuid = () => new Uint8Array(Buffer.from(randomUUID().replaceAll("-", ""), "hex"));
-async function setup(collectorHeld = false, artistIsTreasury = false) {
+async function setup(
+  collectorHeld = false,
+  artistIsTreasury = false,
+  options: {
+    price?: bigint;
+    artistIsSeller?: boolean;
+    commissionBps?: number;
+    secondaryRoyaltyBps?: number;
+  } = {},
+) {
   const f = await setupMarketplaceConfiguration();
-  await f.client.sendTransaction([await f.initialize()]);
+  const price = options.price ?? f.settings.examplePrice;
+  await f.client.sendTransaction([
+    await f.initialize({
+      commissionBps: options.commissionBps ?? f.settings.commissionBps,
+      secondaryRoyaltyBps:
+        options.secondaryRoyaltyBps ?? f.settings.secondaryRoyaltyBps,
+    }),
+  ]);
   await f.client.sendTransaction([
     await market.getInitializeSaleTermsInstructionAsync({
       artwork: f.artwork.artwork,
       authority: f.roles.bootstrap,
       artistPayout: artistIsTreasury
         ? f.roles.treasury.address
-        : f.roles.artist.address,
+        : options.artistIsSeller
+          ? f.roles.seller.address
+          : f.roles.artist.address,
     }),
   ]);
   let conditionReport = f.artwork.initialCondition;
@@ -67,7 +86,7 @@ async function setup(collectorHeld = false, artistIsTreasury = false) {
       seller: f.roles.seller,
       conditionReport,
       collection: f.collection,
-      price: f.settings.examplePrice,
+      price,
       expiresAt:
         f.clock + (collectorHeld ? f.settings.inspectionValiditySeconds + 100n : 3600n),
       expectedRevision: 0n,
@@ -85,10 +104,12 @@ async function setup(collectorHeld = false, artistIsTreasury = false) {
       sellerTokens: f.tokenAccounts.seller,
       artistTokens: artistIsTreasury
         ? f.tokenAccounts.treasury
-        : f.tokenAccounts.artist,
+        : options.artistIsSeller
+          ? f.tokenAccounts.seller
+          : f.tokenAccounts.artist,
       treasuryTokens: f.tokenAccounts.treasury,
       expectedRevision: 1n,
-      expectedPrice: f.settings.examplePrice,
+      expectedPrice: price,
       ...overrides,
     });
   const send = async (overrides: Partial<market.PurchaseListingAsyncInput> = {}) => {
@@ -335,4 +356,304 @@ it("supports an intentionally shared artist and treasury payout account", async 
   await f.send();
   expect(await f.balances()).toEqual([900_000_000n, 0n, 0n, 100_000_000n]);
   expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
+}, 30_000);
+
+it("serializes two quoted buyers so only the first purchase can settle", async () => {
+  for (const first of ["buyerA", "buyerB"] as const) {
+    const f = await setup();
+    const second = first === "buyerA" ? "buyerB" : "buyerA";
+    // Both buyers quote the same active revision before either transaction executes.
+    const offers = await Promise.all(
+      ([first, second] as const).map((buyer) =>
+        f.purchase({
+          buyer: f.roles[buyer],
+          buyerTokens: f.tokenAccounts[buyer],
+        }),
+      ),
+    );
+    await f.client.sendTransaction([offers[0]!]);
+    const settled = f.state();
+    const balances = await Promise.all(Object.values(f.tokenAccounts).map(f.amount));
+    f.client.svm.expireBlockhash();
+    await expect(f.client.sendTransaction([offers[1]!])).rejects.toThrow();
+    expect(f.state()).toEqual(settled);
+    expect(await Promise.all(Object.values(f.tokenAccounts).map(f.amount))).toEqual(
+      balances,
+    );
+    expect(readListingDelegates(settled.asset).owner).toBe(f.roles[first].address);
+    expect(await f.amount(f.tokenAccounts[second])).toBe(f.settings.buyerBalance);
+    expect(
+      market.getListingRecordDecoder().decode(settled.ledger.data).completedSales,
+    ).toBe(1n);
+  }
+}, 30_000);
+
+it("serializes purchase/cancel in both orders and rejects stale quotes after relisting", async () => {
+  for (const first of ["purchase", "cancel"] as const) {
+    const f = await setup();
+    const purchase = await f.purchase();
+    const cancel = await market.getCancelListingInstructionAsync({
+      artwork: f.artwork.artwork,
+      actor: f.roles.seller,
+      collection: f.collection,
+      expectedRevision: 1n,
+    });
+    await f.client.sendTransaction([first === "purchase" ? purchase : cancel]);
+    const terminal = f.state(),
+      balances = await f.balances();
+    f.client.svm.expireBlockhash();
+    await expect(
+      f.client.sendTransaction([first === "purchase" ? cancel : purchase]),
+    ).rejects.toThrow();
+    expect(f.state()).toEqual(terminal);
+    expect(await f.balances()).toEqual(balances);
+    const delegates = readListingDelegates(terminal.asset);
+    expect(delegates.owner).toBe(
+      first === "purchase" ? f.roles.buyerA.address : f.roles.seller.address,
+    );
+    expect(delegates.freeze?.frozen).toBe(false);
+    if (first === "cancel") {
+      await f.client.sendTransaction([
+        await market.getCreateListingInstructionAsync({
+          artwork: f.artwork.artwork,
+          seller: f.roles.seller,
+          conditionReport: f.artwork.initialCondition,
+          collection: f.collection,
+          price: f.settings.examplePrice,
+          expiresAt: f.clock + 3600n,
+          expectedRevision: 2n,
+        }),
+      ]);
+      const relisted = f.state();
+      f.client.svm.expireBlockhash();
+      await expect(f.client.sendTransaction([purchase])).rejects.toThrow();
+      expect(f.state()).toEqual(relisted);
+      expect(await f.balances()).toEqual(balances);
+      expect(readListingDelegates(relisted.asset).freeze?.frozen).toBe(true);
+      await f.send({ expectedRevision: 3n });
+    }
+  }
+}, 30_000);
+
+it("conserves tiny rounded payments and full u64 prices through real token CPIs", async () => {
+  for (const price of [1n, 39n, 40n, 101n, (1n << 64n) - 1n]) {
+    const f = await setup(false, false, { price });
+    if (price > f.settings.buyerBalance) {
+      // Synthetic boundary balances, not token issuance or real network funds.
+      setTokenAmount(f, f.tokenAccounts.buyerA, price);
+      setTokenAmount(f, f.tokenAccounts.buyerB, 0n);
+      const mint = f.client.svm.getAccount(f.mint);
+      if (!mint.exists) throw new Error("Missing mint");
+      const data = Uint8Array.from(mint.data);
+      new DataView(data.buffer).setBigUint64(36, price, true);
+      f.client.svm.setAccount({ ...mint, data });
+    }
+    const source = await f.amount(f.tokenAccounts.buyerA);
+    await f.send();
+    const commission = (price * 250n) / 10_000n;
+    expect(await f.balances()).toEqual([
+      source - price,
+      0n,
+      price - commission,
+      commission,
+    ]);
+    expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
+  }
+  const f = await setup(false, false, { price: 101n });
+  await f.send();
+  await f.client.sendTransaction([
+    await market.getCreateListingInstructionAsync({
+      artwork: f.artwork.artwork,
+      seller: f.roles.buyerA,
+      conditionReport: f.artwork.initialCondition,
+      collection: f.collection,
+      price: 101n,
+      expiresAt: f.clock + 3600n,
+      expectedRevision: 2n,
+    }),
+  ]);
+  await f.send({
+    seller: f.roles.buyerA.address,
+    sellerTokens: f.tokenAccounts.buyerA,
+    buyer: f.roles.buyerB,
+    buyerTokens: f.tokenAccounts.buyerB,
+    expectedRevision: 3n,
+  });
+  // Floor fees independently: 2 commission + 5 royalty, seller keeps 94.
+  expect(await f.balances()).toEqual([999_999_993n, 0n, 104n, 4n]);
+  expect(await f.amount(f.tokenAccounts.buyerB)).toBe(999_999_899n);
+}, 30_000);
+
+function setTokenAmount(
+  f: Awaited<ReturnType<typeof setup>>,
+  account: Address,
+  amount: bigint,
+) {
+  const original = f.client.svm.getAccount(account);
+  if (!original.exists) throw new Error("Missing synthetic token account");
+  const data = Uint8Array.from(original.data);
+  new DataView(data.buffer).setBigUint64(64, amount, true);
+  f.client.svm.setAccount({ ...original, data });
+}
+
+it("merges every secondary seller/artist/treasury overlap without losing role proceeds", async () => {
+  for (const overlap of [
+    "seller-artist",
+    "seller-treasury",
+    "artist-treasury",
+    "all",
+  ] as const) {
+    const artistIsTreasury = overlap === "artist-treasury" || overlap === "all";
+    const f = await setup(false, artistIsTreasury, {
+      artistIsSeller: overlap === "seller-artist",
+    });
+    await f.send();
+    const seller =
+      overlap === "seller-artist"
+        ? f.roles.seller
+        : overlap === "artist-treasury"
+          ? f.roles.buyerA
+          : f.roles.treasury;
+    const sellerTokens =
+      overlap === "seller-artist"
+        ? f.tokenAccounts.seller
+        : overlap === "artist-treasury"
+          ? f.tokenAccounts.buyerA
+          : f.tokenAccounts.treasury;
+    if (seller !== f.roles.buyerA) {
+      await f.client.sendTransaction([
+        transferAsOwner(f.artwork.asset, f.collection, f.roles.buyerA, seller.address),
+      ]);
+    }
+    await f.client.sendTransaction([
+      await market.getCreateListingInstructionAsync({
+        artwork: f.artwork.artwork,
+        seller,
+        conditionReport: f.artwork.initialCondition,
+        collection: f.collection,
+        price: f.settings.examplePrice,
+        expiresAt: f.clock + 3600n,
+        expectedRevision: 2n,
+      }),
+    ]);
+    const before = await f.balances();
+    const expected = [...before];
+    const artistIndex = artistIsTreasury ? 3 : overlap === "seller-artist" ? 1 : 2;
+    const sellerIndex =
+      sellerTokens === f.tokenAccounts.buyerA
+        ? 0
+        : sellerTokens === f.tokenAccounts.seller
+          ? 1
+          : 3;
+    expected[sellerIndex] = expected[sellerIndex]! + 92_500_000n;
+    expected[artistIndex] = expected[artistIndex]! + 5_000_000n;
+    expected[3] = expected[3]! + 2_500_000n;
+    await f.send({
+      seller: seller.address,
+      sellerTokens,
+      buyer: f.roles.buyerB,
+      buyerTokens: f.tokenAccounts.buyerB,
+      expectedRevision: 3n,
+    });
+    expect(await f.balances()).toEqual(expected);
+    expect(await f.amount(f.tokenAccounts.buyerB)).toBe(900_000_000n);
+    expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerB.address);
+  }
+}, 30_000);
+
+it.each(["token", "core"] as const)(
+  "rolls back settlement when compute exhaustion interrupts a later %s CPI",
+  async (stage) => {
+    const f = await setup();
+    const before = f.state(),
+      balances = await f.balances();
+    const purchase = await f.purchase();
+    const core = purchase.accounts[13]!.address;
+    const program = stage === "token" ? TOKEN_PROGRAM_ADDRESS : core;
+    // Simulation supplies a budget inside the last CPI at this stage. This avoids
+    // compiler-sensitive constants and proves earlier calls ran before failure.
+    const baseline = await f.client.signTransaction([purchase]);
+    const metadata = baseline.context.transactionMetadata;
+    if (!metadata || "err" in metadata)
+      throw new Error("Baseline purchase must simulate successfully");
+    const consumption = metadata
+      .logs()
+      .filter((line) => line.startsWith(`Program ${program} consumed `))
+      .at(-1);
+    const match = consumption?.match(/consumed (\d+) of (\d+) compute units/);
+    if (!match) throw new Error("Missing CPI consumption log");
+    const consumed = Number(match[1]),
+      remaining = Number(match[2]);
+    // One top-level purchase instruction has the runtime's 200,000-unit default.
+    // The extra Compute Budget instruction itself consumes 150 units.
+    const units = 200_000 + 150 - remaining + Math.floor(consumed / 2);
+    const data = new Uint8Array(5);
+    data[0] = 2; // Solana Compute Budget SetComputeUnitLimit.
+    new DataView(data.buffer).setUint32(1, units, true);
+    const limit: Instruction = {
+      programAddress: address("ComputeBudget111111111111111111111111111111"),
+      data,
+    };
+    const signed = await f.client.signTransaction([limit, purchase]);
+    const result = f.client.svm.sendTransaction(signed.context.transaction);
+    expect("err" in result).toBe(true);
+    if (!("err" in result)) throw new Error("Expected CPI compute exhaustion");
+    const logs = result.meta().logs();
+    expect(logs.some((line) => line.startsWith(`Program ${program} failed`))).toBe(
+      true,
+    );
+    expect(
+      logs.filter((line) => line === `Program ${TOKEN_PROGRAM_ADDRESS} success`),
+    ).toHaveLength(stage === "token" ? 1 : 2);
+    expect(logs.filter((line) => line === `Program ${core} success`)).toHaveLength(
+      stage === "token" ? 0 : 2,
+    );
+    expect(f.state()).toEqual(before);
+    expect(await f.balances()).toEqual(balances);
+    expect(readListingDelegates(f.state().asset).freeze?.frozen).toBe(true);
+    // The failed transaction must not consume the listing or duplicate payouts.
+    await f.send();
+    expect(await f.balances()).toEqual([900_000_000n, 0n, 97_500_000n, 2_500_000n]);
+    expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
+  },
+  30_000,
+);
+
+it("rejects different token accounts for overlapping wallets even when both accounts are valid", async () => {
+  const f = await setup(false, true);
+  const treasury = f.client.svm.getAccount(f.tokenAccounts.treasury);
+  if (!treasury.exists) throw new Error("Missing treasury token account");
+  // Synthetic second initialized, zero-balance account with the same mint/owner.
+  f.client.svm.setAccount({ ...treasury, address: f.roles.outsider.address });
+  const before = f.state(),
+    balances = await f.balances();
+  await expect(f.send({ artistTokens: f.roles.outsider.address })).rejects.toThrow();
+  expect(f.state()).toEqual(before);
+  expect(await f.balances()).toEqual(balances);
+  expect(await f.amount(f.roles.outsider.address)).toBe(0n);
+  await f.send();
+  expect(await f.amount(f.tokenAccounts.treasury)).toBe(f.settings.examplePrice);
+}, 30_000);
+
+it("settles zero and full commission boundaries while validating zero-proceeds destinations", async () => {
+  for (const commissionBps of [0, 10_000]) {
+    const f = await setup(false, false, { commissionBps, secondaryRoyaltyBps: 0 });
+    const before = f.state(),
+      balances = await f.balances();
+    await expect(
+      f.send({ artistTokens: f.tokenAccounts.wrongMintBuyer }),
+    ).rejects.toThrow();
+    await expect(
+      f.send({ treasuryTokens: f.tokenAccounts.wrongMintBuyer }),
+    ).rejects.toThrow();
+    expect(f.state()).toEqual(before);
+    expect(await f.balances()).toEqual(balances);
+    await f.send();
+    expect(await f.balances()).toEqual(
+      commissionBps === 0
+        ? [900_000_000n, 0n, 100_000_000n, 0n]
+        : [900_000_000n, 0n, 0n, 100_000_000n],
+    );
+    expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
+  }
 }, 30_000);
