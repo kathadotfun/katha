@@ -36,7 +36,7 @@ product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task
 orchestration, a minimal Next.js web scaffold, a Hono API service, an initial
 shared TypeScript package, a Node-only Drizzle database package, a Solana client
-package, an Anchor Registry, a Marketplace configuration, eligibility and listing program, and a local
+package, an Anchor Registry, a Marketplace listing and atomic test-token settlement program, and a local
 PostgreSQL service. The Solana package includes Kit clients, a Core adapter,
 generated program clients, unsigned transaction builders, and simulation.
 Local tests cover Registry configuration, artwork registration and verification,
@@ -121,8 +121,9 @@ keeps the API session in memory; sign-out and account changes clear it. The wall
 panel displays the configured Localnet/Devnet test environment. A shared transaction
 review boundary now validates and simulates prepared Registry messages, requests
 explicit wallet approval, records signed attempts and reconciles finalized outcomes
-with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork drafts, media management and the registration workflow are connected, with exact document review, simulation, explicit wallet approval and protected receipt/indexing feedback. Artwork authenticity now connects manual inspection and authorship approval to verifier-authorized preparation, wallet signing and finalized receipt/indexing feedback. Condition inspection now connects private evidence upload and immutable report preparation to explicit verifier signing, current owner/custody scope checks and report-specific finalized receipt/indexing feedback. Custody administration now connects finalized physical state and private fulfillment requests to explicit manual status confirmation, authority-bound custody signing and separate receipt/indexing feedback. Remaining API behavior and Marketplace
-business instructions remain planned.
+with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork drafts, media management and the registration workflow are connected, with exact document review, simulation, explicit wallet approval and protected receipt/indexing feedback. Artwork authenticity now connects manual inspection and authorship approval to verifier-authorized preparation, wallet signing and finalized receipt/indexing feedback. Condition inspection now connects private evidence upload and immutable report preparation to explicit verifier signing, current owner/custody scope checks and report-specific finalized receipt/indexing feedback. Custody administration now connects finalized physical state and private fulfillment requests to explicit manual status confirmation, authority-bound custody signing and separate receipt/indexing feedback. Marketplace transaction builders now prepare owner-bound listings, seller cancellation,
+permissionless expiry recovery and buyer-bound purchases through generated clients.
+Marketplace API and collector screens remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -219,6 +220,7 @@ outside the current scope.
 - [Listing cancellation and expiry recovery](docs/development/marketplace-cancellation.md)
 - [Checked primary and secondary sale distributions](docs/development/marketplace-distributions.md)
 - [Atomic test-token purchases and Core transfer](docs/development/marketplace-purchase.md)
+- [Marketplace transaction preparation](docs/development/marketplace-transactions.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

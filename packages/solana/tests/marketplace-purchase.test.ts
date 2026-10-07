@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
-import { AccountRole, address, type Address, type Instruction } from "@solana/kit";
+import {
+  AccountRole,
+  address,
+  addSignersToInstruction,
+  type Address,
+  type Instruction,
+} from "@solana/kit";
 import { fetchToken, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { setupMarketplaceConfiguration } from "./fixtures/marketplace-configuration.js";
 import {
@@ -10,6 +16,13 @@ import {
 } from "./fixtures/core-plugins.js";
 import * as market from "../src/generated/marketplace/index.js";
 import * as registry from "../src/generated/registry/index.js";
+import {
+  buildCreateListingTransaction,
+  buildCancelListingTransaction,
+  buildExpireListingTransaction,
+  buildPurchaseListingTransaction,
+  type MarketplaceTransactionContext,
+} from "../src/marketplace.js";
 
 const uuid = () => new Uint8Array(Buffer.from(randomUUID().replaceAll("-", ""), "hex"));
 async function setup(
@@ -656,4 +669,105 @@ it("settles zero and full commission boundaries while validating zero-proceeds d
     );
     expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
   }
+}, 30_000);
+
+it("executes marketplace builder instructions with real seller/buyer signatures and expiry recovery", async () => {
+  const f = await setup();
+  const required = (account: Address) => {
+    const result = f.client.svm.getAccount(account);
+    if (!result.exists) throw new Error("Missing builder snapshot");
+    return result;
+  };
+  const [conditionHead] = await registry.findHeadPda({ artwork: f.artwork.artwork });
+  const [saleTerms] = await market.findSaleTermsPda({ artwork: f.artwork.artwork });
+  const accounts = () => ({
+    marketplaceConfigAccount: required(f.config),
+    registryConfigAccount: required(f.registryConfig),
+    artworkAccount: required(f.artwork.artwork),
+    assetAccount: required(f.artwork.asset),
+    collectionAccount: required(f.collection),
+    listingAccount: required(f.listing),
+    conditionHeadAccount: required(conditionHead),
+    saleTermsAccount: required(saleTerms),
+  });
+  const context: MarketplaceTransactionContext = {
+    cluster: "localnet",
+    feePayerAddress: f.roles.bootstrap.address,
+    authorityAddress: f.roles.seller.address,
+    supportedTransactionVersions: new Set([0]),
+    lifetime: {
+      blockhash: f.client.svm.latestBlockhash(),
+      lastValidBlockHeight: 1_000_000n,
+    },
+    currentBlockHeight: 0n,
+    chainTime: f.clock,
+  };
+  const input = { kathaId: f.artwork.kathaId, expectedRevision: 1n };
+  const cancel = await buildCancelListingTransaction(context, accounts(), input);
+  await f.client.sendTransaction([
+    addSignersToInstruction([f.roles.seller], cancel.instruction),
+  ]);
+  const create = await buildCreateListingTransaction(context, accounts(), {
+    ...input,
+    expectedRevision: 2n,
+    price: f.settings.examplePrice.toString(),
+    expiresAt: f.clock + 3600n,
+  });
+  await f.client.sendTransaction([
+    addSignersToInstruction([f.roles.seller], create.instruction),
+  ]);
+  const clock = f.client.svm.getClock();
+  clock.unixTimestamp = f.clock + 3600n;
+  f.client.svm.setClock(clock);
+  const expire = await buildExpireListingTransaction(
+    {
+      ...context,
+      authorityAddress: f.roles.outsider.address,
+      chainTime: clock.unixTimestamp,
+    },
+    accounts(),
+    { ...input, expectedRevision: 3n },
+  );
+  await f.client.sendTransaction([
+    addSignersToInstruction([f.roles.outsider], expire.instruction),
+  ]);
+  const relist = await buildCreateListingTransaction(
+    { ...context, chainTime: clock.unixTimestamp },
+    accounts(),
+    {
+      ...input,
+      expectedRevision: 4n,
+      price: f.settings.examplePrice.toString(),
+      expiresAt: clock.unixTimestamp + 3600n,
+    },
+  );
+  await f.client.sendTransaction([
+    addSignersToInstruction([f.roles.seller], relist.instruction),
+  ]);
+  const buy = await buildPurchaseListingTransaction(
+    {
+      ...context,
+      authorityAddress: f.roles.buyerA.address,
+      chainTime: clock.unixTimestamp,
+    },
+    accounts(),
+    {
+      ...input,
+      expectedRevision: 5n,
+      expectedPrice: f.settings.examplePrice.toString(),
+      buyerAddress: f.roles.buyerA.address,
+      paymentMintAddress: f.mint,
+    },
+  );
+  expect(buy.addresses.buyerTokens).toBe(f.tokenAccounts.buyerA);
+  await f.client.sendTransaction([
+    addSignersToInstruction([f.roles.buyerA], buy.instruction),
+  ]);
+  expect(await f.balances()).toEqual([900_000_000n, 0n, 97_500_000n, 2_500_000n]);
+  expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
+  expect(market.getListingRecordDecoder().decode(f.state().ledger.data)).toMatchObject({
+    status: market.ListingStatus.Purchased,
+    revision: 6n,
+    completedSales: 1n,
+  });
 }, 30_000);

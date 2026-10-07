@@ -147,3 +147,20 @@ export {
 export { isRetryableRpcFailure } from "./rpc-retry.js";
 
 export { readConditionInspectionScope } from "./attestation.js";
+
+export {
+  buildCreateListingTransaction,
+  buildCancelListingTransaction,
+  buildExpireListingTransaction,
+  buildPurchaseListingTransaction,
+  type MarketplaceTransactionContext,
+  type MarketplaceAddresses,
+  type MarketplacePurchaseAddresses,
+  type PreparedMarketplaceTransaction,
+  type MarketplaceArtworkAccounts,
+  type MarketplaceListingAccounts,
+  type MarketplacePurchaseAccounts,
+  type MarketplaceRevisionInput,
+  type MarketplaceListingInput,
+  type MarketplacePurchaseInput,
+} from "./marketplace.js";
