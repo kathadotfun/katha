@@ -2,6 +2,9 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token};
 use katha_registry::{program::KathaRegistry, KathaConfig};
 
+pub mod eligibility;
+pub use eligibility::*;
+
 declare_id!("B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq");
 
 pub const MARKETPLACE_CONFIG_SEED: &[u8] = b"marketplace-config";
@@ -11,6 +14,28 @@ pub const BASIS_POINTS_DENOMINATOR: u32 = 10_000;
 #[program]
 pub mod katha_marketplace {
     use super::*;
+
+    pub fn initialize_sale_terms(
+        ctx: Context<InitializeSaleTerms>,
+        artist_payout: Pubkey,
+    ) -> Result<()> {
+        require_keys_neq!(
+            artist_payout,
+            Pubkey::default(),
+            MarketplaceError::InvalidArtistPayout
+        );
+        let terms = &mut ctx.accounts.sale_terms;
+        terms.version = 1;
+        terms.artwork = ctx.accounts.artwork.key();
+        terms.artist_payout = artist_payout;
+        terms.bump = ctx.bumps.sale_terms;
+        Ok(())
+    }
+
+    // Read-only preview. Listing and purchase instructions must call the same validator.
+    pub fn check_sale_eligibility(ctx: Context<CheckSaleEligibility>) -> Result<()> {
+        ctx.accounts.validate(Clock::get()?.unix_timestamp)
+    }
 
     pub fn initialize_marketplace(
         ctx: Context<InitializeMarketplace>,
@@ -153,6 +178,24 @@ pub enum MarketplaceError {
     InvalidFees,
     #[msg("Inspection validity must be positive and fit the signed timestamp domain")]
     InvalidInspectionValidity,
+    #[msg("Artwork or Registry account does not match Marketplace configuration")]
+    InvalidArtwork,
+    #[msg("Seller must sign as the current Core owner")]
+    UnauthorizedSeller,
+    #[msg("Artwork verification or current condition commitment is invalid")]
+    InvalidAttestation,
+    #[msg("Artist payout must be configured and immutable")]
+    InvalidArtistPayout,
+    #[msg("Custody is unknown, in transit or unrelated to the current seller")]
+    InvalidCustody,
+    #[msg("Inspection does not approve the current custody and owner scope")]
+    InvalidInspectionScope,
+    #[msg("Collector inspection is expired or has an invalid timestamp")]
+    ExpiredInspection,
+    #[msg("Listing identity, version or primary-sale classification is invalid")]
+    InvalidListing,
+    #[msg("Listing price must be positive and expiry must be in the future")]
+    InvalidListingTerms,
 }
 
 #[cfg(test)]

@@ -1016,6 +1016,7 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "katha_registry",
+ "mpl-core",
 ]
 
 [[package]]

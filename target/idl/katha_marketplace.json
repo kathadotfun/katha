@@ -8,6 +8,310 @@
   },
   "instructions": [
     {
+      "name": "check_sale_eligibility",
+      "discriminator": [
+        36,
+        153,
+        2,
+        204,
+        199,
+        101,
+        233,
+        51
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry_program",
+          "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+        },
+        {
+          "name": "registry_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "condition_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  100,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "condition_report"
+        },
+        {
+          "name": "custody_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "sale_terms",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101,
+                  45,
+                  116,
+                  101,
+                  114,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  114,
+                  101,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "seller",
+          "signer": true
+        },
+        {
+          "name": "listing_address",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing",
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "initialize_marketplace",
       "discriminator": [
         47,
@@ -125,9 +429,154 @@
           "type": "u64"
         }
       ]
+    },
+    {
+      "name": "initialize_sale_terms",
+      "discriminator": [
+        42,
+        56,
+        223,
+        187,
+        72,
+        189,
+        35,
+        60
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry_program",
+          "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "sale_terms",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101,
+                  45,
+                  116,
+                  101,
+                  114,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "artist_payout",
+          "type": "pubkey"
+        }
+      ]
     }
   ],
   "accounts": [
+    {
+      "name": "ArtworkSaleTerms",
+      "discriminator": [
+        222,
+        252,
+        23,
+        205,
+        169,
+        39,
+        122,
+        125
+      ]
+    },
+    {
+      "name": "ListingRecord",
+      "discriminator": [
+        137,
+        46,
+        190,
+        68,
+        189,
+        213,
+        26,
+        171
+      ]
+    },
     {
       "name": "MarketplaceConfig",
       "discriminator": [
@@ -197,9 +646,423 @@
       "code": 6007,
       "name": "InvalidInspectionValidity",
       "msg": "Inspection validity must be positive and fit the signed timestamp domain"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidArtwork",
+      "msg": "Artwork or Registry account does not match Marketplace configuration"
+    },
+    {
+      "code": 6009,
+      "name": "UnauthorizedSeller",
+      "msg": "Seller must sign as the current Core owner"
+    },
+    {
+      "code": 6010,
+      "name": "InvalidAttestation",
+      "msg": "Artwork verification or current condition commitment is invalid"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidArtistPayout",
+      "msg": "Artist payout must be configured and immutable"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidCustody",
+      "msg": "Custody is unknown, in transit or unrelated to the current seller"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidInspectionScope",
+      "msg": "Inspection does not approve the current custody and owner scope"
+    },
+    {
+      "code": 6014,
+      "name": "ExpiredInspection",
+      "msg": "Collector inspection is expired or has an invalid timestamp"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidListing",
+      "msg": "Listing identity, version or primary-sale classification is invalid"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidListingTerms",
+      "msg": "Listing price must be positive and expiry must be in the future"
     }
   ],
   "types": [
+    {
+      "name": "ArtworkCategory",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Mandala"
+          },
+          {
+            "name": "Paubha"
+          },
+          {
+            "name": "Thangka"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkRecord",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "katha_id",
+            "type": "string"
+          },
+          {
+            "name": "artist_id",
+            "type": "string"
+          },
+          {
+            "name": "creator_wallet",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "category",
+            "type": {
+              "defined": {
+                "name": "ArtworkCategory"
+              }
+            }
+          },
+          {
+            "name": "creation_year",
+            "type": "u16"
+          },
+          {
+            "name": "authorship_evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "core_asset",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "registered_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "registered_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkSaleTerms",
+      "docs": [
+        "Permanent economic attribution, separate from the optional creator wallet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "artist_payout",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkVerification",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "authorship_evidence_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "verified_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConditionAttestation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "type": "u32"
+          },
+          {
+            "name": "report_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "report_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "grade",
+            "type": {
+              "defined": {
+                "name": "ConditionGrade"
+              }
+            }
+          },
+          {
+            "name": "reason",
+            "type": {
+              "defined": {
+                "name": "ConditionReason"
+              }
+            }
+          },
+          {
+            "name": "inspector_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "verifier",
+            "type": "pubkey"
+          },
+          {
+            "name": "inspected_at",
+            "type": "i64"
+          },
+          {
+            "name": "recorded_at",
+            "type": "i64"
+          },
+          {
+            "name": "owner_scope",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "custody_revision_scope",
+            "type": {
+              "option": "u64"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConditionGrade",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Excellent"
+          },
+          {
+            "name": "Good"
+          },
+          {
+            "name": "Fair"
+          },
+          {
+            "name": "Poor"
+          },
+          {
+            "name": "Damaged"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConditionHead",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "type": "u32"
+          },
+          {
+            "name": "current_report",
+            "type": "pubkey"
+          },
+          {
+            "name": "current_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConditionReason",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "InitialVerification"
+          },
+          {
+            "name": "PreSale"
+          },
+          {
+            "name": "PostDelivery"
+          },
+          {
+            "name": "PreResale"
+          },
+          {
+            "name": "ReturnToCustody"
+          },
+          {
+            "name": "Insurance"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustodyHead",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "state",
+            "type": {
+              "defined": {
+                "name": "CustodyState"
+              }
+            }
+          },
+          {
+            "name": "subject",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "latest_transition",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CustodyState",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Unknown"
+          },
+          {
+            "name": "KathaHeld"
+          },
+          {
+            "name": "CollectorHeld"
+          },
+          {
+            "name": "InTransit"
+          }
+        ]
+      }
+    },
     {
       "name": "KathaConfig",
       "type": {
@@ -240,6 +1103,130 @@
           {
             "name": "collection_authority_bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingRecord",
+      "docs": [
+        "One persistent bounded ledger per asset; cancellation must preserve completed_sales.",
+        "No instruction creates or activates this account until the listing feature."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "asset",
+            "type": "pubkey"
+          },
+          {
+            "name": "seller",
+            "type": "pubkey"
+          },
+          {
+            "name": "artist_payout",
+            "type": "pubkey"
+          },
+          {
+            "name": "payment_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "condition_report",
+            "type": "pubkey"
+          },
+          {
+            "name": "condition_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "condition_version",
+            "type": "u32"
+          },
+          {
+            "name": "custody_revision",
+            "type": "u64"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "expires_at",
+            "type": "i64"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "completed_sales",
+            "type": "u64"
+          },
+          {
+            "name": "sale_kind",
+            "type": {
+              "defined": {
+                "name": "SaleKind"
+              }
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "ListingStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Inactive"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Cancelled"
+          },
+          {
+            "name": "Expired"
+          },
+          {
+            "name": "Purchased"
           }
         ]
       }
@@ -356,6 +1343,20 @@
           {
             "name": "inspection_validity_seconds",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SaleKind",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Primary"
+          },
+          {
+            "name": "Secondary"
           }
         ]
       }

@@ -30,28 +30,64 @@ export const KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT = 0x1775; // 6005
 export const KATHA_MARKETPLACE_ERROR__INVALID_FEES = 0x1776; // 6006
 /** InvalidInspectionValidity: Inspection validity must be positive and fit the signed timestamp domain */
 export const KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_VALIDITY = 0x1777; // 6007
+/** InvalidArtwork: Artwork or Registry account does not match Marketplace configuration */
+export const KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK = 0x1778; // 6008
+/** UnauthorizedSeller: Seller must sign as the current Core owner */
+export const KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER = 0x1779; // 6009
+/** InvalidAttestation: Artwork verification or current condition commitment is invalid */
+export const KATHA_MARKETPLACE_ERROR__INVALID_ATTESTATION = 0x177a; // 6010
+/** InvalidArtistPayout: Artist payout must be configured and immutable */
+export const KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT = 0x177b; // 6011
+/** InvalidCustody: Custody is unknown, in transit or unrelated to the current seller */
+export const KATHA_MARKETPLACE_ERROR__INVALID_CUSTODY = 0x177c; // 6012
+/** InvalidInspectionScope: Inspection does not approve the current custody and owner scope */
+export const KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_SCOPE = 0x177d; // 6013
+/** ExpiredInspection: Collector inspection is expired or has an invalid timestamp */
+export const KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION = 0x177e; // 6014
+/** InvalidListing: Listing identity, version or primary-sale classification is invalid */
+export const KATHA_MARKETPLACE_ERROR__INVALID_LISTING = 0x177f; // 6015
+/** InvalidListingTerms: Listing price must be positive and expiry must be in the future */
+export const KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS = 0x1780; // 6016
 
 export type KathaMarketplaceError =
+  | typeof KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_ATTESTATION
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_AUTHORITY
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_CUSTODY
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_FEES
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_SCOPE
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_VALIDITY
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_TREASURY
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY
-  | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP;
+  | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP
+  | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER;
 
 let kathaMarketplaceErrorMessages: Record<KathaMarketplaceError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   kathaMarketplaceErrorMessages = {
+    [KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION]: `Collector inspection is expired or has an invalid timestamp`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT]: `Artist payout must be configured and immutable`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK]: `Artwork or Registry account does not match Marketplace configuration`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_ATTESTATION]: `Artwork verification or current condition commitment is invalid`,
     [KATHA_MARKETPLACE_ERROR__INVALID_AUTHORITY]: `Marketplace authority cannot be the default address`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_CUSTODY]: `Custody is unknown, in transit or unrelated to the current seller`,
     [KATHA_MARKETPLACE_ERROR__INVALID_FEES]: `Combined commission and secondary royalty exceed 10000 basis points`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_SCOPE]: `Inspection does not approve the current custody and owner scope`,
     [KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_VALIDITY]: `Inspection validity must be positive and fit the signed timestamp domain`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_LISTING]: `Listing identity, version or primary-sale classification is invalid`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS]: `Listing price must be positive and expiry must be in the future`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT]: `Payment mint must use six decimals and have no freeze authority`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA]: `ProgramData does not belong to this Marketplace program`,
     [KATHA_MARKETPLACE_ERROR__INVALID_TREASURY]: `Registry treasury cannot be the default address`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY]: `Only the configured Registry authority can initialize Marketplace`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP]: `Bootstrap signer is not the Marketplace upgrade authority`,
+    [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER]: `Seller must sign as the current Core owner`,
   };
 }
 

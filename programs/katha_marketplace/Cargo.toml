@@ -21,6 +21,7 @@ custom-panic = []
 
 [dependencies]
 anchor-lang = "=1.2.0"
+mpl-core = "=0.12.1"
 anchor-spl = { version = "=1.2.0", default-features = false, features = ["token"] }
 katha_registry = { path = "../katha_registry", features = ["cpi"] }
 

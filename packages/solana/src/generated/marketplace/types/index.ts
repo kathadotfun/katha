@@ -6,4 +6,15 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./artworkCategory.js";
+export * from "./artworkRecord.js";
+export * from "./artworkVerification.js";
+export * from "./conditionAttestation.js";
+export * from "./conditionGrade.js";
+export * from "./conditionHead.js";
+export * from "./conditionReason.js";
+export * from "./custodyHead.js";
+export * from "./custodyState.js";
 export * from "./kathaConfig.js";
+export * from "./listingStatus.js";
+export * from "./saleKind.js";
