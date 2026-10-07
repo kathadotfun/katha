@@ -30,10 +30,11 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --exclude tests/core-cpi.test.ts --exclude tests/registry-config.test.ts --exclude tests/admin-lifecycle.test.ts",
+    "test": "vitest run --exclude tests/core-cpi.test.ts --exclude tests/registry-config.test.ts --exclude tests/admin-lifecycle.test.ts --exclude tests/marketplace-fixtures.test.ts",
     "program:typecheck": "tsc -p tsconfig.tests.json --noEmit"
   },
   "devDependencies": {
+    "@solana-program/token": "0.17.0",
     "@solana/kit-plugin-litesvm": "0.19.0",
     "@solana/kit-plugin-signer": "0.19.0",
     "@types/node": "24.19.0",

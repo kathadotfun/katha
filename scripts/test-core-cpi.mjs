@@ -172,7 +172,11 @@ async function main() {
         "run",
         ...(adminLifecycle
           ? ["tests/admin-lifecycle.test.ts"]
-          : ["tests/core-cpi.test.ts", "tests/registry-config.test.ts"]),
+          : [
+              "tests/core-cpi.test.ts",
+              "tests/registry-config.test.ts",
+              "tests/marketplace-fixtures.test.ts",
+            ]),
       ],
       root,
       {

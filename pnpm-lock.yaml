@@ -330,6 +330,9 @@ importers:
         specifier: 0.19.0
         version: 0.19.0(@solana/kit@8.4.0(typescript@6.0.3))
     devDependencies:
+      '@solana-program/token':
+        specifier: 0.17.0
+        version: 0.17.0(@solana/kit@8.4.0(typescript@6.0.3))
       '@solana/kit-plugin-litesvm':
         specifier: 0.19.0
         version: 0.19.0(@solana/kit@8.4.0(typescript@6.0.3))(typescript@6.0.3)
@@ -1315,10 +1318,20 @@ packages:
     peerDependencies:
       '@solana/kit': ^8.0.0
 
+  '@solana-program/system@0.15.0':
+    resolution: {integrity: sha512-xE08wZCyNRhOaO/XNRd9A3kSLfUrTe/BnmAHhql8uqc2eriNy2ZmnvaGRrs0m+kOSihvUbANzHljmJsTzGL5kg==}
+    peerDependencies:
+      '@solana/kit': ^8.3.0
+
   '@solana-program/token@0.16.1':
     resolution: {integrity: sha512-X9dsvbh+VDq4SuCfvxn95P1DCvtBYHJOBiVmgBJMfW8l/lp8uSwEhy9IurpcdltnGi5kNIkCm4sk4YOXKAMiCw==}
     peerDependencies:
       '@solana/kit': ^8.0.0
+
+  '@solana-program/token@0.17.0':
+    resolution: {integrity: sha512-l7EhF3lCWXXdOllGI8qnbF4Pj7pCT/5zJTW2lPsNUQfa7G28pnFhSssHW2GCW7dzGttSHgPdJYdQRB5rvQoN9Q==}
+    peerDependencies:
+      '@solana/kit': ^8.3.0
 
   '@solana/accounts@8.4.0':
     resolution: {integrity: sha512-YklERWeG5UD2fzxR0zwWgzCVyuHRqg6eTIyGBAe8hOWIim8TYS1aPBVFAlVkSZiAXaFRxmu1E3IRfeCe/QSQmg==}
@@ -3776,9 +3789,18 @@ snapshots:
     dependencies:
       '@solana/kit': 8.4.0(typescript@6.0.3)
 
+  '@solana-program/system@0.15.0(@solana/kit@8.4.0(typescript@6.0.3))':
+    dependencies:
+      '@solana/kit': 8.4.0(typescript@6.0.3)
+
   '@solana-program/token@0.16.1(@solana/kit@8.4.0(typescript@6.0.3))':
     dependencies:
       '@solana-program/system': 0.14.1(@solana/kit@8.4.0(typescript@6.0.3))
+      '@solana/kit': 8.4.0(typescript@6.0.3)
+
+  '@solana-program/token@0.17.0(@solana/kit@8.4.0(typescript@6.0.3))':
+    dependencies:
+      '@solana-program/system': 0.15.0(@solana/kit@8.4.0(typescript@6.0.3))
       '@solana/kit': 8.4.0(typescript@6.0.3)
 
   '@solana/accounts@8.4.0(typescript@6.0.3)':

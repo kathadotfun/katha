@@ -212,6 +212,7 @@ outside the current scope.
 - [Solana package boundary](docs/development/solana-package.md)
 - [Anchor program workspace](docs/development/anchor-workspace.md)
 - [Local program testing](docs/development/program-testing.md)
+- [Local marketplace settlement fixtures](docs/development/marketplace-fixtures.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)
