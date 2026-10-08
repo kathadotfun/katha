@@ -44,8 +44,8 @@ custody remain separate.
 An ACTIVE record needs release even if its expiry has passed. Refresh before
 another preparation, especially after uncertain responses. Check a retained
 signature before retrying; unknown confirmation is not success. Wallet/session
-changes discard stale reads and prepared authority. Cancellation and expiry
-recovery controls are implemented in the following step.
+changes discard stale reads and prepared authority. The same route also provides
+[seller cancellation and expiry recovery](listing-management-web.md) controls.
 
 ## Verification
 

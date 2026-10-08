@@ -10,7 +10,10 @@ import {
   blockhash,
   pipe,
 } from "@solana/kit";
-import { getCreateListingInstructionAsync } from "@katha/solana/marketplace";
+import {
+  getCreateListingInstructionAsync,
+  getCancelListingInstructionAsync,
+} from "@katha/solana/marketplace";
 import {
   findArtworkPda,
   findReportPda,
@@ -97,6 +100,59 @@ export async function listingFixture(
         asset: String(ix.accounts[9].address),
         collection,
       },
+    },
+  };
+}
+
+export async function cancellationFixture(
+  patch: {
+    wallet?: string;
+    kathaId?: string;
+    actor?: string;
+    revision?: bigint;
+    coreProgram?: string;
+  } = {},
+) {
+  const base = await listingFixture(patch);
+  const [artwork] = await findArtworkPda({ kathaId: base.operation.kathaId });
+  const ix = await getCancelListingInstructionAsync({
+    artwork,
+    actor: createNoopSigner(address(patch.actor ?? base.operation.feePayer)),
+    collection: address(base.expected.listing.collection),
+    registryProgram: KATHA_REGISTRY_PROGRAM_ADDRESS,
+    expectedRevision: patch.revision ?? 1n,
+    ...(patch.coreProgram ? { coreProgram: address(patch.coreProgram) } : {}),
+  });
+  const tx = compileTransaction(
+    pipe(
+      createTransactionMessage({ version: 0 }),
+      (msg) => setTransactionMessageFeePayer(address(base.operation.feePayer), msg),
+      (msg) =>
+        setTransactionMessageLifetimeUsingBlockhash(
+          {
+            blockhash: blockhash(base.operation.blockhash),
+            lastValidBlockHeight: 1000n,
+          },
+          msg,
+        ),
+      (msg) => appendTransactionMessageInstruction(ix, msg),
+    ),
+  );
+  const operation: ListingPreparationResponse & { kind: "CANCEL_LISTING" } = {
+    ...base.operation,
+    kind: "CANCEL_LISTING",
+    currentRevision: "1",
+    nextRevision: "2",
+    transactionBase64: String(getBase64EncodedWireTransaction(tx)),
+    messageHash: await sha256Hex(Uint8Array.from(tx.messageBytes)),
+  };
+  return {
+    operation,
+    listingAddress: String(ix.accounts[5].address),
+    expected: {
+      ...base.expected,
+      kind: "CANCEL_LISTING" as const,
+      listing: { ...base.expected.listing, expectedRevision: "1" },
     },
   };
 }

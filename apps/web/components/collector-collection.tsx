@@ -219,19 +219,16 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
                     <p className="mt-4 break-all text-sm text-muted">
                       Core asset: <span className="font-mono">{item.assetAddress}</span>
                     </p>
-                    {!changedOwner &&
-                      listing &&
-                      (!listing.listing ||
-                        ["CANCELLED", "EXPIRED", "PURCHASED"].includes(
-                          listing.listing.status,
-                        )) && (
-                        <Link
-                          href={`/collection/${artwork.kathaId}/list`}
-                          className="text-link mt-4 inline-flex min-h-11 items-center"
-                        >
-                          Offer this artwork for sale
-                        </Link>
-                      )}
+                    {!changedOwner && listing && (
+                      <Link
+                        href={`/collection/${artwork.kathaId}/list`}
+                        className="text-link mt-4 inline-flex min-h-11 items-center"
+                      >
+                        {listing.listing?.status === "ACTIVE"
+                          ? "Manage this listing"
+                          : "Offer this artwork for sale"}
+                      </Link>
+                    )}
                     <p className="mt-3 text-sm text-muted">
                       These are recorded observations, not a live ownership or physical
                       inspection guarantee.

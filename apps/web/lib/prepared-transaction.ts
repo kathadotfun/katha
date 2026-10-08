@@ -153,12 +153,77 @@ export async function inspectPreparedTransaction(
     message.instructions.length !== 1 ||
     !instruction?.data ||
     (operation.kind !== "CREATE_LISTING" &&
+      operation.kind !== "CANCEL_LISTING" &&
       (instruction.programAddress !== KATHA_REGISTRY_PROGRAM_ADDRESS ||
         !kinds[operation.kind].includes(
           identifyKathaRegistryInstruction(instruction.data),
         )))
   )
     throw new Error("Preparation does not match the requested operation.");
+  if (operation.kind === "CANCEL_LISTING") {
+    const expected = context.listing;
+    if (
+      !expected ||
+      instruction.programAddress !== market.KATHA_MARKETPLACE_PROGRAM_ADDRESS ||
+      market.identifyKathaMarketplaceInstruction(instruction.data!) !==
+        market.KathaMarketplaceInstruction.CancelListing
+    )
+      throw new Error("Cancellation operation mismatch");
+    const parsed = market.parseCancelListingInstruction({
+      ...instruction,
+      accounts: instruction.accounts ?? [],
+      data: instruction.data!,
+    });
+    const [[artwork], [config], [registryConfig]] = await Promise.all([
+      findArtworkPda({ kathaId: operation.kathaId }),
+      market.findConfigPda(),
+      findConfigPda(),
+    ]);
+    const [asset] = await findAssetPda({ artwork });
+    const [listing] = await market.findListingPda({ asset });
+    const accounts = [
+      config,
+      KATHA_REGISTRY_PROGRAM_ADDRESS,
+      registryConfig,
+      artwork,
+      asset,
+      listing,
+      address(context.wallet),
+      address(expected.collection),
+      CORE_PROGRAM_ADDRESS,
+      address("11111111111111111111111111111111"),
+    ];
+    const roles = [0, 0, 0, 0, 1, 1, 3, 1, 0, 0];
+    if (
+      asset !== expected.asset ||
+      parsed.data.expectedRevision !== BigInt(expected.expectedRevision) ||
+      operation.currentRevision !== expected.expectedRevision ||
+      operation.price !== expected.price ||
+      operation.expiresAt !== expected.expiresAt ||
+      BigInt(operation.nextRevision) !== BigInt(expected.expectedRevision) + 1n ||
+      instruction.data!.length !== 16 ||
+      instruction.accounts?.length !== accounts.length ||
+      instruction.accounts.some(
+        (item, i) => item.address !== accounts[i] || item.role !== roles[i],
+      )
+    )
+      throw new Error("Cancellation terms or account binding mismatch");
+    return {
+      operation,
+      transaction: {
+        ...transaction,
+        lifetimeConstraint: {
+          blockhash: message.lifetimeConstraint.blockhash,
+          lastValidBlockHeight: BigInt(operation.lastValidBlockHeight),
+        },
+      },
+      accounts: instruction.accounts.map((item) => ({
+        address: String(item.address),
+        role: item.role,
+      })),
+      program: String(instruction.programAddress),
+    };
+  }
   if (operation.kind === "CREATE_LISTING") {
     const expected = context.listing;
     if (

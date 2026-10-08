@@ -88,6 +88,9 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    prepareCancellation: async () => {
+      throw new Error("Unexpected cancellation");
+    },
     prepareListing: async () => {
       throw new Error("Unused listing fixture");
     },

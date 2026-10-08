@@ -19,6 +19,12 @@ const noop = () => () => {};
 const emptyAuth = () => signedOutSnapshot;
 const emptyState = () => emptyOwnerListingSnapshot;
 const emptyFlow = () => idleTransactionSnapshot;
+function expiryLabel(seconds: string) {
+  const date = new Date(Number(seconds) * 1000);
+  return Number.isFinite(date.getTime())
+    ? date.toISOString()
+    : `${seconds} Unix seconds`;
+}
 export function OwnerListingPanel({
   kathaId,
   apiOrigin,
@@ -60,6 +66,15 @@ export function OwnerListingPanel({
     transactions?.getSnapshot ?? emptyFlow,
     emptyFlow,
   );
+  useEffect(() => {
+    if (
+      flow.phase === "indexed" &&
+      flow.operation?.kathaId === kathaId &&
+      (flow.operation.kind === "CREATE_LISTING" ||
+        flow.operation.kind === "CANCEL_LISTING")
+    )
+      void workflow?.read();
+  }, [workflow, flow.phase, flow.operation?.operationId, kathaId]);
   const [price, setPrice] = useState(""),
     [expiry, setExpiry] = useState("");
   useEffect(() => {
@@ -91,8 +106,8 @@ export function OwnerListingPanel({
       </p>
       <p className="mt-4 text-sm">
         Collector-held resale requires a current inspection approved for the owner and
-        custody state. Katha-held resale uses the applicable condition rules.
-        Preparation and chain simulation recheck eligibility and the configured
+        custody state. Katha-held resale uses the applicable condition rules. New
+        listing preparation and chain simulation recheck eligibility and the configured
         inspection validity; an owned work is not automatically eligible.
       </p>
       <button
@@ -124,6 +139,52 @@ export function OwnerListingPanel({
               ? "This listing must be released before another can be created."
               : "A fresh preparation will recheck the current owner and artwork eligibility."}
           </p>
+          {state.page.listing && (
+            <div className="mt-6 border-t border-line pt-4">
+              <h3 className="text-xl">
+                Recorded listing: {state.page.listing.status.toLowerCase()}
+              </h3>
+              <p className="mt-3 text-sm">
+                Price: {state.page.listing.price} test-token base units · Expiry:{" "}
+                {expiryLabel(state.page.listing.expiresAt)}
+              </p>
+              {state.page.listing.status === "ACTIVE" && (
+                <>
+                  <p className="mt-3 text-sm">
+                    {BigInt(state.page.chainTime) >=
+                    BigInt(state.page.listing.expiresAt)
+                      ? "The observed chain time has reached expiry. Expiry alone does not unlock the asset."
+                      : "This recorded offer still locks the asset until a release or purchase finalizes."}{" "}
+                    Seller cancellation releases the temporary Marketplace delegates,
+                    including after expiry. It does not move physical custody or require
+                    another inspection.
+                  </p>
+                  <button
+                    type="button"
+                    className="button-primary mt-4"
+                    disabled={!workflow?.canRelease()}
+                    onClick={() => void workflow?.release()}
+                  >
+                    {BigInt(state.page.chainTime) >=
+                    BigInt(state.page.listing.expiresAt)
+                      ? "Release expired listing"
+                      : "Cancel listing"}
+                  </button>
+                  <p className="mt-3 text-sm text-muted">
+                    Requires the current owner and recorded seller wallet. Review and
+                    approve the cancellation transaction; release is complete only after
+                    finalized confirmation and a matching chain observation.
+                  </p>
+                </>
+              )}
+              {state.page.listing.status === "CANCELLED" && (
+                <p className="mt-3 text-sm">
+                  Cancellation recorded. Refresh reads finalized chain state; ownership
+                  and physical custody remain separate.
+                </p>
+              )}
+            </div>
+          )}
           <form
             className="mt-6 space-y-5"
             onSubmit={(event) => {
@@ -182,12 +243,13 @@ export function OwnerListingPanel({
           )}
         </>
       )}
-      {flow.operation?.kind === "CREATE_LISTING" &&
+      {(flow.operation?.kind === "CREATE_LISTING" ||
+        flow.operation?.kind === "CANCEL_LISTING") &&
         flow.operation.kathaId === kathaId && (
           <>
             <p className="mt-6">
               Price: {flow.operation.price} test-token base units · Expiry:{" "}
-              {new Date(Number(flow.operation.expiresAt) * 1000).toISOString()}
+              {expiryLabel(flow.operation.expiresAt)}
             </p>
             <TransactionReviewView
               id="listing-transaction-review"

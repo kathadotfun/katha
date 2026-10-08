@@ -1,4 +1,7 @@
-import { listingFixture } from "../apps/web/tests/fixtures/listing.ts";
+import {
+  listingFixture,
+  cancellationFixture,
+} from "../apps/web/tests/fixtures/listing.ts";
 import { provenanceFixture } from "../apps/web/tests/fixtures/provenance.ts";
 import {
   collectionFixture,
@@ -329,6 +332,11 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       // Exercise the owner form with a generated instruction, isolated API and RPC.
 
       let listingPreparations = 0;
+      let releaseMode = "NONE",
+        releasePreparations = 0;
+      const releaseFixture = await cancellationFixture({
+        kathaId: fixture.operation.kathaId,
+      });
       await context.route(
         `${apiOrigin}/artworks/${fixture.operation.kathaId}/listing`,
         (route) =>
@@ -338,8 +346,29 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
               ...collectionListingFixture(issuedSession.walletAddress),
               kathaId: fixture.operation.kathaId,
               asset: fixture.expected.listing.asset,
-              currentRevision: "0",
-              chainTime: String(Math.floor(Date.now() / 1000)),
+              currentRevision:
+                releaseMode === "NONE" ? "0" : releaseMode === "CANCELLED" ? "2" : "1",
+              chainTime:
+                releaseMode === "EXPIRED"
+                  ? "1900000000"
+                  : String(Math.floor(Date.now() / 1000)),
+              listing:
+                releaseMode === "NONE"
+                  ? null
+                  : {
+                      address: releaseFixture.listingAddress,
+                      status: releaseMode === "CANCELLED" ? "CANCELLED" : "ACTIVE",
+                      revision: releaseMode === "CANCELLED" ? "2" : "1",
+                      completedSales: "0",
+                      saleKind: "PRIMARY",
+                      seller: issuedSession.walletAddress,
+                      paymentMint: "11111111111111111111111111111114",
+                      decimals: 6,
+                      price: "12500001",
+                      createdAt: "1700000000",
+                      expiresAt: "1900000000",
+                      active: releaseMode === "ACTIVE",
+                    },
             },
           }),
       );
@@ -385,6 +414,26 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
               expiresAt: input.expiresAt,
             },
           });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/artworks/${fixture.operation.kathaId}/operations/cancellation`,
+        (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers });
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          const input = route.request().postDataJSON();
+          assert.equal(input.expectedRevision, "1");
+          assert.deepEqual(Object.keys(input).sort(), [
+            "expectedRevision",
+            "idempotencyKey",
+            "supportedTransactionVersions",
+          ]);
+          releasePreparations++;
+          return route.fulfill({ headers, json: releaseFixture.operation });
         },
       );
       await context.route("http://127.0.0.1:8899/**", (route) => {
@@ -456,6 +505,60 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       });
       await review.getByRole("button", { name: "Cancel transaction review" }).click();
       await expect(prepare).toBeDisabled();
+      releaseMode = "ACTIVE";
+      await main
+        .getByRole("button", { name: "Refresh listing state", exact: true })
+        .click();
+      await expect(
+        main.getByRole("button", { name: "Cancel listing", exact: true }),
+      ).toBeEnabled();
+      await main.getByRole("button", { name: "Cancel listing", exact: true }).click();
+      await expect(review).toContainText("CANCEL LISTING");
+      await expect(review).toContainText("Review transaction before wallet approval");
+      assert.equal(releasePreparations, 1);
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
+        0,
+      );
+      await review
+        .getByRole("button", { name: "Approve in wallet and submit" })
+        .click();
+      await expect(review).toContainText("Transaction not completed");
+      await expect(main).not.toContainText("Cancellation recorded");
+      await review.getByRole("button", { name: "Cancel transaction review" }).click();
+      releaseMode = "EXPIRED";
+      await main
+        .getByRole("button", { name: "Refresh listing state", exact: true })
+        .click();
+      await expect(main).toContainText("Expiry alone does not unlock the asset");
+      const release = main.getByRole("button", {
+        name: "Release expired listing",
+        exact: true,
+      });
+      await expect(release).toBeEnabled();
+      await release.click();
+      await expect(review).toContainText("Review transaction before wallet approval");
+      assert.equal(releasePreparations, 2);
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.screenshot({
+        path: `/tmp/katha-124-expired-listing-${width}.png`,
+        fullPage: true,
+      });
+      await review.getByRole("button", { name: "Cancel transaction review" }).click();
+      // Simulate cleanup finalized elsewhere, then read actual terminal observation.
+      releaseMode = "CANCELLED";
+      await main
+        .getByRole("button", { name: "Refresh listing state", exact: true })
+        .click();
+      await expect(main).toContainText("Cancellation recorded");
+      await expect(prepare).toBeEnabled();
+      await expect(release).toHaveCount(0);
+
       await main
         .getByRole("link", { name: "Back to my collection", exact: true })
         .click();
@@ -478,7 +581,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await context.close();
     }
     console.log(
-      "Collector account, collection and owner listing browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
+      "Collector account, collection, owner listing and release browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
     );
   } finally {
     await browser.close();

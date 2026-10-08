@@ -39,9 +39,12 @@ when identity changes or the component unmounts. An empty collection is distinct
 from an unavailable request and may reflect unpublished work or indexing delay.
 No private fulfillment details, raw events, token balances or purchase controls
 are added by this page. When a finalized listing lookup agrees with the indexed
-owner and no ACTIVE listing requires release, **Offer this artwork for sale**
-opens the [owner listing form](owner-listing-web.md). Eligibility is rechecked
-during preparation and chain simulation.
+owner, **Offer this artwork for sale** opens the [owner listing form](owner-listing-web.md).
+For an ACTIVE ledger, **Manage this listing** opens the same route's
+[cancellation and expired-offer release controls](listing-management-web.md).
+Only the recorded seller/current owner can prepare cancellation. Expiry alone
+requires cleanup; eligibility is rechecked during new listing preparation and
+chain simulation.
 
 ## Verification
 

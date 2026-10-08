@@ -64,7 +64,9 @@ export function TransactionReviewView({
       <p role="status" className="mt-3">
         {state.operation?.kind === "CREATE_LISTING" && state.phase === "indexed"
           ? "Transaction finalized and active listing observed"
-          : labels[state.phase]}
+          : state.operation?.kind === "CANCEL_LISTING" && state.phase === "indexed"
+            ? "Transaction finalized and cancelled listing observed"
+            : labels[state.phase]}
       </p>
       {operation && (
         <>

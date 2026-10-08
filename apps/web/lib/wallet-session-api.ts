@@ -1,5 +1,7 @@
 import {
   listingCreateRequestSchema,
+  listingCancelRequestSchema,
+  type ListingCancelRequest,
   listingPreparationResponseSchema,
   artworkDraftParamsSchema as listingParamsSchema,
   type ListingCreateRequest,
@@ -159,6 +161,29 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async prepareCancellation(
+      kathaId: string,
+      input: ListingCancelRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const result = listingPreparationResponseSchema.parse(
+        await request(
+          `/artworks/${path.kathaId}/operations/cancellation`,
+          listingCancelRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kind !== "CANCEL_LISTING" ||
+        result.kathaId !== path.kathaId ||
+        result.currentRevision !== input.expectedRevision
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return { ...result, kind: "CANCEL_LISTING" as const };
+    },
     async prepareListing(
       kathaId: string,
       input: ListingCreateRequest,

@@ -1,4 +1,4 @@
-import type { ListingCreateRequest } from "@katha/shared";
+import type { ListingCreateRequest, ListingCancelRequest } from "@katha/shared";
 import type { WalletOperation } from "./wallet-operation.ts";
 import type { CollectorCollectionQuery } from "@katha/shared";
 import type {
@@ -128,6 +128,22 @@ export function createWalletSession(
     return result;
   }
   return {
+    async prepareCancellation(
+      kathaId: string,
+      input: ListingCancelRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.prepareCancellation(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async prepareListing(
       kathaId: string,
       input: ListingCreateRequest,

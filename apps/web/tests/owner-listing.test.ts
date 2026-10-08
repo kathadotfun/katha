@@ -9,7 +9,7 @@ import {
   listingObservationMatches,
 } from "../lib/owner-listing.ts";
 import { inspectPreparedTransaction } from "../lib/prepared-transaction.ts";
-import { listingFixture } from "./fixtures/listing.ts";
+import { listingFixture, cancellationFixture } from "./fixtures/listing.ts";
 import { createWalletSessionApi } from "../lib/wallet-session-api.ts";
 import { collectionListingFixture } from "./fixtures/collection.ts";
 import { provenanceFixture } from "./fixtures/provenance.ts";
@@ -128,6 +128,9 @@ test("owner-only workflow rejects nonowner and active listings without preparing
     {
       getSnapshot: () => auth,
       subscribe,
+      prepareCancellation: async () => {
+        throw new Error("Unexpected cancellation");
+      },
       prepareListing: async () => {
         prepares++;
         return operation;
@@ -210,148 +213,152 @@ test("owner-only workflow rejects nonowner and active listings without preparing
   assert.equal(listeners.size, 0);
 });
 
-test("listing lifecycle simulates, requires approval, signs exact wire and confirms indexing", async () => {
-  const { generateKeyPairSigner, signTransaction, getSignatureFromTransaction } =
-    await import("@solana/kit");
-  const { decodeCanonicalTransaction } = await import("../lib/prepared-transaction.ts");
-  const { createTransactionLifecycle } =
-    await import("../lib/transaction-lifecycle.ts");
-  const signer = await generateKeyPairSigner();
-  const { operation, expected } = await listingFixture({ wallet: signer.address });
-  const signed = await signTransaction(
-    [signer.keyPair],
-    decodeCanonicalTransaction(operation.transactionBase64),
-  );
-  const signature = getSignatureFromTransaction(signed);
-  const calls: string[] = [];
-  let receiptCalls = 0;
-  const account = {
-    address: signer.address,
-    publicKey: new Uint8Array(
-      await crypto.subtle.exportKey("raw", signer.keyPair.publicKey),
-    ),
-    chains: ["solana:localnet"],
-    features: ["solana:signTransaction"],
-  };
-  const adapterState = {
-    status: "connected",
-    wallets: [],
-    reconnectingTo: null,
-    connected: {
-      account,
-      wallet: {
-        name: "Synthetic",
-        accounts: [account],
-        chains: ["solana:localnet"],
-        features: ["solana:signTransaction"],
-      },
-      signer: {
-        address: signer.address,
-        modifyAndSignTransactions: async () => {
-          calls.push("sign");
-          return [signed];
+for (const kind of ["create", "cancel"] as const)
+  test(`${kind} listing lifecycle simulates, requires approval, signs exact wire and confirms indexing`, async () => {
+    const { generateKeyPairSigner, signTransaction, getSignatureFromTransaction } =
+      await import("@solana/kit");
+    const { decodeCanonicalTransaction } =
+      await import("../lib/prepared-transaction.ts");
+    const { createTransactionLifecycle } =
+      await import("../lib/transaction-lifecycle.ts");
+    const signer = await generateKeyPairSigner();
+    const { operation, expected } = await (
+      kind === "create" ? listingFixture : cancellationFixture
+    )({ wallet: signer.address });
+    const signed = await signTransaction(
+      [signer.keyPair],
+      decodeCanonicalTransaction(operation.transactionBase64),
+    );
+    const signature = getSignatureFromTransaction(signed);
+    const calls: string[] = [];
+    let receiptCalls = 0;
+    const account = {
+      address: signer.address,
+      publicKey: new Uint8Array(
+        await crypto.subtle.exportKey("raw", signer.keyPair.publicKey),
+      ),
+      chains: ["solana:localnet"],
+      features: ["solana:signTransaction"],
+    };
+    const adapterState = {
+      status: "connected",
+      wallets: [],
+      reconnectingTo: null,
+      connected: {
+        account,
+        wallet: {
+          name: "Synthetic",
+          accounts: [account],
+          chains: ["solana:localnet"],
+          features: ["solana:signTransaction"],
         },
+        signer: {
+          address: signer.address,
+          modifyAndSignTransactions: async () => {
+            calls.push("sign");
+            return [signed];
+          },
+        },
+        supportedTransactionVersions: new Set([0]),
       },
-      supportedTransactionVersions: new Set([0]),
-    },
-  } as unknown as WalletState;
-  const adapter = createWalletBoundary(
-    {
-      getState: () => adapterState,
+    } as unknown as WalletState;
+    const adapter = createWalletBoundary(
+      {
+        getState: () => adapterState,
+        subscribe: () => () => {},
+        connect: async () => [],
+        disconnect: async () => {},
+        selectAccount: () => {},
+      },
+      "localnet",
+    );
+    const connection = {
+      cluster: "localnet" as const,
+      getSnapshot: () => ({
+        status: "connected" as const,
+        wallets: [],
+        connected: {
+          walletId: "synthetic",
+          walletName: "Synthetic",
+          address: signer.address,
+          accounts: [signer.address],
+          supportsV0: true,
+          supportsV1: false,
+          supportsMessageSigning: true,
+        },
+      }),
       subscribe: () => () => {},
-      connect: async () => [],
+      signPreparedTransaction: adapter.signPreparedTransaction,
+      connect: async () => {},
       disconnect: async () => {},
       selectAccount: () => {},
-    },
-    "localnet",
-  );
-  const connection = {
-    cluster: "localnet" as const,
-    getSnapshot: () => ({
-      status: "connected" as const,
-      wallets: [],
-      connected: {
-        walletId: "synthetic",
-        walletName: "Synthetic",
-        address: signer.address,
-        accounts: [signer.address],
-        supportsV0: true,
-        supportsV1: false,
-        supportsMessageSigning: true,
+      signLoginChallenge: async () => "",
+      dispose: () => {},
+    };
+    const session = {
+      getSnapshot: () => ({
+        status: "signed-in" as const,
+        session: {
+          walletId: "aaaaaaaa-1111-4111-8111-111111111111",
+          walletAddress: signer.address,
+          cluster: "localnet" as const,
+          expiresAt: new Date(Date.now() + 60000).toISOString(),
+        },
+        error: null,
+      }),
+      subscribe: () => () => {},
+      reconcile: async () => {
+        calls.push("receipt");
+        const status =
+          ++receiptCalls === 1 ? ("UNKNOWN" as const) : ("FINALIZED" as const);
+        return {
+          receiptId: operation.operationId,
+          operationId: operation.operationId,
+          preparationId: operation.preparationId,
+          kind: operation.kind,
+          cluster: operation.cluster,
+          signature,
+          messageHash: operation.messageHash,
+          status,
+          operationStatus: status,
+          failureCode: null,
+          slot: status === "FINALIZED" ? "12" : null,
+          chainRecordedAt: status === "FINALIZED" ? new Date().toISOString() : null,
+        };
       },
-    }),
-    subscribe: () => () => {},
-    signPreparedTransaction: adapter.signPreparedTransaction,
-    connect: async () => {},
-    disconnect: async () => {},
-    selectAccount: () => {},
-    signLoginChallenge: async () => "",
-    dispose: () => {},
-  };
-  const session = {
-    getSnapshot: () => ({
-      status: "signed-in" as const,
-      session: {
-        walletId: "aaaaaaaa-1111-4111-8111-111111111111",
-        walletAddress: signer.address,
-        cluster: "localnet" as const,
-        expiresAt: new Date(Date.now() + 60000).toISOString(),
+    };
+    const flow = createTransactionLifecycle(
+      connection,
+      session,
+      {
+        height: async () => 1n,
+        simulate: async () => {
+          calls.push("simulate");
+          return { slot: "1", unitsConsumed: "200", feeLamports: "5000" };
+        },
+        submit: async () => {
+          calls.push("submit");
+        },
       },
-      error: null,
-    }),
-    subscribe: () => () => {},
-    reconcile: async () => {
-      calls.push("receipt");
-      const status =
-        ++receiptCalls === 1 ? ("UNKNOWN" as const) : ("FINALIZED" as const);
-      return {
-        receiptId: operation.operationId,
-        operationId: operation.operationId,
-        preparationId: operation.preparationId,
-        kind: operation.kind,
-        cluster: operation.cluster,
-        signature,
-        messageHash: operation.messageHash,
-        status,
-        operationStatus: status,
-        failureCode: null,
-        slot: status === "FINALIZED" ? "12" : null,
-        chainRecordedAt: status === "FINALIZED" ? new Date().toISOString() : null,
-      };
-    },
-  };
-  const flow = createTransactionLifecycle(
-    connection,
-    session,
-    {
-      height: async () => 1n,
-      simulate: async () => {
-        calls.push("simulate");
-        return { slot: "1", unitsConsumed: "200", feeLamports: "5000" };
-      },
-      submit: async () => {
-        calls.push("submit");
-      },
-    },
-    async () => provenanceFixture,
-    async () => true,
-  );
-  await flow.load(operation, expected);
-  assert.equal(flow.getSnapshot().phase, "review");
-  assert.deepEqual(calls, ["simulate"]);
-  await flow.approveAndSend();
-  assert.equal(flow.getSnapshot().phase, "indexed");
-  assert.deepEqual(calls, [
-    "simulate",
-    "simulate",
-    "sign",
-    "receipt",
-    "submit",
-    "receipt",
-  ]);
-  flow.dispose();
-  adapter.dispose();
-});
+      async () => provenanceFixture,
+      async () => true,
+    );
+    await flow.load(operation, expected);
+    assert.equal(flow.getSnapshot().phase, "review");
+    assert.deepEqual(calls, ["simulate"]);
+    await flow.approveAndSend();
+    assert.equal(flow.getSnapshot().phase, "indexed");
+    assert.deepEqual(calls, [
+      "simulate",
+      "simulate",
+      "sign",
+      "receipt",
+      "submit",
+      "receipt",
+    ]);
+    flow.dispose();
+    adapter.dispose();
+  });
 
 test("finalized listing observation requires matching asset, ledger, seller and terms", async () => {
   const { findListingPda } = await import("@katha/solana/marketplace");

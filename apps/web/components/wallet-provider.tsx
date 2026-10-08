@@ -73,7 +73,10 @@ export function WalletProvider({
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
       async (operation, signature, signal) => {
-        if (operation.kind === "CREATE_LISTING") {
+        if (
+          operation.kind === "CREATE_LISTING" ||
+          operation.kind === "CANCEL_LISTING"
+        ) {
           const current = await createPublicApi(apiOrigin).listing(operation.kathaId, {
             signal,
           });

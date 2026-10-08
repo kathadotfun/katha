@@ -3,6 +3,7 @@ import { findListingPda } from "@katha/solana/marketplace";
 import type { WalletOperation } from "./wallet-operation.ts";
 import {
   listingCreateRequestSchema,
+  listingCancelRequestSchema,
   listingPriceSchema,
   artworkListingResponseSchema,
   artworkProvenanceResponseSchema,
@@ -50,7 +51,7 @@ export const emptyOwnerListingSnapshot: OwnerListingSnapshot = {
 export function createOwnerListing(
   session: Pick<
     WalletSessionController,
-    "getSnapshot" | "subscribe" | "prepareListing"
+    "getSnapshot" | "subscribe" | "prepareListing" | "prepareCancellation"
   >,
   connection: Pick<WalletConnection, "getSnapshot" | "subscribe" | "cluster">,
   transactions: Pick<TransactionLifecycle, "load" | "getSnapshot">,
@@ -89,20 +90,26 @@ export function createOwnerListing(
   };
   const unsubSession = session.subscribe(change),
     unsubWallet = connection.subscribe(change);
-  const canPrepare = () =>
+  const canAct = () =>
     !!current &&
     !!state.page &&
     !state.busy &&
     !state.reloadRequired &&
     state.page.owner === session.getSnapshot().session?.walletAddress &&
     state.collection !== null &&
-    (!state.page.listing ||
-      ["CANCELLED", "EXPIRED", "PURCHASED"].includes(state.page.listing.status)) &&
-    ["idle", "not-completed", "expired", "failed"].includes(
+    ["idle", "not-completed", "expired", "failed", "indexed"].includes(
       transactions.getSnapshot().phase,
     ) &&
     (!transactions.getSnapshot().signature ||
-      transactions.getSnapshot().phase === "failed");
+      ["failed", "indexed"].includes(transactions.getSnapshot().phase));
+  const canPrepare = () =>
+    canAct() &&
+    (!state.page!.listing ||
+      ["CANCELLED", "EXPIRED", "PURCHASED"].includes(state.page!.listing.status));
+  const canRelease = () =>
+    canAct() &&
+    state.page!.listing?.status === "ACTIVE" &&
+    state.page!.listing.seller === session.getSnapshot().session?.walletAddress;
   return {
     getSnapshot: () => state,
     subscribe(listener: () => void) {
@@ -112,6 +119,7 @@ export function createOwnerListing(
       };
     },
     canPrepare,
+    canRelease,
     async read() {
       if (disposed || !current || state.busy) return;
       const version = ++generation;
@@ -149,6 +157,51 @@ export function createOwnerListing(
         if (!disposed && !signal.aborted && version === generation)
           publish({
             error: "Listing state could not be loaded. Check the API and refresh.",
+          });
+      } finally {
+        if (!disposed && version === generation) publish({ busy: false });
+      }
+    },
+    async release() {
+      if (disposed || !canRelease()) return;
+      const page = state.page!,
+        ledger = page.listing!,
+        collection = state.collection!,
+        version = ++generation;
+      abort?.abort();
+      abort = new AbortController();
+      const signal = abort.signal;
+      publish({ busy: true, error: null });
+      try {
+        const wallet = connection.getSnapshot().connected!;
+        const input = listingCancelRequestSchema.parse({
+          idempotencyKey: crypto.randomUUID(),
+          expectedRevision: page.currentRevision,
+          supportedTransactionVersions: [
+            ...(wallet.supportsV0 ? [0] : []),
+            ...(wallet.supportsV1 ? [1] : []),
+          ],
+        });
+        const prepared = await session.prepareCancellation(kathaId, input, signal);
+        if (disposed || signal.aborted || version !== generation) return;
+        await transactions.load(prepared, {
+          kind: "CANCEL_LISTING",
+          kathaId,
+          listing: {
+            price: ledger.price,
+            expiresAt: ledger.expiresAt,
+            expectedRevision: input.expectedRevision,
+            asset: page.asset,
+            collection,
+          },
+        });
+        if (!disposed && version === generation) publish({ reloadRequired: true });
+      } catch {
+        if (!disposed && !signal.aborted && version === generation)
+          publish({
+            reloadRequired: true,
+            error:
+              "Listing release preparation did not complete. Refresh state and check any pending signature before trying again.",
           });
       } finally {
         if (!disposed && version === generation) publish({ busy: false });
@@ -226,7 +279,7 @@ export type OwnerListing = ReturnType<typeof createOwnerListing>;
 
 // A finalized receipt and a matching finalized listing observation are separate checks.
 export async function listingObservationMatches(
-  operation: Extract<WalletOperation, { kind: "CREATE_LISTING" }>,
+  operation: Extract<WalletOperation, { kind: "CREATE_LISTING" | "CANCEL_LISTING" }>,
   current: ArtworkListingResponse,
 ) {
   const [artwork] = await findArtworkPda({ kathaId: operation.kathaId });
@@ -239,8 +292,9 @@ export async function listingObservationMatches(
     current.owner === operation.feePayer &&
     current.currentRevision === operation.nextRevision &&
     current.listing?.address === listing &&
-    current.listing.status === "ACTIVE" &&
-    current.listing.active === true &&
+    (operation.kind === "CREATE_LISTING"
+      ? current.listing.status === "ACTIVE" && current.listing.active === true
+      : current.listing.status === "CANCELLED" && current.listing.active === false) &&
     current.listing.seller === operation.feePayer &&
     current.listing.revision === operation.nextRevision &&
     current.listing.price === operation.price &&
