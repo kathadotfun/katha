@@ -1,3 +1,4 @@
+import type { PurchaseQuoteRequest } from "@katha/shared";
 import type { ListingCreateRequest, ListingCancelRequest } from "@katha/shared";
 import type { WalletOperation } from "./wallet-operation.ts";
 import type { CollectorCollectionQuery } from "@katha/shared";
@@ -128,6 +129,22 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readPurchaseQuote(
+      kathaId: string,
+      input: PurchaseQuoteRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.readPurchaseQuote(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.buyer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async prepareCancellation(
       kathaId: string,
       input: ListingCancelRequest,

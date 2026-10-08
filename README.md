@@ -126,7 +126,9 @@ with separate indexing feedback; the protected administration page now supports 
 permissionless expiry recovery and buyer-bound purchases through generated clients.
 Listing and purchase preparation APIs are available. Signed-in owners can prepare
 fixed-price test-token listings and cancel or release expired offers through
-explicit seller-wallet approval; purchase screens remain planned.
+explicit seller-wallet approval. Buyer-bound purchase previews now display exact
+test-token distributions, listing revision and recorded custody; purchase signing
+remains planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -234,6 +236,7 @@ outside the current scope.
 - [Collector collection page](docs/development/collector-collection-web.md)
 - [Owner listing form](docs/development/owner-listing-web.md)
 - [Listing cancellation and expiry recovery controls](docs/development/listing-management-web.md)
+- [Purchase quotes and sale distributions](docs/development/purchase-quotes-web.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

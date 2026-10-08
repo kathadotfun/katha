@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ArtworkPhysicalIdentity } from "./artwork-physical-identity";
 import type { PublicArtworkDetail } from "@katha/shared";
 import {
@@ -74,6 +75,12 @@ export function ArtworkDetail({
           · {artwork.creationYear}
         </p>
         <p className="mt-3 break-all font-mono text-sm text-muted">{artwork.kathaId}</p>
+        <Link
+          href={`/art/${artwork.kathaId}/purchase`}
+          className="text-link mt-5 inline-flex min-h-11 items-center"
+        >
+          Review purchase quote
+        </Link>
       </header>
       <div className="artwork-overview">
         {hero ? (

@@ -88,6 +88,9 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readPurchaseQuote: async () => {
+      throw new Error("Unexpected quote");
+    },
     prepareCancellation: async () => {
       throw new Error("Unexpected cancellation");
     },

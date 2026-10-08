@@ -6,6 +6,9 @@ uses the six-decimal **Katha test token (no monetary value)**. Only the wallet
 approves, signs and submits the transaction. Physical delivery remains a separate
 manual workflow; no quote, preparation or receipt changes physical custody.
 
+The [purchase quote screen](purchase-quotes-web.md) displays these authenticated
+terms without preparing or signing a transaction.
+
 ## Quote
 
 `POST /artworks/:kathaId/purchase-quote` requires the existing wallet-session bearer

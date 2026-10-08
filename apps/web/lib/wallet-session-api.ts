@@ -1,4 +1,9 @@
 import {
+  purchaseQuoteRequestSchema,
+  purchaseQuoteResponseSchema,
+  type PurchaseQuoteRequest,
+} from "@katha/shared";
+import {
   listingCreateRequestSchema,
   listingCancelRequestSchema,
   type ListingCancelRequest,
@@ -161,6 +166,25 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readPurchaseQuote(
+      kathaId: string,
+      input: PurchaseQuoteRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const result = purchaseQuoteResponseSchema.parse(
+        await request(
+          `/artworks/${path.kathaId}/purchase-quote`,
+          purchaseQuoteRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async prepareCancellation(
       kathaId: string,
       input: ListingCancelRequest,

@@ -73,3 +73,5 @@ export const purchasePreparationResponseSchema = unsignedOperationResponseSchema
 );
 export type PurchaseQuoteTerms = z.infer<typeof purchaseQuoteTermsSchema>;
 export type PurchaseQuoteResponse = z.infer<typeof purchaseQuoteResponseSchema>;
+
+export type PurchaseQuoteRequest = z.infer<typeof purchaseQuoteRequestSchema>;

@@ -21,6 +21,7 @@ async function viewModule(path: string, aliases: Readonly<Record<string, string>
   }).outputText;
   for (const [specifier, target] of Object.entries({
     react: pathToFileURL(require.resolve("react")).href,
+    "next/link": pathToFileURL(require.resolve("next/link")).href,
     "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
     ...aliases,
   }))
@@ -87,6 +88,8 @@ test("the actual view renders documentation, attribution and approved photograph
       html.includes('referrerpolicy="no-referrer"'),
   );
   assert.ok(html.includes(`href="/artists/${artworkFixture.artist.slug}"`));
+  assert.ok(html.includes(`href="/art/${artworkFixture.kathaId}/purchase"`));
+  assert.ok(html.includes("Review purchase quote"));
   assert.ok(html.includes(artworkFixture.ownership.ownerWallet));
   assert.ok(html.includes("Recorded digital owner"));
   assert.ok(html.includes("Katha verification recorded"));

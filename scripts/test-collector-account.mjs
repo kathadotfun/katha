@@ -1,3 +1,4 @@
+import { purchaseQuoteFixture } from "../apps/web/tests/fixtures/purchase-quote.ts";
 import {
   listingFixture,
   cancellationFixture,
@@ -562,7 +563,104 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await main
         .getByRole("link", { name: "Back to my collection", exact: true })
         .click();
-      await main.getByRole("link", { name: "Wallet & account", exact: true }).click();
+      collectionMode = "READY";
+      await main
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      await main
+        .getByRole("link", { name: "Synthetic Paubha study", exact: true })
+        .click();
+      await main
+        .getByRole("link", { name: "Review purchase quote", exact: true })
+        .click();
+      const quoteSigningBefore = await page.evaluate(() =>
+        globalThis.__kathaWalletTest.transactionCalls(),
+      );
+      let quoteMode = "PRIMARY",
+        quoteReads = 0;
+      await context.route(
+        `${apiOrigin}/artworks/${fixture.operation.kathaId}`,
+        async (route) => {
+          const { artwork } = await purchaseQuoteFixture();
+          return route.fulfill({ headers, json: artwork });
+        },
+      );
+      await context.route(
+        `${apiOrigin}/artworks/${fixture.operation.kathaId}/purchase-quote`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers });
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          assert.deepEqual(Object.keys(route.request().postDataJSON()), [
+            "supportedTransactionVersions",
+          ]);
+          quoteReads++;
+          if (quoteMode === "FAIL")
+            return route.fulfill({
+              status: 409,
+              headers,
+              json: { privateError: "PRIVATE QUOTE ERROR" },
+            });
+          const { quote } = await purchaseQuoteFixture(
+            quoteMode === "SECONDARY" ? "SECONDARY" : "PRIMARY",
+            "100000001",
+            quoteMode === "SECONDARY",
+          );
+          return route.fulfill({ headers, json: quote });
+        },
+      );
+      await expect(
+        main.getByRole("heading", { name: "Understand the purchase." }),
+      ).toBeVisible();
+      assert.equal(quoteReads, 0);
+      const refreshQuote = main.getByRole("button", {
+        name: "Refresh purchase quote",
+        exact: true,
+      });
+      await refreshQuote.click();
+      await expect(main).toContainText("Total: 100.000001 test tokens");
+      await expect(main).toContainText("97.500001 test tokens");
+      await expect(main).toContainText("0.000000 test tokens");
+      await expect(main).toContainText("Expected listing revision");
+      await expect(main).toContainText("Recorded physical custody");
+      await expect(main).toContainText("No monetary value");
+      quoteMode = "SECONDARY";
+      await refreshQuote.click();
+      await expect(main).toContainText("Secondary sale");
+      await expect(main).toContainText("92.500001 test tokens");
+      await expect(main).toContainText("5.000000 test tokens");
+      await expect(main).toContainText("merged amounts");
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.screenshot({
+        path: `/tmp/katha-125-quote-${width}.png`,
+        fullPage: true,
+      });
+      quoteMode = "FAIL";
+      await refreshQuote.click();
+      await expect(main.getByRole("alert")).toContainText("quote is unavailable");
+      await expect(main).not.toContainText("92.500001 test tokens");
+      await expect(main).not.toContainText("PRIVATE QUOTE ERROR");
+      quoteMode = "PRIMARY";
+      await refreshQuote.click();
+      await expect(main).toContainText("100.000001 test tokens");
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
+        quoteSigningBefore,
+      );
+      await page.getByRole("button", { name: "Wallet connected", exact: true }).click();
+      await page
+        .locator("#wallet-connection-panel")
+        .getByRole("link", { name: "My account", exact: true })
+        .click();
+
       await expect(main).toContainText("This count reflects");
       mode = "FAIL";
       await main.getByRole("button", { name: "Refresh account" }).click();
@@ -581,7 +679,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await context.close();
     }
     console.log(
-      "Collector account, collection, owner listing and release browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
+      "Collector account, collection, owner listing, release and purchase quote browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
     );
   } finally {
     await browser.close();
