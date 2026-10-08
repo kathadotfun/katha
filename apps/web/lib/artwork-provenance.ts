@@ -44,7 +44,13 @@ export function validateArtworkHistory(
     history.pagination.limit !== 20 ||
     history.items.some((event) => {
       if (event.type === "MINT" || event.type === "TRANSFER")
-        return event.data.assetAddress !== artwork.chain.coreAssetAddress;
+        return (
+          event.data.assetAddress !== artwork.chain.coreAssetAddress ||
+          (event.type === "TRANSFER" &&
+            event.data.sale !== null &&
+            (event.data.sale.buyerWallet !== event.data.newOwner ||
+              event.data.sale.listingAddress !== event.data.authorityWallet))
+        );
       if (event.type === "REGISTRATION")
         return (
           event.data.artistId !== artwork.artist.id ||

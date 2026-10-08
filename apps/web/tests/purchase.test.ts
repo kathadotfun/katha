@@ -325,6 +325,7 @@ test("purchase history requires the same successful transfer signature, asset, c
           assetAddress: operation.quote.asset,
           newOwner: operation.feePayer,
           authorityWallet: operation.quote.seller,
+          sale: null,
         },
       },
     ],

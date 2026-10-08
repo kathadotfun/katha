@@ -9,6 +9,10 @@ import {
   artworkOwnership,
   indexerNetworks,
   ownershipReconciliations,
+  artworkSales,
+  artworkListings,
+  conditionReports,
+  artworkMedia,
 } from "./schema/index.js";
 
 const names = {
@@ -79,6 +83,78 @@ export function createPublicProvenanceStore(
             .orderBy(...order)
             .limit(query.limit + 1)
             .offset(query.offset);
+          const pageEvents = events.slice(0, query.limit);
+          const signatures = pageEvents
+            .filter((e) => e.payload.name === "CoreTransfer")
+            .map((e) => e.signature);
+          const sales =
+            signatures.length && programs.marketplace
+              ? await tx
+                  .select({
+                    sale: artworkSales,
+                    event: indexedEvents,
+                    listing: artworkListings,
+                  })
+                  .from(artworkSales)
+                  .innerJoin(
+                    indexedEvents,
+                    eq(indexedEvents.id, artworkSales.sourceEventId),
+                  )
+                  .innerJoin(
+                    artworkListings,
+                    eq(artworkListings.id, artworkSales.listingId),
+                  )
+                  .where(
+                    and(
+                      eq(artworkSales.artworkId, record.id),
+                      eq(artworkSales.cluster, cluster),
+                      eq(indexedEvents.programAddress, programs.marketplace),
+                      inArray(indexedEvents.signature, signatures),
+                    ),
+                  )
+              : [];
+          const versions = pageEvents
+            .filter((e) => e.payload.name === "ConditionRecorded")
+            .map((e) => Number(e.payload.version))
+            .filter(Number.isSafeInteger);
+          const reports = versions.length
+            ? await tx
+                .select()
+                .from(conditionReports)
+                .where(
+                  and(
+                    eq(conditionReports.artworkId, record.id),
+                    eq(conditionReports.status, "FINALIZED"),
+                    eq(conditionReports.chainCluster, cluster),
+                    inArray(conditionReports.chainVersion, versions),
+                    inArray(
+                      conditionReports.documentHash,
+                      pageEvents
+                        .filter((e) => e.payload.name === "ConditionRecorded")
+                        .map((e) => String(e.payload.reportHash)),
+                    ),
+                  ),
+                )
+            : [];
+          const mediaHashes = [...new Set(reports.flatMap((r) => r.mediaHashes))];
+          // Public visibility is checked now, even for older reports. Private media is never returned.
+          const inspectionMedia = mediaHashes.length
+            ? await tx
+                .select({
+                  contentHash: artworkMedia.contentHash,
+                  mimeType: artworkMedia.mimeType,
+                  altText: artworkMedia.altText,
+                })
+                .from(artworkMedia)
+                .where(
+                  and(
+                    eq(artworkMedia.artworkId, record.id),
+                    eq(artworkMedia.visibility, "PUBLIC"),
+                    eq(artworkMedia.kind, "IMAGE"),
+                    inArray(artworkMedia.contentHash, mediaHashes),
+                  ),
+                )
+            : [];
           const [registration] = await tx
             .select()
             .from(indexedEvents)
@@ -156,6 +232,9 @@ export function createPublicProvenanceStore(
           return {
             ...record,
             events,
+            sales,
+            reports,
+            inspectionMedia,
             registration: registration ?? null,
             mint: mint ?? null,
             checkpoints,

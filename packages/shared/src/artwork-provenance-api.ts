@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { tokenAmountSchema } from "./marketplace.js";
 import { walletAddressSchema } from "./artwork-domain.js";
 import { kathaIdSchema } from "./artwork-identity.js";
 import { conditionGradeSchema, conditionReasonSchema } from "./condition-report.js";
@@ -48,6 +49,40 @@ const base = {
     eventIndex: z.number().int().nonnegative(),
   }),
 };
+export const publicSaleEvidenceSchema = z
+  .strictObject({
+    listingAddress: walletAddressSchema,
+    listingRevision: tokenAmountSchema.refine((s) => s !== "0"),
+    marketplaceProgram: walletAddressSchema,
+    isPrimary: z.boolean(),
+    sellerWallet: walletAddressSchema,
+    buyerWallet: walletAddressSchema,
+    paymentMint: walletAddressSchema,
+    price: tokenAmountSchema,
+    proceedsWallet: walletAddressSchema,
+    proceedsAmount: tokenAmountSchema,
+    artistWallet: walletAddressSchema,
+    royaltyAmount: tokenAmountSchema,
+    treasuryWallet: walletAddressSchema,
+    platformFee: tokenAmountSchema,
+  })
+  .refine(
+    (s) =>
+      [s.price, s.proceedsAmount, s.royaltyAmount, s.platformFee].every(
+        (value) => tokenAmountSchema.safeParse(value).success,
+      ) &&
+      BigInt(s.price) > 0n &&
+      BigInt(s.price) ===
+        BigInt(s.proceedsAmount) + BigInt(s.royaltyAmount) + BigInt(s.platformFee) &&
+      (s.isPrimary
+        ? s.royaltyAmount === "0" && s.proceedsWallet === s.artistWallet
+        : s.proceedsWallet === s.sellerWallet),
+  );
+const publicInspectionMediaSchema = z.strictObject({
+  contentHash: hash,
+  mimeType: z.enum(["image/png", "image/jpeg", "image/webp", "image/avif"]),
+  altText: z.string().min(1).max(500),
+});
 export const publicProvenanceEventSchema = z.discriminatedUnion("type", [
   z.strictObject({
     ...base,
@@ -93,6 +128,7 @@ export const publicProvenanceEventSchema = z.discriminatedUnion("type", [
       verifierWallet: walletAddressSchema,
       inspectedAt: time,
       recordedAt: time,
+      publicMedia: z.array(publicInspectionMediaSchema).max(20).default([]),
     }),
   }),
   z.strictObject({
@@ -126,6 +162,7 @@ export const publicProvenanceEventSchema = z.discriminatedUnion("type", [
       assetAddress: walletAddressSchema,
       newOwner: walletAddressSchema,
       authorityWallet: walletAddressSchema,
+      sale: publicSaleEvidenceSchema.nullable().default(null),
     }),
   }),
 ]);

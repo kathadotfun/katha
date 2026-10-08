@@ -14,7 +14,7 @@ import { artistFixture } from "../apps/web/tests/fixtures/artist.ts";
 
 const webDirectory = fileURLToPath(new URL("../apps/web/", import.meta.url));
 const require = createRequire(new URL("../apps/web/package.json", import.meta.url));
-const { metadataBytes, provenanceFixture } =
+const { metadataBytes, provenanceFixture, collectingHistoryFixture } =
   await import("../apps/web/tests/fixtures/provenance.ts");
 const metadataHash = createHash("sha256").update(metadataBytes).digest("hex");
 let apiOrigin;
@@ -116,7 +116,7 @@ const api = createServer((request, response) => {
       return response.end(
         JSON.stringify({
           ...provenanceFixture,
-          items: offset ? [] : provenanceFixture.items,
+          items: offset ? [] : collectingHistoryFixture.items,
           pagination: { limit: 20, offset, hasMore: offset === 0 },
         }),
       );
@@ -273,6 +273,16 @@ try {
     assert.ok(visibleMarkup.includes(text), text);
   assert.ok(success.html.includes(artworkFixture.ownership.ownerWallet));
   assert.ok(visibleMarkup.includes("Digital ownership transferred"));
+  for (const text of [
+    "Primary purchase",
+    "Secondary purchase",
+    "Condition report 2",
+    "Photo SHA-256",
+    "Custody revision 3",
+    "1000000",
+    "Artist royalty 50000",
+  ])
+    assert.ok(visibleMarkup.includes(text), text);
   assert.ok(visibleMarkup.includes("Metadata bytes match the published commitment"));
   assert.ok(visibleMarkup.includes("?historyOffset=20#provenance"));
   assert.equal(

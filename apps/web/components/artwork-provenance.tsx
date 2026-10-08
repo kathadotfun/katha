@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { artworkPhotoUrl } from "../lib/artwork-page";
 import type { PublicArtworkDetail, PublicProvenanceEvent } from "@katha/shared";
 import { explorerLink, type ArtworkEvidence } from "../lib/artwork-provenance";
 
@@ -49,15 +51,19 @@ function eventDescription(event: PublicProvenanceEvent): string {
     case "MINT":
       return "Core artwork asset minted";
     case "TRANSFER":
-      return "Digital ownership transferred";
+      return event.data.sale
+        ? `${event.data.sale.isPrimary ? "Primary purchase" : "Secondary purchase"} · digital ownership transferred`
+        : "Digital ownership transferred";
   }
 }
 export function ArtworkProvenance({
   artwork,
   evidence,
+  apiOrigin,
 }: {
   artwork: PublicArtworkDetail;
   evidence?: ArtworkEvidence | undefined;
+  apiOrigin: string;
 }) {
   const history = evidence?.history;
   const integrity = evidence?.integrity ?? { status: "UNAVAILABLE" as const };
@@ -87,8 +93,12 @@ export function ArtworkProvenance({
         The recorded history
       </h2>
       <p className="mt-6 max-w-reading text-muted">
-        Artist authorship remains with {artwork.artist.displayName}. Digital transfers
-        do not establish physical delivery or a sale.
+        Artist authorship remains with{" "}
+        <Link className="underline" href={`/artists/${artwork.artist.slug}`}>
+          {artwork.artist.displayName}
+        </Link>
+        . A purchase changes digital ownership; physical custody is recorded separately.
+        Transfers without matched settlement evidence do not establish a sale.
       </p>
       <p className="mt-4 max-w-reading text-muted">
         {history
@@ -111,15 +121,112 @@ export function ArtworkProvenance({
                     Chain recorded <Time value={event.transaction.recordedAt} />
                   </p>
                   {event.type === "CONDITION" && (
-                    <p className="mt-2 text-sm">
-                      Physically inspected <Time value={event.data.inspectedAt} />
+                    <div className="mt-3">
+                      <p className="text-sm">
+                        Physically inspected <Time value={event.data.inspectedAt} />
+                      </p>
+                      <p className="mt-2 text-sm">
+                        Verifier:{" "}
+                        <Reference kind="address" value={event.data.verifierWallet} />
+                      </p>
+                      {event.data.publicMedia.length ? (
+                        <ul className="mt-4 grid gap-6 sm:grid-cols-2">
+                          {event.data.publicMedia.map((media) => (
+                            <li key={media.contentHash} className="min-w-0">
+                              <a
+                                href={artworkPhotoUrl(apiOrigin, {
+                                  ...media,
+                                  kind: "IMAGE",
+                                })}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block underline"
+                              >
+                                <img
+                                  src={artworkPhotoUrl(apiOrigin, {
+                                    ...media,
+                                    kind: "IMAGE",
+                                  })}
+                                  alt={media.altText}
+                                  loading="lazy"
+                                  className="aspect-[4/3] w-full object-contain bg-surface"
+                                />
+                                View report {event.data.version} photograph
+                                <span className="sr-only"> — opens in a new tab</span>
+                              </a>
+                              <p className="mt-2 break-all font-mono text-xs">
+                                Photo SHA-256: {media.contentHash}
+                              </p>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-3 text-sm text-muted">
+                          No approved public photographs are available for this report.
+                          Private inspection evidence remains private.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {event.type === "CUSTODY" && (
+                    <p className="mt-3 text-sm">
+                      Custody revision {event.data.revision}. Attested by{" "}
+                      <Reference kind="address" value={event.data.attestedBy} />. This
+                      is a physical custody claim, separate from digital ownership.
                     </p>
                   )}
                   {event.type === "TRANSFER" && (
-                    <p className="mt-2">
-                      Recorded new owner:{" "}
-                      <Reference kind="address" value={event.data.newOwner} />
-                    </p>
+                    <div className="mt-3">
+                      <p>
+                        Recorded new owner:{" "}
+                        <Reference kind="address" value={event.data.newOwner} />
+                      </p>
+                      {event.data.sale ? (
+                        <dl className="artwork-facts mt-4">
+                          <div>
+                            <dt>Seller</dt>
+                            <dd>
+                              <Reference
+                                kind="address"
+                                value={event.data.sale.sellerWallet}
+                              />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Test-token price (base units)</dt>
+                            <dd className="break-all font-mono">
+                              {event.data.sale.price}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Payment mint</dt>
+                            <dd>
+                              <Reference
+                                kind="address"
+                                value={event.data.sale.paymentMint}
+                              />
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Settlement (base units)</dt>
+                            <dd className="break-words">
+                              Proceeds {event.data.sale.proceedsAmount} · Artist royalty{" "}
+                              {event.data.sale.royaltyAmount} · Platform fee{" "}
+                              {event.data.sale.platformFee}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Listing revision</dt>
+                            <dd>{event.data.sale.listingRevision}</dd>
+                          </div>
+                        </dl>
+                      ) : (
+                        <p className="mt-3 text-sm text-muted">
+                          No matched Marketplace settlement is available. This transfer
+                          alone does not prove a purchase.
+                        </p>
+                      )}
+                    </div>
                   )}
                   <details className="mt-3">
                     <summary className="cursor-pointer">Transaction details</summary>

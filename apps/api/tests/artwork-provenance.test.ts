@@ -1,6 +1,10 @@
 import { expect, it, vi } from "vitest";
 import type { PublicProvenanceStore } from "@katha/db";
-import { artworkProvenanceResponseSchema } from "@katha/shared";
+import {
+  canonicalDocumentBytes,
+  sha256Hex,
+  artworkProvenanceResponseSchema,
+} from "@katha/shared";
 import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
 import {
   KATHA_REGISTRY_PROGRAM_ADDRESS,
@@ -13,6 +17,11 @@ import {
 import { createArtworkProvenance } from "../src/artwork-provenance.js";
 import { createApi } from "../src/app.js";
 import { createLogger } from "../src/logger.js";
+
+import {
+  KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+  findListingPda,
+} from "@katha/solana/marketplace";
 
 const at = new Date("2026-10-05T00:00:00.000Z");
 const wallet = "11111111111111111111111111111111";
@@ -146,6 +155,9 @@ async function fixture() {
     cluster: "LOCALNET",
     programs: { registry: KATHA_REGISTRY_PROGRAM_ADDRESS, core: CORE_PROGRAM_ADDRESS },
     events,
+    sales: [],
+    reports: [],
+    inspectionMedia: [],
     registration: events[0]!,
     mint: events[5]!,
     network: {
@@ -437,3 +449,205 @@ it("redacts database failures", async () => {
   expect(await response.text()).not.toContain("PRIVATE");
   expect(logs.join("")).not.toContain("PRIVATE");
 });
+
+async function withSale(isPrimary = true) {
+  const f = await fixture();
+  const transfer = f.record.events[6]!;
+  const [listingAddress] = await findListingPda({
+    asset: (await findAssetPda({ artwork: (await findArtworkPda({ kathaId }))[0] }))[0],
+  });
+  transfer.payload.authority = listingAddress;
+  f.record.programs.marketplace = KATHA_MARKETPLACE_PROGRAM_ADDRESS;
+  const sale = {
+    id,
+    cluster: "LOCALNET" as const,
+    artworkId: id,
+    assetAddress: transfer.assetAddress!,
+    sourceEventId: "dddddddd-1111-4111-8111-111111111111",
+    listingId: id,
+    buyerWallet: wallet,
+    sellerWallet: wallet,
+    paymentMint: wallet,
+    price: 1000000n,
+    isPrimary,
+    proceedsWallet: wallet,
+    proceedsAmount: isPrimary ? 975000n : 925000n,
+    artistWallet: wallet,
+    royaltyAmount: isPrimary ? 0n : 50000n,
+    treasuryWallet: wallet,
+    platformFee: 25000n,
+  };
+  const event = {
+    ...transfer,
+    id: sale.sourceEventId,
+    programAddress: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+    kind: "SALE" as const,
+    payload: {
+      name: "ArtworkPurchased",
+      listingAddress,
+      revision: "1",
+      buyerWallet: wallet,
+      isPrimary,
+      proceedsWallet: wallet,
+      proceedsAmount: sale.proceedsAmount.toString(),
+      artistWallet: wallet,
+      royaltyAmount: sale.royaltyAmount.toString(),
+      treasuryWallet: wallet,
+      platformFee: "25000",
+      privateNotes: "PRIVATE",
+    },
+  };
+  const listing = {
+    id,
+    cluster: "LOCALNET" as const,
+    artworkId: id,
+    assetAddress: transfer.assetAddress!,
+    sourceEventId: event.id,
+    listingAddress,
+    listingRevision: 1n,
+    sellerWallet: wallet,
+    paymentMint: wallet,
+    price: 1000000n,
+    status: "PURCHASED" as const,
+    expiresAt: at,
+  };
+  f.record.sales = [{ sale, event, listing }];
+  return f;
+}
+it.each([true, false])(
+  "attaches primary=%s settlement to its single Core transfer without duplicate provenance",
+  async (primary) => {
+    const f = await withSale(primary);
+    const body = await f.boundary.history(kathaId, query);
+    expect(body.items).toHaveLength(7);
+    expect(body.items[6]).toMatchObject({
+      type: "TRANSFER",
+      data: {
+        sale: {
+          isPrimary: primary,
+          price: "1000000",
+          royaltyAmount: primary ? "0" : "50000",
+        },
+      },
+    });
+    expect(body.attribution.artist.id).toBe(id);
+    expect(JSON.stringify(body)).not.toContain("PRIVATE");
+  },
+);
+it.each(["buyer", "authority", "revision", "amount", "source", "duplicate"])(
+  "fails closed for mismatched settlement %s",
+  async (fault) => {
+    const f = await withSale();
+    const row = f.record.sales[0]!;
+    if (fault === "buyer")
+      row.sale.buyerWallet = "Vote111111111111111111111111111111111111111";
+    if (fault === "authority")
+      row.listing.listingAddress = "Vote111111111111111111111111111111111111111";
+    if (fault === "revision") row.event.payload.revision = "2";
+    if (fault === "amount") row.sale.platformFee = 3n;
+    if (fault === "source") row.event.programAddress = CORE_PROGRAM_ADDRESS;
+    if (fault === "duplicate") f.record.sales.push(row);
+    await expect(f.boundary.history(kathaId, query)).rejects.toThrow();
+  },
+);
+it("a direct Core transfer with no settlement remains a transfer", async () => {
+  const f = await fixture();
+  const body = await f.boundary.history(kathaId, query);
+  expect(body.items[6]).toMatchObject({ type: "TRANSFER", data: { sale: null } });
+});
+async function withInspection() {
+  const f = await fixture();
+  const event = f.record.events[3]!;
+  const publicHash = "d".repeat(64),
+    privateHash = "e".repeat(64);
+  const doc = {
+    reportId: "01010101-0101-4101-8101-010101010101",
+    kathaId,
+    grade: "EXCELLENT",
+    reason: "INITIAL_VERIFICATION",
+    inspectorId: id,
+    verifierWallet: wallet,
+    inspectedAt: at.toISOString(),
+    reportedAt: at.toISOString(),
+    notes: "PRIVATE",
+    mediaHashes: [publicHash, privateHash],
+  };
+  event.payload.reportId = doc.reportId.replaceAll("-", "");
+  event.payload.report = (
+    await findReportPda({
+      reportId: Buffer.from(String(event.payload.reportId), "hex"),
+    })
+  )[0];
+  const canonicalDocument = new TextDecoder().decode(canonicalDocumentBytes(doc));
+  const documentHash = await sha256Hex(new TextEncoder().encode(canonicalDocument));
+  event.payload.reportHash = documentHash;
+  f.record.reports = [
+    {
+      id: doc.reportId,
+      artworkId: id,
+      status: "FINALIZED",
+      authorityWallet: wallet,
+      canonicalDocument,
+      documentHash,
+      chainCluster: "LOCALNET",
+      chainSignature: event.signature,
+      chainSlot: event.slot,
+      chainRecordedAt: at,
+      finalizedAt: at,
+      createdAt: at,
+      updatedAt: at,
+      version: 1,
+      chainVersion: 1,
+      inspectorId: id,
+      grade: "EXCELLENT",
+      reason: "INITIAL_VERIFICATION",
+      inspectedAt: at,
+      reportedAt: at,
+      notes: "PRIVATE",
+      mediaHashes: doc.mediaHashes,
+      ownerWallet: null,
+      custodyRevision: null,
+    },
+  ];
+  f.record.inspectionMedia = [
+    {
+      contentHash: publicHash,
+      mimeType: "image/png",
+      altText: "Approved synthetic inspection photograph",
+    },
+    { contentHash: "f".repeat(64), mimeType: "image/png", altText: "Unrelated photo" },
+  ];
+  return { ...f, publicHash, privateHash };
+}
+it("publishes only currently approved media matched to the exact historical commitment", async () => {
+  const f = await withInspection();
+  const body = await f.boundary.history(kathaId, query);
+  expect(body.items[3]).toMatchObject({
+    type: "CONDITION",
+    data: { publicMedia: [{ contentHash: f.publicHash }] },
+  });
+  expect(JSON.stringify(body)).not.toContain(f.privateHash);
+  expect(JSON.stringify(body)).not.toContain("PRIVATE");
+  f.record.inspectionMedia = [];
+  const withdrawn = await f.boundary.history(kathaId, query);
+  expect(withdrawn.items[3]).toMatchObject({ data: { publicMedia: [] } });
+});
+it.each(["hash", "scope", "receipt", "media", "version"])(
+  "rejects mismatched historical inspection %s",
+  async (fault) => {
+    const f = await withInspection();
+    const r = f.record.reports[0]!;
+    if (fault === "hash") r.canonicalDocument += " ";
+    if (fault === "scope") r.artworkId = "bbbbbbbb-1111-4111-8111-111111111111";
+    if (fault === "receipt") r.chainSignature = "4".repeat(88);
+    if (fault === "media") r.mediaHashes = ["f".repeat(64)];
+    if (fault === "version") r.chainVersion = 2;
+    if (fault === "version") {
+      expect((await f.boundary.history(kathaId, query)).items[3]).toMatchObject({
+        data: { publicMedia: [] },
+      });
+      return;
+    }
+    await expect(f.boundary.history(kathaId, query)).rejects.toThrow();
+  },
+);

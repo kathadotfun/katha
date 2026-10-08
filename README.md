@@ -281,3 +281,8 @@ Collector-held resale now has private inspection requests and finalized approval
 status at `/collection/{kathaId}/resale`. Listing preparation requires the applicable
 inspection approval; authorized verifiers use the existing condition workflow.
 See the [inspected resale guide](docs/development/resale-inspection-web.md).
+
+Public artwork history now labels matched primary and secondary purchases once per
+Core transfer and shows versioned inspection commitments with approved public
+photographs. Artist authorship and physical custody remain separate. See the
+[artwork history guide](docs/development/artwork-history-web.md).

@@ -2035,6 +2035,16 @@ export async function runPublicBrowsingJourneys({
         await expect(page).toHaveURL(`${origin}/art/KATHA-PAUBHA-000001#${id}`);
         await expect(page.locator(`#${id}`)).toBeInViewport();
       }
+      await expect(page.locator("#provenance")).toContainText("Primary purchase");
+      await expect(page.locator("#provenance")).toContainText("Secondary purchase");
+      await expect(
+        page.getByRole("img", {
+          name: "Approved synthetic resale inspection photograph",
+        }),
+      ).toBeVisible();
+      await page
+        .locator("#provenance")
+        .screenshot({ path: `${artifacts}/history-${width}.png` });
       await audit("artwork");
       const photo = page
         .getByRole("img", { name: "Synthetic artwork image for testing" })

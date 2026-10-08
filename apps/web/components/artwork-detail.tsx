@@ -150,7 +150,7 @@ export function ArtworkDetail({
       </div>
       <ArtworkPhysicalIdentity artwork={artwork} />
       <ArtworkCare artwork={artwork} />
-      <ArtworkProvenance artwork={artwork} evidence={evidence} />
+      <ArtworkProvenance artwork={artwork} evidence={evidence} apiOrigin={apiOrigin} />
       {photos.length > 1 && (
         <section
           aria-labelledby="artwork-photographs"

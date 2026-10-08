@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canonicalDocumentBytes, sha256Hex } from "@katha/shared";
+import {
+  artworkProvenanceResponseSchema,
+  canonicalDocumentBytes,
+  sha256Hex,
+} from "@katha/shared";
 import {
   checkMetadataIntegrity,
   explorerLink,
@@ -213,4 +217,41 @@ test("public metadata URLs support the local/LAN demo but reject credentials and
         metadata: { ...artworkFixture.metadata, uri },
       }).success,
     );
+});
+
+test("matched sale history requires buyer and listing authority binding", async () => {
+  const { collectingHistoryFixture } = await import("./fixtures/provenance.ts");
+  assert.doesNotThrow(() =>
+    validateArtworkHistory(artworkFixture, collectingHistoryFixture, 0),
+  );
+  for (const field of ["buyerWallet", "listingAddress"]) {
+    const value = structuredClone(collectingHistoryFixture);
+    const event = value.items.find((e) => e.type === "TRANSFER" && e.data.sale);
+    assert.ok(event && event.type === "TRANSFER" && event.data.sale);
+    if (field === "buyerWallet")
+      event.data.sale.buyerWallet = artworkFixture.chain.coreAssetAddress;
+    else event.data.sale.listingAddress = artworkFixture.chain.coreAssetAddress;
+    assert.throws(() => validateArtworkHistory(artworkFixture, value, 0));
+  }
+});
+
+test("sale contracts reject malformed amounts and forged private fields without coercion", async () => {
+  const { collectingHistoryFixture } = await import("./fixtures/provenance.ts");
+  for (const price of ["NaN", "-1", "1e6", "01", "18446744073709551616", "0"]) {
+    const value = structuredClone(collectingHistoryFixture);
+    const event = value.items.find((e) => e.type === "TRANSFER" && e.data.sale);
+    assert.ok(event && event.type === "TRANSFER" && event.data.sale);
+    event.data.sale.price = price;
+    assert.equal(artworkProvenanceResponseSchema.safeParse(value).success, false);
+  }
+  const value = structuredClone(collectingHistoryFixture);
+  const event = value.items.find((e) => e.type === "CONDITION");
+  assert.ok(event && event.type === "CONDITION");
+  assert.equal(
+    artworkProvenanceResponseSchema.safeParse({
+      ...value,
+      items: [{ ...event, data: { ...event.data, privateNotes: "PRIVATE" } }],
+    }).success,
+    false,
+  );
 });

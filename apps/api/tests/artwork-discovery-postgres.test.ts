@@ -1113,6 +1113,115 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       conditions.items.map((e) => (e.type === "CONDITION" ? e.data.version : null)),
     ).toEqual([1, 2]);
     expect(JSON.stringify(conditions)).not.toContain("PRIVATE");
+    // A later real database report links only its approved images, never private evidence.
+    const reportId = randomUUID();
+    const stamp = new Date(Math.floor(Date.now() / 1000) * 1000);
+    const approvedHash = "8".repeat(64),
+      privateHash = "9".repeat(64);
+    const reportDoc = {
+      reportId,
+      kathaId: historical.kathaId,
+      grade: "GOOD",
+      reason: "PRE_RESALE",
+      inspectorId: randomUUID(),
+      verifierWallet: wallet.address,
+      inspectedAt: stamp.toISOString(),
+      reportedAt: stamp.toISOString(),
+      notes: "PRIVATE HISTORICAL REPORT",
+      mediaHashes: [approvedHash, privateHash],
+    };
+    const reportBytes = new TextDecoder().decode(canonicalDocumentBytes(reportDoc));
+    const reportHash = hash(reportBytes);
+    const [reportAddress] = await findReportPda({
+      reportId: Buffer.from(reportId.replaceAll("-", ""), "hex"),
+    });
+    const finalizedAt = new Date();
+    await database.db.insert(conditionReports).values({
+      id: reportId,
+      artworkId: historical.id,
+      version: 3,
+      status: "PREPARED",
+      authorityWallet: wallet.address,
+      canonicalDocument: reportBytes,
+      documentHash: reportHash,
+      createdAt: stamp,
+      updatedAt: finalizedAt,
+      inspectorId: reportDoc.inspectorId,
+      grade: "GOOD",
+      reason: "PRE_RESALE",
+      inspectedAt: stamp,
+      reportedAt: stamp,
+      notes: reportDoc.notes,
+      mediaHashes: reportDoc.mediaHashes,
+    });
+    await database.db
+      .$client`update condition_reports set status='FINALIZED', chain_cluster='LOCALNET', chain_signature=${"7".repeat(88)}, chain_slot=3, chain_version=3, chain_recorded_at=${finalizedAt.toISOString()}, finalized_at=${finalizedAt.toISOString()}, updated_at=${finalizedAt.toISOString()} where id=${reportId}`;
+    await database.db.insert(artworkMedia).values(
+      [approvedHash, privateHash].map((contentHash, i) => ({
+        artworkId: historical.id,
+        kind: "IMAGE" as const,
+        role: "CONDITION" as const,
+        visibility: i === 0 ? ("PUBLIC" as const) : ("PRIVATE" as const),
+        position: 90 + i,
+        storageKey: `${i === 0 ? "public" : "private"}/${contentHash}.png`,
+        contentHash,
+        mimeType: "image/png",
+        byteSize: 1n,
+        altText:
+          i === 0 ? "Approved historical inspection image" : "PRIVATE photograph",
+      })),
+    );
+    await database.db.insert(indexedEvents).values({
+      cluster: "LOCALNET",
+      programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS,
+      signature: "7".repeat(88),
+      slot: 3n,
+      transactionIndex: 0,
+      outerInstructionIndex: 0,
+      innerInstructionIndex: -1,
+      eventIndex: 0,
+      kind: "REGISTRY",
+      artworkId: historical.id,
+      payload: {
+        name: "ConditionRecorded",
+        artwork: registryArtwork,
+        kathaId: historical.kathaId,
+        report: reportAddress,
+        reportId: reportId.replaceAll("-", ""),
+        version: 3,
+        reportHash,
+        grade: 1,
+        reason: 3,
+        verifier: wallet.address,
+        inspectedAt: String(stamp.getTime() / 1000),
+        recordedAt: String(stamp.getTime() / 1000),
+      },
+      chainRecordedAt: finalizedAt,
+    });
+    const approved = await provenance.history(historical.kathaId, {
+      limit: 1,
+      offset: 2,
+      type: "CONDITION",
+    });
+    expect(approved.items[0]).toMatchObject({
+      type: "CONDITION",
+      data: {
+        version: 3,
+        documentHash: reportHash,
+        publicMedia: [{ contentHash: approvedHash }],
+      },
+    });
+    expect(JSON.stringify(approved)).not.toContain(privateHash);
+    expect(JSON.stringify(approved)).not.toContain("PRIVATE");
+    await database.db
+      .$client`update artwork_media set visibility='PRIVATE', updated_at=now() where artwork_id=${historical.id} and content_hash=${approvedHash}`;
+    const withdrawn = await provenance.history(historical.kathaId, {
+      limit: 1,
+      offset: 2,
+      type: "CONDITION",
+    });
+    expect(withdrawn.items[0]).toMatchObject({ data: { publicMedia: [] } });
+
     for (const hiddenRecord of [...hidden, devnet])
       expect(
         (await historyApp.request(`/artworks/${hiddenRecord.kathaId}/provenance`))
@@ -1134,7 +1243,7 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       offset: 0,
     });
     expect(gapHistory.indexing.status).toBe("GAP_DETECTED");
-    expect(gapHistory.items).toHaveLength(7);
+    expect(gapHistory.items).toHaveLength(8);
     // Collector queries use real wallet challenge/signature/session verification.
     const collectorPrograms = {
       registry: KATHA_REGISTRY_PROGRAM_ADDRESS,

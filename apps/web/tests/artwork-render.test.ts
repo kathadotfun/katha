@@ -32,6 +32,7 @@ async function viewModule(path: string, aliases: Readonly<Record<string, string>
 const photoModule = await viewModule("../components/artwork-photo.tsx", {});
 const careModule = await viewModule("../components/artwork-care.tsx", {});
 const provenanceModule = await viewModule("../components/artwork-provenance.tsx", {
+  "../lib/artwork-page": new URL("../lib/artwork-page.ts", import.meta.url).href,
   "../lib/artwork-provenance": new URL("../lib/artwork-provenance.ts", import.meta.url)
     .href,
 });
@@ -324,6 +325,7 @@ function renderHistory(
 ) {
   return renderToStaticMarkup(
     createElement(ArtworkProvenance, {
+      apiOrigin: "http://localhost:3001",
       artwork: { ...artworkFixture, chain: { ...artworkFixture.chain, cluster } },
       evidence: {
         history,
@@ -424,6 +426,7 @@ test("Registry lifecycle events preserve old commitments and physical inspection
         type: "CONDITION" as const,
         data: {
           version: 1,
+          publicMedia: [],
           reportAddress: wallet,
           documentHash: hash,
           grade: "FAIR" as const,
@@ -752,4 +755,25 @@ test("physical identity does not invent dimensions or upgrade an absent photo in
   assert.ok(section.includes("Missing details are not evidence of a match"));
   assert.ok(!section.includes("720 × 510"));
   assert.ok(section.includes("A matching page alone cannot confirm"));
+});
+
+test("two purchases retain artist attribution, separate custody and versioned approved photographs", async () => {
+  const { collectingHistoryFixture } = await import("./fixtures/provenance.ts");
+  const html = renderHistory(collectingHistoryFixture);
+  for (const text of [
+    "Primary purchase",
+    "Secondary purchase",
+    "Condition report 1",
+    "Condition report 2",
+    "Custody revision 3",
+    "Photo SHA-256",
+    "1000000",
+    "Artist royalty 50000",
+    artworkFixture.artist.displayName,
+  ])
+    assert.ok(html.includes(text), text);
+  assert.equal((html.match(/Primary purchase/g) ?? []).length, 1);
+  assert.equal((html.match(/Secondary purchase/g) ?? []).length, 1);
+  assert.ok(html.includes("Approved synthetic resale inspection photograph"));
+  assert.ok(!html.includes("shippingAddress"));
 });

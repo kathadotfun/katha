@@ -1,6 +1,10 @@
 import type { PublicProvenanceStore } from "@katha/db";
 import {
   artworkProvenanceResponseSchema,
+  publicSaleEvidenceSchema,
+  conditionReportDocumentSchema,
+  canonicalDocumentBytes,
+  sha256Hex,
   publicProvenanceEventSchema,
   conditionGradeSchema,
   conditionReasonSchema,
@@ -18,6 +22,10 @@ import {
   findReviseMintedMetadataRevisionPda,
 } from "@katha/solana/registry";
 import { z } from "zod";
+import {
+  KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+  findListingPda,
+} from "@katha/solana/marketplace";
 import { DomainError } from "./errors.js";
 
 type Snapshot = NonNullable<Awaited<ReturnType<PublicProvenanceStore["find"]>>>;
@@ -42,6 +50,117 @@ function enumValue<T extends string>(options: readonly T[], value: unknown): T {
     .max(options.length - 1)
     .parse(value);
   return options[i]!;
+}
+async function saleEvidence(event: Event, record: Snapshot, asset: string) {
+  const matches = record.sales.filter(
+    ({ event: source, sale }) =>
+      source.signature === event.signature &&
+      source.outerInstructionIndex === event.outerInstructionIndex &&
+      sale.assetAddress === asset,
+  );
+  if (!matches.length) return null;
+  if (matches.length !== 1) throw new Error("Ambiguous settlement evidence");
+  const { sale, event: source, listing } = matches[0]!;
+  const [artwork] = await findArtworkPda({ kathaId: record.kathaId });
+  const [coreAsset] = await findAssetPda({ artwork });
+  const [listingAddress] = await findListingPda({ asset: coreAsset });
+  const p = source.payload;
+  if (
+    source.programAddress !== KATHA_MARKETPLACE_PROGRAM_ADDRESS ||
+    record.programs.marketplace !== source.programAddress ||
+    source.kind !== "SALE" ||
+    p.name !== "ArtworkPurchased" ||
+    source.cluster !== record.cluster ||
+    source.artworkId !== record.id ||
+    source.assetAddress !== asset ||
+    source.slot !== event.slot ||
+    source.transactionIndex !== event.transactionIndex ||
+    sale.cluster !== record.cluster ||
+    sale.artworkId !== record.id ||
+    sale.sourceEventId !== source.id ||
+    listing.id !== sale.listingId ||
+    listing.cluster !== record.cluster ||
+    listing.artworkId !== record.id ||
+    listing.assetAddress !== asset ||
+    listing.status !== "PURCHASED" ||
+    listing.listingAddress !== listingAddress ||
+    listing.listingAddress !== event.payload.authority ||
+    listing.listingAddress !== p.listingAddress ||
+    listing.listingRevision.toString() !== p.revision ||
+    sale.buyerWallet !== event.payload.newOwner ||
+    sale.buyerWallet !== p.buyerWallet ||
+    sale.sellerWallet !== listing.sellerWallet ||
+    sale.paymentMint !== listing.paymentMint ||
+    sale.price !== listing.price ||
+    sale.isPrimary !== p.isPrimary
+  )
+    throw new Error("Invalid settlement binding");
+  for (const key of [
+    "proceedsWallet",
+    "proceedsAmount",
+    "artistWallet",
+    "royaltyAmount",
+    "treasuryWallet",
+    "platformFee",
+  ] as const) {
+    if (String(sale[key]) !== p[key])
+      throw new Error("Invalid settlement distribution");
+  }
+  return publicSaleEvidenceSchema.parse({
+    listingAddress: listing.listingAddress,
+    listingRevision: listing.listingRevision.toString(),
+    marketplaceProgram: source.programAddress,
+    isPrimary: sale.isPrimary,
+    sellerWallet: sale.sellerWallet,
+    buyerWallet: sale.buyerWallet,
+    paymentMint: sale.paymentMint,
+    price: sale.price.toString(),
+    proceedsWallet: sale.proceedsWallet,
+    proceedsAmount: sale.proceedsAmount.toString(),
+    artistWallet: sale.artistWallet,
+    royaltyAmount: sale.royaltyAmount.toString(),
+    treasuryWallet: sale.treasuryWallet,
+    platformFee: sale.platformFee.toString(),
+  });
+}
+async function inspectionMedia(event: Event, record: Snapshot) {
+  const report = record.reports.find((r) => r.chainVersion === event.payload.version);
+  if (!report) return [];
+  if (
+    report.status !== "FINALIZED" ||
+    report.chainCluster !== record.cluster ||
+    report.artworkId !== record.id ||
+    report.chainSignature !== event.signature ||
+    report.chainSlot !== event.slot ||
+    report.documentHash !== event.payload.reportHash ||
+    !report.canonicalDocument
+  )
+    throw new Error("Invalid condition document binding");
+  const bytes = new TextEncoder().encode(report.canonicalDocument);
+  const document = conditionReportDocumentSchema.parse(
+    JSON.parse(report.canonicalDocument),
+  );
+  const canonical = canonicalDocumentBytes(document);
+  if (
+    (await sha256Hex(bytes)) !== report.documentHash ||
+    !Buffer.from(bytes).equals(Buffer.from(canonical)) ||
+    document.kathaId !== record.kathaId ||
+    document.reportId.replaceAll("-", "") !== event.payload.reportId ||
+    document.verifierWallet !== event.payload.verifier ||
+    document.grade !== enumValue(conditionGradeSchema.options, event.payload.grade) ||
+    document.reason !==
+      enumValue(conditionReasonSchema.options, event.payload.reason) ||
+    document.inspectedAt !== seconds(event.payload.inspectedAt) ||
+    JSON.stringify(document.mediaHashes) !== JSON.stringify(report.mediaHashes)
+  )
+    throw new Error("Invalid condition commitment");
+  // Only hashes belonging to this exact historical report AND currently public media qualify.
+  return document.mediaHashes.flatMap((contentHash) => {
+    const media = record.inspectionMedia.find((m) => m.contentHash === contentHash);
+    return media && media.altText
+      ? [{ contentHash, mimeType: media.mimeType, altText: media.altText }]
+      : [];
+  });
 }
 async function project(
   event: Event,
@@ -174,6 +293,7 @@ async function project(
           verifierWallet: p.verifier,
           inspectedAt,
           recordedAt,
+          publicMedia: await inspectionMedia(event, record),
         },
       };
       break;
@@ -244,6 +364,7 @@ async function project(
           assetAddress: p.asset,
           newOwner: p.newOwner,
           authorityWallet: p.authority,
+          sale: await saleEvidence(event, record, asset),
         },
       };
       break;
