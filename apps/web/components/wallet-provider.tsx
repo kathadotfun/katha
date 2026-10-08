@@ -16,6 +16,7 @@ import {
   type TransactionLifecycle,
 } from "../lib/transaction-lifecycle";
 import { createTransactionRpc } from "../lib/transaction-rpc";
+import { listingObservationMatches } from "../lib/owner-listing";
 import { createPublicApi } from "../lib/public-api";
 
 type Runtime = Readonly<{
@@ -72,6 +73,12 @@ export function WalletProvider({
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
       async (operation, signature, signal) => {
+        if (operation.kind === "CREATE_LISTING") {
+          const current = await createPublicApi(apiOrigin).listing(operation.kathaId, {
+            signal,
+          });
+          return listingObservationMatches(operation, current);
+        }
         if (operation.kind === "REVISE_METADATA") {
           const page = await auth.readMetadataRevisions(operation.kathaId, signal);
           return (

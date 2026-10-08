@@ -1,3 +1,4 @@
+import type { WalletOperation } from "./wallet-operation.ts";
 import {
   type TransactionMessageBytesBase64,
   createSolanaRpc,
@@ -6,7 +7,7 @@ import {
   getSignatureFromTransaction,
 } from "@solana/kit";
 import { assertKathaRpcCluster } from "@katha/solana/rpc-cluster";
-import type { UnsignedOperationResponse } from "@katha/shared";
+
 import { decodeCanonicalTransaction } from "./prepared-transaction.ts";
 export function publicTransactionRpcUrl(
   cluster: "localnet" | "devnet",
@@ -45,7 +46,7 @@ export function createTransactionRpc(cluster: "localnet" | "devnet", url?: strin
         .getBlockHeight({ commitment: "confirmed" })
         .send({ abortSignal: signal });
     },
-    async simulate(operation: UnsignedOperationResponse, signal: AbortSignal) {
+    async simulate(operation: WalletOperation, signal: AbortSignal) {
       await check(signal);
       const response = await rpc
         .simulateTransaction(

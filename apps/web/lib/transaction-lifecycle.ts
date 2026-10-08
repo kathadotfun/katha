@@ -1,8 +1,5 @@
-import type {
-  UnsignedOperationResponse,
-  ArtworkProvenanceResponse,
-  RegistrationIdentity,
-} from "@katha/shared";
+import type { WalletOperation } from "./wallet-operation.ts";
+import type { ArtworkProvenanceResponse, RegistrationIdentity } from "@katha/shared";
 import {
   type ConditionTransactionReview,
   type CustodyTransactionReview,
@@ -31,7 +28,7 @@ export type TransactionPhase =
   | "indexed";
 export type TransactionSnapshot = Readonly<{
   phase: TransactionPhase;
-  operation: UnsignedOperationResponse | null;
+  operation: WalletOperation | null;
   accounts: readonly { address: string; role: number }[];
   feeLamports: string | null;
   program: string | null;
@@ -49,20 +46,21 @@ export const idleTransactionSnapshot: TransactionSnapshot = {
 };
 export function createTransactionLifecycle(
   connection: WalletConnection,
-  session: WalletSessionController,
+  session: Pick<WalletSessionController, "getSnapshot" | "subscribe" | "reconcile">,
   rpc: TransactionRpc,
   provenance: (
     kathaId: string,
     signal: AbortSignal,
   ) => Promise<ArtworkProvenanceResponse>,
   indexed?: (
-    operation: UnsignedOperationResponse,
+    operation: WalletOperation,
     signature: string,
     signal: AbortSignal,
   ) => Promise<boolean>,
 ) {
   let state = idleTransactionSnapshot;
   let wire: string | null = null;
+  let review: Parameters<typeof inspectPreparedTransaction>[1] | null = null;
   let finalized = false;
   let generation = 0;
   let disposed = false;
@@ -87,6 +85,7 @@ export function createTransactionLifecycle(
     abort = new AbortController();
     active = false;
     wire = null;
+    review = null;
     finalized = false;
     state = idleTransactionSnapshot;
     publish({});
@@ -101,12 +100,13 @@ export function createTransactionLifecycle(
   const unsubscribeWallet = connection.subscribe(changed),
     unsubscribeSession = session.subscribe(changed);
   const signal = () => AbortSignal.any([abort.signal, AbortSignal.timeout(10_000)]);
-  function assertIdentity(operation: UnsignedOperationResponse) {
+  function assertIdentity(operation: WalletOperation) {
     const auth = session.getSnapshot().session,
       wallet = connection.getSnapshot();
     if (
       disposed ||
       !owner ||
+      !auth ||
       wallet.status !== "connected" ||
       auth?.walletAddress !== operation.feePayer ||
       wallet.connected?.address !== operation.feePayer ||
@@ -122,7 +122,7 @@ export function createTransactionLifecycle(
     )
       throw new Error("Unsupported transaction version.");
   }
-  async function validLifetime(operation: UnsignedOperationResponse, version: number) {
+  async function validLifetime(operation: WalletOperation, version: number) {
     const height = await rpc.height(signal());
     if (version !== generation || disposed) return false;
     if (typeof height !== "bigint" || height < 0n)
@@ -199,7 +199,14 @@ export function createTransactionLifecycle(
     },
     async load(
       input: unknown,
-      expected: Pick<UnsignedOperationResponse, "kind" | "kathaId"> & {
+      expected: Pick<WalletOperation, "kind" | "kathaId"> & {
+        listing?: {
+          price: string;
+          expiresAt: string;
+          expectedRevision: string;
+          asset: string;
+          collection: string;
+        };
         registration?: RegistrationIdentity;
         verification?: { authorshipEvidenceHash: string };
         condition?: ConditionTransactionReview;
@@ -220,13 +227,15 @@ export function createTransactionLifecycle(
       active = true;
       publish({ phase: "simulating", error: null });
       try {
-        const prepared = await inspectPreparedTransaction(input, {
+        const context = {
           ...expected,
           wallet: connection.getSnapshot().connected?.address ?? "",
           cluster: connection.cluster,
-        });
+        };
+        const prepared = await inspectPreparedTransaction(input, context);
         if (version !== generation || disposed) return;
         assertIdentity(prepared.operation);
+        review = context;
         publish({
           operation: prepared.operation,
           accounts: prepared.accounts,
@@ -280,6 +289,7 @@ export function createTransactionLifecycle(
         const signed = await connection.signPreparedTransaction(
           operation,
           abort.signal,
+          review ?? undefined,
         );
         if (version !== generation || disposed) return;
         assertIdentity(operation);

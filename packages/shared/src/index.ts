@@ -235,6 +235,7 @@ export {
   listingCancelRequestSchema,
   listingPreparationResponseSchema,
   artworkListingResponseSchema,
+  type ListingPreparationResponse,
   type ListingCreateRequest,
   type ListingCancelRequest,
   type ArtworkListingResponse,

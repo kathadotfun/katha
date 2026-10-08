@@ -62,7 +62,9 @@ export function TransactionReviewView({
         {title}
       </h3>
       <p role="status" className="mt-3">
-        {labels[state.phase]}
+        {state.operation?.kind === "CREATE_LISTING" && state.phase === "indexed"
+          ? "Transaction finalized and active listing observed"
+          : labels[state.phase]}
       </p>
       {operation && (
         <>
@@ -78,15 +80,14 @@ export function TransactionReviewView({
           </p>
           <p className="mt-2">
             Estimated network fee: {state.feeLamports ?? "pending"} lamports. Account
-            rent may also apply. No token payment is included in this Registry
-            operation.
+            rent may also apply. No token payment is included in this operation.
           </p>
           <p className="mt-2">
             Simulation checks execution but does not guarantee success.
           </p>
           <details className="mt-3">
             <summary>Review affected accounts and message commitment</summary>
-            <p className="mt-2 break-all text-sm">Registry program: {state.program}</p>
+            <p className="mt-2 break-all text-sm">Program: {state.program}</p>
             <p className="mt-2 break-all font-mono text-sm">{operation.messageHash}</p>
             <ul className="mt-2 text-sm">
               {state.accounts.map((account, index) => (

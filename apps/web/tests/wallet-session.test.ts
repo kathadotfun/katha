@@ -88,6 +88,9 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    prepareListing: async () => {
+      throw new Error("Unused listing fixture");
+    },
     readCollection: async () => {
       throw new Error("Unused collection fixture");
     },

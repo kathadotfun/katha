@@ -1,3 +1,5 @@
+import { listingFixture } from "../apps/web/tests/fixtures/listing.ts";
+import { provenanceFixture } from "../apps/web/tests/fixtures/provenance.ts";
 import {
   collectionFixture,
   collectionListingFixture,
@@ -22,6 +24,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       const page = await context.newPage();
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
+      const fixture = await listingFixture({ kathaId: "KATHA-PAUBHA-000001" });
       let issuedSession;
       let mode = "EMPTY";
       let accountCalls = 0;
@@ -75,6 +78,8 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           new URL(route.request().url()).searchParams.get("offset"),
         );
         const value = collectionFixture(issuedSession.walletAddress, offset);
+        if (value.items[0])
+          value.items[0].assetAddress = fixture.expected.listing.asset;
         if (collectionMode === "EMPTY") value.items = [];
         if (collectionMode === "COLLECTOR" && value.items[0])
           value.items[0].custody.state = "COLLECTOR_HELD";
@@ -87,6 +92,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           headers,
           json: {
             ...collectionListingFixture(issuedSession.walletAddress),
+            asset: fixture.expected.listing.asset,
             listing: listingActive
               ? {
                   address: "11111111111111111111111111111113",
@@ -320,6 +326,139 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await expect(main).toContainText(
         "No published artworks are indexed to this wallet yet",
       );
+      // Exercise the owner form with a generated instruction, isolated API and RPC.
+
+      let listingPreparations = 0;
+      await context.route(
+        `${apiOrigin}/artworks/${fixture.operation.kathaId}/listing`,
+        (route) =>
+          route.fulfill({
+            headers,
+            json: {
+              ...collectionListingFixture(issuedSession.walletAddress),
+              kathaId: fixture.operation.kathaId,
+              asset: fixture.expected.listing.asset,
+              currentRevision: "0",
+              chainTime: String(Math.floor(Date.now() / 1000)),
+            },
+          }),
+      );
+      await context.route(
+        `${apiOrigin}/artworks/${fixture.operation.kathaId}/provenance?**`,
+        (route) =>
+          route.fulfill({
+            headers,
+            json: {
+              ...provenanceFixture,
+              kathaId: fixture.operation.kathaId,
+              chain: {
+                ...provenanceFixture.chain,
+                coreAssetAddress: fixture.expected.listing.asset,
+                collectionAddress: fixture.expected.listing.collection,
+              },
+            },
+          }),
+      );
+      await context.route(
+        `${apiOrigin}/artworks/${fixture.operation.kathaId}/operations/listing`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers });
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          const input = route.request().postDataJSON();
+          assert.equal(input.price, "12500001");
+          assert.equal(input.expectedRevision, "0");
+          listingPreparations++;
+          const prepared = await listingFixture({
+            kathaId: fixture.operation.kathaId,
+            price: BigInt(input.price),
+            expiresAt: BigInt(input.expiresAt),
+          });
+          return route.fulfill({
+            headers,
+            json: {
+              ...prepared.operation,
+              price: input.price,
+              expiresAt: input.expiresAt,
+            },
+          });
+        },
+      );
+      await context.route("http://127.0.0.1:8899/**", (route) => {
+        const { method, id } = route.request().postDataJSON();
+        const results = {
+          getGenesisHash: "11111111111111111111111111111111",
+          getBlockHeight: 1,
+          simulateTransaction: {
+            context: { slot: 10 },
+            value: { err: null, unitsConsumed: 200 },
+          },
+          getFeeForMessage: { context: { slot: 10 }, value: 5000 },
+        };
+        assert.ok(method in results, `Unexpected RPC: ${method}`);
+        return route.fulfill({
+          headers,
+          json: { jsonrpc: "2.0", id, result: results[method] },
+        });
+      });
+      collectionMode = "READY";
+      listingUnavailable = false;
+      listingActive = false;
+      await main
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      await main
+        .getByRole("link", { name: "Offer this artwork for sale", exact: true })
+        .click();
+      await expect(
+        main.getByRole("heading", { name: "Offer your artwork for sale." }),
+      ).toBeVisible();
+      const prepare = main.getByRole("button", {
+        name: "Prepare listing for review",
+        exact: true,
+      });
+      await expect(prepare).toBeEnabled();
+      await main.getByLabel("Price in test tokens").fill("0");
+      await main
+        .getByLabel("Listing expiry (your local time)")
+        .fill("2030-01-01T00:00");
+      await prepare.click();
+      await expect(main.getByRole("alert")).toContainText("positive amount");
+      assert.equal(listingPreparations, 0);
+      await main.getByLabel("Price in test tokens").fill("12.500001");
+      await prepare.click();
+      const review = main.getByRole("region", {
+        name: "Listing transaction review",
+        exact: true,
+      });
+      await expect(review).toContainText("Review transaction before wallet approval");
+      await expect(main).toContainText("12500001 test-token base units");
+      await expect(
+        review.getByRole("button", { name: "Approve in wallet and submit" }),
+      ).toBeVisible();
+      assert.equal(listingPreparations, 1);
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
+        0,
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.screenshot({
+        path: `/tmp/katha-123-listing-${width}.png`,
+        fullPage: true,
+      });
+      await review.getByRole("button", { name: "Cancel transaction review" }).click();
+      await expect(prepare).toBeDisabled();
+      await main
+        .getByRole("link", { name: "Back to my collection", exact: true })
+        .click();
       await main.getByRole("link", { name: "Wallet & account", exact: true }).click();
       await expect(main).toContainText("This count reflects");
       mode = "FAIL";
@@ -339,7 +478,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await context.close();
     }
     console.log(
-      "Collector account and collection browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
+      "Collector account, collection and owner listing browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
     );
   } finally {
     await browser.close();

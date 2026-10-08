@@ -1,4 +1,12 @@
 import {
+  listingCreateRequestSchema,
+  listingPreparationResponseSchema,
+  artworkDraftParamsSchema as listingParamsSchema,
+  type ListingCreateRequest,
+} from "@katha/shared";
+import { parseWalletOperation } from "./wallet-operation.ts";
+import type { WalletOperation } from "./wallet-operation.ts";
+import {
   collectorCollectionQuerySchema,
   collectorCollectionResponseSchema,
   type CollectorCollectionQuery,
@@ -69,7 +77,6 @@ import {
   operationReceiptRequestSchema,
   operationReceiptResponseSchema,
   unsignedOperationResponseSchema,
-  type UnsignedOperationResponse,
   walletChallengeRequestSchema,
   walletChallengeResponseSchema,
   walletVerifyRequestSchema,
@@ -152,6 +159,31 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async prepareListing(
+      kathaId: string,
+      input: ListingCreateRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const result = listingPreparationResponseSchema.parse(
+        await request(
+          `/artworks/${path.kathaId}/operations/listing`,
+          listingCreateRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kind !== "CREATE_LISTING" ||
+        result.kathaId !== path.kathaId ||
+        result.price !== input.price ||
+        result.expiresAt !== input.expiresAt ||
+        result.currentRevision !== input.expectedRevision
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return { ...result, kind: "CREATE_LISTING" as const };
+    },
     async readCollection(
       query: CollectorCollectionQuery,
       token: string,
@@ -773,12 +805,12 @@ export function createWalletSessionApi(
       return result;
     },
     async receipt(
-      operation: UnsignedOperationResponse,
+      operation: WalletOperation,
       transactionBase64: string,
       token: string,
       signal: AbortSignal,
     ) {
-      const parsed = unsignedOperationResponseSchema.parse(operation);
+      const parsed = parseWalletOperation(operation);
       return operationReceiptResponseSchema.parse(
         await request(
           `/operations/${parsed.operationId}/receipts`,

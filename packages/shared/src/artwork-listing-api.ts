@@ -63,3 +63,7 @@ export const artworkListingResponseSchema = z.strictObject({
 export type ListingCreateRequest = z.infer<typeof listingCreateRequestSchema>;
 export type ListingCancelRequest = z.infer<typeof listingCancelRequestSchema>;
 export type ArtworkListingResponse = z.infer<typeof artworkListingResponseSchema>;
+
+export type ListingPreparationResponse = z.infer<
+  typeof listingPreparationResponseSchema
+>;

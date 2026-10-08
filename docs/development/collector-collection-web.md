@@ -37,8 +37,11 @@ The page clears previous holdings on refresh failure, wallet/session change,
 sign-out, expiry, or revocation. Requests are aborted and late responses discarded
 when identity changes or the component unmounts. An empty collection is distinct
 from an unavailable request and may reflect unpublished work or indexing delay.
-No private fulfillment details, raw events, token balances, prices, sale forms or
-purchase controls are added by this page.
+No private fulfillment details, raw events, token balances or purchase controls
+are added by this page. When a finalized listing lookup agrees with the indexed
+owner and no ACTIVE listing requires release, **Offer this artwork for sale**
+opens the [owner listing form](owner-listing-web.md). Eligibility is rechecked
+during preparation and chain simulation.
 
 ## Verification
 

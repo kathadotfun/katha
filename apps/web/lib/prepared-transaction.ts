@@ -1,3 +1,5 @@
+import { parseWalletOperation, type WalletOperation } from "./wallet-operation.ts";
+import * as market from "@katha/solana/marketplace";
 import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
 import {
   getBase64Encoder,
@@ -15,7 +17,6 @@ import {
   unwrapOption,
 } from "@solana/kit";
 import {
-  unsignedOperationResponseSchema,
   metadataRevisionReviewSchema,
   metadataDocumentSchema,
   type MetadataRevisionReview,
@@ -108,7 +109,14 @@ export async function inspectPreparedTransaction(
   context: {
     wallet: string;
     cluster: "localnet" | "devnet";
-    kind: UnsignedOperationResponse["kind"];
+    kind: WalletOperation["kind"];
+    listing?: {
+      price: string;
+      expiresAt: string;
+      expectedRevision: string;
+      asset: string;
+      collection: string;
+    };
     kathaId: string;
     registration?: RegistrationIdentity;
     verification?: { authorshipEvidenceHash: string };
@@ -118,7 +126,7 @@ export async function inspectPreparedTransaction(
     metadata?: MetadataTransactionReview;
   },
 ) {
-  const operation = unsignedOperationResponseSchema.parse(input);
+  const operation = parseWalletOperation(input);
   const transaction = decodeCanonicalTransaction(operation.transactionBase64);
   const compiled = getCompiledTransactionMessageDecoder().decode(
     transaction.messageBytes,
@@ -144,10 +152,98 @@ export async function inspectPreparedTransaction(
       operation.messageHash ||
     message.instructions.length !== 1 ||
     !instruction?.data ||
-    instruction.programAddress !== KATHA_REGISTRY_PROGRAM_ADDRESS ||
-    !kinds[operation.kind].includes(identifyKathaRegistryInstruction(instruction.data))
+    (operation.kind !== "CREATE_LISTING" &&
+      (instruction.programAddress !== KATHA_REGISTRY_PROGRAM_ADDRESS ||
+        !kinds[operation.kind].includes(
+          identifyKathaRegistryInstruction(instruction.data),
+        )))
   )
     throw new Error("Preparation does not match the requested operation.");
+  if (operation.kind === "CREATE_LISTING") {
+    const expected = context.listing;
+    if (
+      !expected ||
+      instruction.programAddress !== market.KATHA_MARKETPLACE_PROGRAM_ADDRESS ||
+      market.identifyKathaMarketplaceInstruction(instruction.data!) !==
+        market.KathaMarketplaceInstruction.CreateListing
+    )
+      throw new Error("Listing operation mismatch");
+    const parsed = market.parseCreateListingInstruction({
+      ...instruction,
+      accounts: instruction.accounts ?? [],
+      data: instruction.data!,
+    });
+    const [[artwork], [config], [registryConfig]] = await Promise.all([
+      findArtworkPda({ kathaId: operation.kathaId }),
+      market.findConfigPda(),
+      findConfigPda(),
+    ]);
+    const [[asset], [listing], [verification], [head], [custody], [terms]] =
+      await Promise.all([
+        findAssetPda({ artwork }),
+        market.findListingPda({ asset: address(expected.asset) }),
+        findVerificationPda({ artwork }),
+        market.findConditionHeadPda(
+          { artwork },
+          { programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS },
+        ),
+        market.findCustodyHeadPda(
+          { artwork },
+          { programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS },
+        ),
+        market.findSaleTermsPda({ artwork }),
+      ]);
+    const accounts = [
+      config,
+      KATHA_REGISTRY_PROGRAM_ADDRESS,
+      registryConfig,
+      artwork,
+      verification,
+      head,
+      parsed.accounts.conditionReport.address,
+      custody,
+      terms,
+      asset,
+      address(context.wallet),
+      listing,
+      address(expected.collection),
+      CORE_PROGRAM_ADDRESS,
+      address("11111111111111111111111111111111"),
+    ];
+    const roles = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 1, 1, 0, 0];
+    if (
+      asset !== expected.asset ||
+      parsed.data.price !== BigInt(expected.price) ||
+      parsed.data.expiresAt !== BigInt(expected.expiresAt) ||
+      parsed.data.expectedRevision !== BigInt(expected.expectedRevision) ||
+      operation.price !== expected.price ||
+      operation.expiresAt !== expected.expiresAt ||
+      operation.currentRevision !== expected.expectedRevision ||
+      BigInt(operation.nextRevision) !== BigInt(expected.expectedRevision) + 1n ||
+      instruction.accounts?.length !== 15 ||
+      instruction.accounts.some(
+        (value, index) =>
+          value.address !== accounts[index] || value.role !== roles[index],
+      ) ||
+      instruction.data!.length !== 32
+    )
+      throw new Error("Listing terms or account binding mismatch");
+    return {
+      operation,
+      transaction: {
+        ...transaction,
+        lifetimeConstraint: {
+          blockhash: message.lifetimeConstraint.blockhash,
+          lastValidBlockHeight: BigInt(operation.lastValidBlockHeight),
+        },
+      },
+      accounts: instruction.accounts.map((value) => ({
+        address: String(value.address),
+        role: value.role,
+      })),
+      program: String(instruction.programAddress),
+    };
+  }
   const parsed = parseKathaRegistryInstruction({
     ...instruction,
     data: instruction.data,
@@ -561,7 +657,7 @@ export async function inspectPreparedTransaction(
 }
 export async function validateSignedTransaction(
   wire: string,
-  operation: UnsignedOperationResponse,
+  operation: WalletOperation,
 ) {
   const signed = decodeCanonicalTransaction(wire);
   const prepared = decodeCanonicalTransaction(operation.transactionBase64);

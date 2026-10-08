@@ -1,3 +1,4 @@
+import type { WalletOperation } from "./wallet-operation.ts";
 import {
   address,
   createClient,
@@ -18,7 +19,6 @@ import {
   inspectPreparedTransaction,
   validateSignedTransaction,
 } from "./prepared-transaction.ts";
-import type { UnsignedOperationResponse } from "@katha/shared";
 
 type Cluster = WalletSession["cluster"];
 export type WalletConnectionSnapshot = Readonly<{
@@ -130,8 +130,12 @@ export function createWalletBoundary(
   return {
     cluster,
     async signPreparedTransaction(
-      operation: UnsignedOperationResponse,
+      operation: WalletOperation,
       signal: AbortSignal,
+      review: Omit<
+        Parameters<typeof inspectPreparedTransaction>[1],
+        "wallet" | "cluster" | "kind" | "kathaId"
+      > = {},
     ) {
       available();
       signal.throwIfAborted();
@@ -145,6 +149,7 @@ export function createWalletBoundary(
       )
         throw new Error("Wallet cannot sign this transaction version separately.");
       const prepared = await inspectPreparedTransaction(operation, {
+        ...review,
         wallet: before.address,
         cluster,
         kind: operation.kind,

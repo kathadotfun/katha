@@ -124,7 +124,8 @@ review boundary now validates and simulates prepared Registry messages, requests
 explicit wallet approval, records signed attempts and reconciles finalized outcomes
 with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork drafts, media management and the registration workflow are connected, with exact document review, simulation, explicit wallet approval and protected receipt/indexing feedback. Artwork authenticity now connects manual inspection and authorship approval to verifier-authorized preparation, wallet signing and finalized receipt/indexing feedback. Condition inspection now connects private evidence upload and immutable report preparation to explicit verifier signing, current owner/custody scope checks and report-specific finalized receipt/indexing feedback. Custody administration now connects finalized physical state and private fulfillment requests to explicit manual status confirmation, authority-bound custody signing and separate receipt/indexing feedback. Marketplace transaction builders now prepare owner-bound listings, seller cancellation,
 permissionless expiry recovery and buyer-bound purchases through generated clients.
-Listing and purchase preparation APIs are available; collector marketplace screens remain planned.
+Listing and purchase preparation APIs are available. Signed-in owners can prepare
+fixed-price test-token listings; purchase screens remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -230,6 +231,7 @@ outside the current scope.
 - [Authenticated collector account and holdings](docs/development/collector-api.md)
 - [Collector account page](docs/development/collector-account-web.md)
 - [Collector collection page](docs/development/collector-collection-web.md)
+- [Owner listing form](docs/development/owner-listing-web.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)

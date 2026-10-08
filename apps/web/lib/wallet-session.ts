@@ -1,3 +1,5 @@
+import type { ListingCreateRequest } from "@katha/shared";
+import type { WalletOperation } from "./wallet-operation.ts";
 import type { CollectorCollectionQuery } from "@katha/shared";
 import type {
   MetadataRevisionDocumentRequest,
@@ -20,7 +22,6 @@ import {
   type Pagination,
   type ArtworkDraftCreateRequest,
   type ArtworkDraftUpdateRequest,
-  type UnsignedOperationResponse,
 } from "@katha/shared";
 import type { WalletConnection } from "./wallet-connection.ts";
 import { WalletSessionApiError, type WalletSessionApi } from "./wallet-session-api.ts";
@@ -127,6 +128,22 @@ export function createWalletSession(
     return result;
   }
   return {
+    async prepareListing(
+      kathaId: string,
+      input: ListingCreateRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.prepareListing(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readCollection(query: CollectorCollectionQuery, signal: AbortSignal) {
       const result = await authorized(
         (value) => api.readCollection(query, value, signal),
@@ -451,11 +468,7 @@ export function createWalletSession(
         throw new WalletSessionApiError("UNAVAILABLE");
       return result;
     },
-    async reconcile(
-      operation: UnsignedOperationResponse,
-      wire: string,
-      signal: AbortSignal,
-    ) {
+    async reconcile(operation: WalletOperation, wire: string, signal: AbortSignal) {
       if (
         disposed ||
         !token ||
