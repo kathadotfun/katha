@@ -88,6 +88,12 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readResale: async () => {
+      throw new Error("Unexpected resale read");
+    },
+    requestResale: async () => {
+      throw new Error("Unexpected resale request");
+    },
     readDelivery: async () => {
       throw new Error("Unexpected delivery read");
     },

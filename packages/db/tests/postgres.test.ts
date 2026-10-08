@@ -64,7 +64,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(15);
+    expect(applicationCount).toBe(16);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -6300,6 +6300,107 @@ it("indexes primary and secondary settlements once across streams, replay and li
         .from(artworkSales)
         .where(eq(artworkSales.artworkId, artwork!.id)),
     ).toHaveLength(2);
+  } finally {
+    await connection.close();
+  }
+});
+
+it("serializes scoped resale inspection requests without condition approval or custody history", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const { createResaleInspectionStore, resaleInspectionRequests } =
+    await import("../src/index.js");
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "synthetic-resale-requests",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist!.id,
+        category: "PAUBHA",
+        title: "Synthetic resale",
+        creationYear: 2026,
+        authorshipEvidenceHash: "a".repeat(64),
+      })
+      .returning();
+    if (!artwork) throw new Error("Missing fixture");
+    const store = createResaleInspectionStore(db),
+      owner = "G".repeat(32),
+      id = randomUUID();
+    const rows = await Promise.all([
+      store.request(artwork, owner, 1n, 1, id),
+      store.request(artwork, owner, 1n, 1, randomUUID()),
+    ]);
+    expect(rows[0]?.id).toBe(rows[1]?.id);
+    expect(await store.list(artwork.id, owner)).toHaveLength(1);
+    expect(await store.request(artwork, owner, 1n, 1, rows[0]!.id)).toEqual(rows[0]);
+    expect(await store.request(artwork, "H".repeat(32), 2n, 1, rows[0]!.id)).toBeNull();
+    expect(
+      await store.request(
+        { ...artwork, updatedAt: new Date(0) },
+        owner,
+        2n,
+        1,
+        randomUUID(),
+      ),
+    ).toBeNull();
+    expect(await store.list(artwork.id, "H".repeat(32))).toHaveLength(0);
+    const renewal = await store.request(artwork, owner, 1n, 2, randomUUID());
+    expect(renewal?.id).not.toBe(rows[0]!.id);
+    expect(renewal?.conditionVersion).toBe(2);
+    const largeVersion = await store.request(
+      artwork,
+      owner,
+      1n,
+      3221225472,
+      randomUUID(),
+    );
+    expect(largeVersion?.conditionVersion).toBe(3221225472);
+    await expect(
+      db.insert(resaleInspectionRequests).values({
+        id: randomUUID(),
+        artworkId: artwork.id,
+        ownerWallet: owner,
+        custodyRevision: 1n,
+        conditionVersion: 3,
+        requestedAt: new Date(Date.now() + 60000),
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      db
+        .update(resaleInspectionRequests)
+        .set({ ownerWallet: "H".repeat(32) })
+        .where(eq(resaleInspectionRequests.id, rows[0]!.id)),
+    ).rejects.toThrow();
+    await expect(
+      db
+        .delete(resaleInspectionRequests)
+        .where(eq(resaleInspectionRequests.id, rows[0]!.id)),
+    ).rejects.toThrow();
+    expect(
+      await db
+        .select()
+        .from(custodyEvents)
+        .where(eq(custodyEvents.artworkId, artwork.id)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(conditionReports)
+        .where(eq(conditionReports.artworkId, artwork.id)),
+    ).toHaveLength(0);
   } finally {
     await connection.close();
   }

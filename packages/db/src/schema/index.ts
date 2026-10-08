@@ -46,3 +46,4 @@ export { indexerNetworks, ownershipReconciliations } from "./indexer-recovery.js
 export { nfcTags } from "./nfc-tags.js";
 
 export { fulfillmentReceiptReports } from "./fulfillment-receipt-reports.js";
+export * from "./resale-inspection-requests.js";

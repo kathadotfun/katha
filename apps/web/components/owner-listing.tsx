@@ -128,6 +128,17 @@ export function OwnerListingPanel({
           {state.error}
         </p>
       )}
+      {state.approval && (
+        <p className="mt-4" role="status">
+          Inspection approval: {state.approval.inspection.status.toLowerCase()}.{" "}
+          {state.approval.canList
+            ? "Observed inspection requirements are met; preparation and purchase recheck them."
+            : "Listing preparation remains unavailable until eligible."}{" "}
+          <Link className="text-link" href={`/collection/${kathaId}/resale`}>
+            Inspection and resale
+          </Link>
+        </p>
+      )}
       {state.page && (
         <>
           <p className="mt-4 text-sm">

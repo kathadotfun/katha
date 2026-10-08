@@ -237,6 +237,14 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
                         Delivery and receipt
                       </Link>
                     )}
+                    {!changedOwner && (
+                      <Link
+                        href={`/collection/${artwork.kathaId}/resale`}
+                        className="text-link mt-4 ml-4 inline-flex min-h-11 items-center"
+                      >
+                        Inspection and resale
+                      </Link>
+                    )}
                     <p className="mt-3 text-sm text-muted">
                       These are recorded observations, not a live ownership or physical
                       inspection guarantee.

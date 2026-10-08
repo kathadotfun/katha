@@ -1,3 +1,4 @@
+import { resaleFixture } from "../apps/web/tests/fixtures/resale.ts";
 import { purchaseFixture } from "../apps/web/tests/fixtures/purchase.ts";
 import { purchaseQuoteFixture } from "../apps/web/tests/fixtures/purchase-quote.ts";
 import {
@@ -47,6 +48,43 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           ? route.continue()
           : route.abort(),
       );
+      let resaleMode = "KATHA_HELD",
+        resaleRequests = [],
+        resaleWrites = 0;
+      await context.route(`${apiOrigin}/resale/artworks/*`, async (route) => {
+        const id = new URL(route.request().url()).pathname.split("/").at(-1);
+        if (route.request().method() === "POST") {
+          const input = route.request().postDataJSON();
+          assert.equal(input.inspectionRequested, true);
+          assert.equal(input.expectedCustodyRevision, "2");
+          resaleWrites++;
+          resaleRequests = [
+            {
+              id: input.requestId,
+              ownerWallet: issuedSession.walletAddress,
+              custodyRevision: "2",
+              conditionVersion: 1,
+              requestedAt: new Date().toISOString(),
+            },
+          ];
+        }
+        const value = resaleFixture(issuedSession.walletAddress, id);
+        if (resaleMode !== "KATHA_HELD") {
+          value.custodyState = "COLLECTOR_HELD";
+          value.custodyRevision = "2";
+          value.requests = resaleRequests;
+          value.inspection.status =
+            resaleMode === "APPROVED"
+              ? "APPROVED"
+              : resaleMode === "EXPIRED"
+                ? "EXPIRED"
+                : "REQUIRED";
+          value.inspection.validUntil = "1792000000";
+          value.canList = resaleMode === "APPROVED";
+          value.canRequest = resaleMode !== "APPROVED" && !resaleRequests.length;
+        }
+        return route.fulfill({ headers, json: value });
+      });
       await context.route(`${apiOrigin}/account`, async (route) => {
         if (route.request().method() === "OPTIONS")
           return route.fulfill({ status: 204, headers });
@@ -417,6 +455,61 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await main.getByRole("button", { name: "Refresh delivery requests" }).click();
       await expect(main.getByRole("alert")).toContainText("could not be confirmed");
       await expect(main).not.toContainText("Synthetic address");
+      await main.getByRole("link", { name: "Back to my collection" }).click();
+      await main
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      resaleMode = "REQUIRED";
+      await main
+        .getByRole("link", { name: "Inspection and resale", exact: true })
+        .click();
+      await expect(
+        main.getByRole("heading", { name: "Preserve the story through resale." }),
+      ).toBeVisible();
+      await main.getByRole("button", { name: "Refresh inspection status" }).click();
+      await expect(main).toContainText("Inspection approval: required");
+      await expect(
+        main.getByRole("link", { name: "Review a listing", exact: true }),
+      ).toHaveCount(0);
+      await main
+        .getByRole("button", { name: "Request Katha resale inspection" })
+        .click();
+      await expect(main).toContainText(
+        "Manual inspection or renewed approval is required",
+      );
+      assert.equal(resaleWrites, 1);
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
+        0,
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      await page.evaluate(() => {
+        document.activeElement?.blur();
+        window.scrollTo(0, 0);
+      });
+      await page.screenshot({
+        path: `/tmp/katha-128-resale-${width}.png`,
+        fullPage: true,
+      });
+      resaleMode = "APPROVED";
+      await main.getByRole("button", { name: "Refresh inspection status" }).click();
+      await expect(main).toContainText(
+        "Matching finalized inspection approval observed",
+      );
+      await expect(
+        main.getByRole("link", { name: "Review a listing", exact: true }),
+      ).toBeVisible();
+      resaleMode = "EXPIRED";
+      await main.getByRole("button", { name: "Refresh inspection status" }).click();
+      await expect(main).toContainText("Inspection approval: expired");
+      await expect(
+        main.getByRole("link", { name: "Review a listing", exact: true }),
+      ).toHaveCount(0);
+      resaleMode = "KATHA_HELD";
       await main.getByRole("link", { name: "Back to my collection" }).click();
       await main
         .getByRole("button", { name: "Refresh collection", exact: true })
@@ -857,7 +950,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await context.close();
     }
     console.log(
-      "Collector account, collection, owner listing, release, purchase quote and private delivery/receipt browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
+      "Collector account, collection, owner listing, release, purchase quote and private delivery/receipt and inspected resale browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
     );
   } finally {
     await browser.close();

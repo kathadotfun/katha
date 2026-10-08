@@ -66,3 +66,12 @@ preparation, review without automatic signing, cancellation of unsigned review,
 accessibility and overflow at 375, 768 and 1280px. API/RPC responses are synthetic;
 this harness does not prove live chain execution. Real wallet approval and the
 Devnet demonstration remain manual.
+
+## Current inspection approval
+
+The owner screen reads the private resale inspection boundary before enabling a
+new listing and again immediately before preparation. Missing/stale/expired
+approval blocks creation. Cancellation and expiry recovery remain available when
+approval reads fail. Collector-held secondary sales require a finalized PRE_RESALE
+report matching the current owner/custody and configured validity. See the
+[inspection request and approval guide](resale-inspection-web.md).

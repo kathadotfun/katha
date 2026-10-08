@@ -155,6 +155,12 @@ async function fixture(
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    readResale: async () => {
+      throw new Error("Unexpected resale read");
+    },
+    requestResale: async () => {
+      throw new Error("Unexpected resale request");
+    },
     readDelivery: async () => {
       throw new Error("Unexpected delivery read");
     },

@@ -225,3 +225,8 @@ export {
 export { createCollectorStore, type CollectorStore } from "./collector-store.js";
 
 export { fulfillmentReceiptReports } from "./schema/fulfillment-receipt-reports.js";
+export {
+  createResaleInspectionStore,
+  type ResaleInspectionStore,
+} from "./resale-inspection-store.js";
+export { resaleInspectionRequests } from "./schema/resale-inspection-requests.js";

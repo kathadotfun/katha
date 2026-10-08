@@ -7,6 +7,8 @@ import {
   listingPriceSchema,
   artworkListingResponseSchema,
   artworkProvenanceResponseSchema,
+  resaleInspectionReviewSchema,
+  type ResaleInspectionReview,
   type ArtworkListingResponse,
   type ListingCreateRequest,
 } from "@katha/shared";
@@ -37,6 +39,7 @@ export function listingExpiry(value: string, now = Date.now()): string {
 export type OwnerListingSnapshot = Readonly<{
   page: ArtworkListingResponse | null;
   collection: string | null;
+  approval: ResaleInspectionReview | null;
   busy: boolean;
   error: string | null;
   reloadRequired: boolean;
@@ -44,6 +47,7 @@ export type OwnerListingSnapshot = Readonly<{
 export const emptyOwnerListingSnapshot: OwnerListingSnapshot = {
   page: null,
   collection: null,
+  approval: null,
   busy: false,
   error: null,
   reloadRequired: false,
@@ -51,7 +55,11 @@ export const emptyOwnerListingSnapshot: OwnerListingSnapshot = {
 export function createOwnerListing(
   session: Pick<
     WalletSessionController,
-    "getSnapshot" | "subscribe" | "prepareListing" | "prepareCancellation"
+    | "getSnapshot"
+    | "subscribe"
+    | "prepareListing"
+    | "prepareCancellation"
+    | "readResale"
   >,
   connection: Pick<WalletConnection, "getSnapshot" | "subscribe" | "cluster">,
   transactions: Pick<TransactionLifecycle, "load" | "getSnapshot">,
@@ -104,6 +112,7 @@ export function createOwnerListing(
       ["failed", "indexed"].includes(transactions.getSnapshot().phase));
   const canPrepare = () =>
     canAct() &&
+    state.approval?.canList === true &&
     (!state.page!.listing ||
       ["CANCELLED", "EXPIRED", "PURCHASED"].includes(state.page!.listing.status));
   const canRelease = () =>
@@ -126,7 +135,13 @@ export function createOwnerListing(
       abort?.abort();
       abort = new AbortController();
       const signal = abort.signal;
-      publish({ busy: true, page: null, collection: null, error: null });
+      publish({
+        busy: true,
+        page: null,
+        collection: null,
+        approval: null,
+        error: null,
+      });
       try {
         const [page, history] = await Promise.all([
           api.listing(kathaId, { signal }),
@@ -144,13 +159,34 @@ export function createOwnerListing(
           !history.chain.collectionAddress
         )
           throw new Error("Artwork binding changed");
+        let approval: ResaleInspectionReview | null = null;
+        try {
+          if (page.owner === session.getSnapshot().session?.walletAddress) {
+            const observed = resaleInspectionReviewSchema.parse(
+              await session.readResale(kathaId, signal),
+            );
+            if (
+              observed.kathaId !== kathaId ||
+              observed.ownerWallet !== page.owner ||
+              observed.cluster !== page.cluster
+            )
+              throw new Error("Approval binding changed");
+            approval = observed;
+          }
+        } catch {
+          /* A missing approval blocks creation, while cancellation remains available. */
+        }
+        if (disposed || signal.aborted || version !== generation) return;
         publish({
           page,
+          approval,
           collection: history.chain.collectionAddress,
           reloadRequired: false,
           error:
             page.owner === session.getSnapshot().session?.walletAddress
-              ? null
+              ? approval
+                ? null
+                : "Inspection approval is unavailable. Refresh before creating a listing."
               : "The connected wallet is not the observed Core owner.",
         });
       } catch {
@@ -239,6 +275,17 @@ export function createOwnerListing(
       const signal = abort.signal;
       publish({ busy: true, error: null });
       try {
+        const approval = resaleInspectionReviewSchema.parse(
+          await session.readResale(kathaId, signal),
+        );
+        if (disposed || signal.aborted || version !== generation) return;
+        if (
+          !approval.canList ||
+          approval.kathaId !== kathaId ||
+          approval.ownerWallet !== page.owner ||
+          approval.cluster !== page.cluster
+        )
+          throw new Error("Approval changed");
         const prepared = await session.prepareListing(kathaId, input, signal);
         if (disposed || signal.aborted || version !== generation) return;
         await transactions.load(prepared, {

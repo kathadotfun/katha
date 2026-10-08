@@ -1,3 +1,4 @@
+import { resaleFixture } from "./fixtures/resale.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cancellationFixture } from "./fixtures/listing.ts";
@@ -126,6 +127,7 @@ test("seller releases before or after expiry; nonowner, wrong seller and uncerta
       expiresAt: new Date(Date.now() + 60000).toISOString(),
     },
   };
+  let approvalUnavailable = false;
   let prepared = 0,
     loaded = 0;
   let gate: Promise<typeof operation> | null = null;
@@ -135,6 +137,10 @@ test("seller releases before or after expiry; nonowner, wrong seller and uncerta
     {
       getSnapshot: () => auth,
       subscribe,
+      readResale: async () => {
+        if (approvalUnavailable) throw new Error("Unavailable");
+        return resaleFixture(operation.feePayer, operation.kathaId);
+      },
       prepareListing: async () => {
         throw new Error("Unexpected creation");
       },
@@ -185,6 +191,13 @@ test("seller releases before or after expiry; nonowner, wrong seller and uncerta
   );
   await workflow.read();
   assert.equal(workflow.canRelease(), true);
+  approvalUnavailable = true;
+  await workflow.read();
+  assert.equal(workflow.canRelease(), true);
+  assert.equal(workflow.canPrepare(), false);
+  approvalUnavailable = false;
+  await workflow.read();
+
   page = { ...page, owner: "11111111111111111111111111111114" };
   await workflow.read();
   await workflow.release();

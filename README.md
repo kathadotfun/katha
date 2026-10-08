@@ -276,3 +276,8 @@ Current Core owners can request physical delivery and report receipt through
 `/collection/{kathaId}/delivery`. Shipping details stay private; operator-confirmed
 custody and post-delivery inspections remain separate. See the
 [delivery guide](docs/development/delivery-web.md).
+
+Collector-held resale now has private inspection requests and finalized approval
+status at `/collection/{kathaId}/resale`. Listing preparation requires the applicable
+inspection approval; authorized verifiers use the existing condition workflow.
+See the [inspected resale guide](docs/development/resale-inspection-web.md).

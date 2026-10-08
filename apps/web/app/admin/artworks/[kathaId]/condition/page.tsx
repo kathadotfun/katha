@@ -1,3 +1,4 @@
+import { ResaleInspectionPanel } from "../../../../../components/resale-inspection";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -40,6 +41,7 @@ export default async function ConditionPage({
         Document Nepal’s cultural artwork condition in person and attest to the report
         with the authorized verifier wallet.
       </p>
+      <ResaleInspectionPanel kathaId={parsed.data.kathaId} verifier />
       <ConditionInspectionPanel kathaId={parsed.data.kathaId} />
     </div>
   );

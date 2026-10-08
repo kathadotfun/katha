@@ -1,3 +1,5 @@
+import type { ResaleInspectionBoundary } from "./resale-inspection.js";
+import { resaleInspectionRequestSchema } from "@katha/shared";
 import type { CollectorBoundary } from "./collector.js";
 import { collectorCollectionQuerySchema } from "@katha/shared";
 import type { ArtworkPurchasesBoundary } from "./artwork-purchases.js";
@@ -128,6 +130,7 @@ export function createApi(
   listings?: ArtworkListingsBoundary,
   purchases?: ArtworkPurchasesBoundary,
   collector?: CollectorBoundary,
+  resale?: ResaleInspectionBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -618,6 +621,35 @@ export function createApi(
         ),
         201,
       );
+    });
+  }
+  if (resale) {
+    app.use("/resale/*", async (c, next) => {
+      c.header("Cache-Control", "no-store");
+      await next();
+      c.header("Cache-Control", "no-store");
+    });
+    app.get("/resale/artworks/:kathaId", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(await resale.review(c.req.header("Authorization"), kathaId));
+    });
+    app.post("/resale/artworks/:kathaId", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await resale.request(
+          c.req.header("Authorization"),
+          kathaId,
+          await parseJson(c, resaleInspectionRequestSchema),
+        ),
+        201,
+      );
+    });
+    app.get("/verifier/artworks/:kathaId/resale", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(await resale.review(c.req.header("Authorization"), kathaId, true));
     });
   }
   if (custodyOperations) {

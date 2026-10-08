@@ -261,3 +261,5 @@ export {
 } from "./artwork-purchase-api.js";
 
 export * from "./collector-api.js";
+
+export * from "./resale-inspection.js";

@@ -1,4 +1,9 @@
 import {
+  resaleInspectionReviewSchema,
+  resaleInspectionRequestSchema,
+  type ResaleInspectionRequest,
+} from "@katha/shared";
+import {
   purchasePrepareRequestSchema,
   purchasePreparationResponseSchema,
   type PurchasePrepareRequest,
@@ -174,6 +179,45 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readResale(
+      kathaId: string,
+      token: string,
+      signal: AbortSignal,
+      verifier = false,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const page = resaleInspectionReviewSchema.parse(
+        await request(
+          verifier
+            ? `/verifier/artworks/${path.kathaId}/resale`
+            : `/resale/artworks/${path.kathaId}`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (page.kathaId !== kathaId) throw new WalletSessionApiError("UNAVAILABLE");
+      return page;
+    },
+    async requestResale(
+      kathaId: string,
+      input: ResaleInspectionRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const page = resaleInspectionReviewSchema.parse(
+        await request(
+          `/resale/artworks/${path.kathaId}`,
+          resaleInspectionRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (page.kathaId !== kathaId) throw new WalletSessionApiError("UNAVAILABLE");
+      return page;
+    },
     async readDelivery(
       kathaId: string,
       pagination: Pagination,

@@ -1,3 +1,4 @@
+import { resaleFixture } from "./fixtures/resale.ts";
 import type { WalletState } from "@solana/kit-plugin-wallet";
 import { createWalletBoundary } from "../lib/wallet-connection.ts";
 import assert from "node:assert/strict";
@@ -125,6 +126,7 @@ test("owner-only workflow rejects nonowner and active listings without preparing
     };
   };
   let prepares = 0;
+  let approval = resaleFixture(operation.feePayer, operation.kathaId);
   const workflow = createOwnerListing(
     {
       getSnapshot: () => auth,
@@ -132,6 +134,7 @@ test("owner-only workflow rejects nonowner and active listings without preparing
       prepareCancellation: async () => {
         throw new Error("Unexpected cancellation");
       },
+      readResale: async () => approval,
       prepareListing: async () => {
         prepares++;
         return operation;
@@ -174,6 +177,18 @@ test("owner-only workflow rejects nonowner and active listings without preparing
   await workflow.prepare("12.500001", "2030-01-01T00:00");
   assert.equal(prepares, 0);
   page = { ...page, owner: operation.feePayer };
+  await workflow.read();
+  approval = {
+    ...approval,
+    custodyState: "COLLECTOR_HELD",
+    canList: false,
+    inspection: { ...approval.inspection, status: "REQUIRED" },
+  };
+  await workflow.read();
+  assert.equal(workflow.canPrepare(), false);
+  await workflow.prepare("12.500001", "2030-01-01T00:00");
+  assert.equal(prepares, 0);
+  approval = resaleFixture(operation.feePayer, operation.kathaId);
   await workflow.read();
   assert.equal(workflow.canPrepare(), true);
   const originalPage = page;

@@ -1,3 +1,4 @@
+import type { ResaleInspectionRequest } from "@katha/shared";
 import type { PurchaseQuoteRequest, PurchasePrepareRequest } from "@katha/shared";
 import type { ListingCreateRequest, ListingCancelRequest } from "@katha/shared";
 import type { WalletOperation } from "./wallet-operation.ts";
@@ -131,6 +132,34 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readResale(kathaId: string, signal: AbortSignal, verifier = false) {
+      const page = await authorized(
+        (token) => api.readResale(kathaId, token, signal, verifier),
+        signal,
+      );
+      if (
+        page.cluster !== snapshot.session?.cluster ||
+        (!verifier && page.ownerWallet !== snapshot.session?.walletAddress)
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return page;
+    },
+    async requestResale(
+      kathaId: string,
+      input: ResaleInspectionRequest,
+      signal: AbortSignal,
+    ) {
+      const page = await authorized(
+        (token) => api.requestResale(kathaId, input, token, signal),
+        signal,
+      );
+      if (
+        page.cluster !== snapshot.session?.cluster ||
+        page.ownerWallet !== snapshot.session?.walletAddress
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return page;
+    },
     async readDelivery(kathaId: string, pagination: Pagination, signal: AbortSignal) {
       const page = await authorized(
         (token) => api.readDelivery(kathaId, pagination, token, signal),

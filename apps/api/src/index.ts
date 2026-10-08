@@ -1,3 +1,5 @@
+import { createResaleInspectionStore } from "@katha/db";
+import { createResaleInspection } from "./resale-inspection.js";
 import { createCollectorStore } from "@katha/db";
 import { createCollector } from "./collector.js";
 import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "@katha/solana/marketplace";
@@ -344,6 +346,14 @@ function startApi() {
         },
       ),
       sessions,
+      config.KATHA_CLUSTER,
+    ),
+    createResaleInspection(
+      createResaleInspectionStore(database.db),
+      sessions,
+      authorization,
+      createConditionAttestationReader(rpcConfig),
+      createMarketplaceListingReader(rpcConfig),
       config.KATHA_CLUSTER,
     ),
   );
