@@ -88,6 +88,15 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readDelivery: async () => {
+      throw new Error("Unexpected delivery read");
+    },
+    createDelivery: async () => {
+      throw new Error("Unexpected delivery create");
+    },
+    reportDeliveryReceipt: async () => {
+      throw new Error("Unexpected receipt report");
+    },
     preparePurchase: async () => {
       throw new Error("Unexpected purchase preparation");
     },

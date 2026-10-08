@@ -396,6 +396,13 @@ function FulfillmentForm({
           <p>Delivery instructions: {request.deliveryInstructions}</p>
         )}
         <p>Request updated: {request.updatedAt}</p>
+        {request.ownerReportedReceivedAt && (
+          <p>
+            Collector reported receipt: {request.ownerReportedReceivedAt}. This private
+            claim still requires manual confirmation; custody and condition inspection
+            are separate.
+          </p>
+        )}
         {!row.ownerMatches && (
           <p>
             The requester is no longer the current digital owner. Only an available

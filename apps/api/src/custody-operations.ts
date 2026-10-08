@@ -1,4 +1,6 @@
 import {
+  collectorDeliveryReviewSchema,
+  fulfillmentReceiptRequestSchema,
   custodyPreparationRequestSchema,
   custodyAdministrationReviewSchema,
   physicalCustodyTransitionSchema,
@@ -37,7 +39,10 @@ export function createCustodyOperations(
       throw error;
     }
   }
-  function response(row: FulfillmentRequestRecord, kathaId: string) {
+  function response(
+    row: FulfillmentRequestRecord & { ownerReportedReceivedAt?: Date | null },
+    kathaId: string,
+  ) {
     // Explicit private projection; internal wallets, artwork UUID and chain intent are omitted.
     return fulfillmentResponseSchema.parse({
       id: row.id,
@@ -55,6 +60,7 @@ export function createCustodyOperations(
       deliveryInstructions: row.deliveryInstructions,
       courier: row.courier,
       trackingReference: row.trackingReference,
+      ownerReportedReceivedAt: row.ownerReportedReceivedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     });
@@ -65,6 +71,54 @@ export function createCustodyOperations(
     return wallet;
   }
   return {
+    async collectorReview(
+      bearer: string | undefined,
+      kathaId: string,
+      pagination: Pagination,
+    ) {
+      const wallet = await session(bearer);
+      const accounts = await read(kathaId);
+      if (accounts.ownerWallet !== wallet.walletAddress)
+        throw new DomainError("FORBIDDEN");
+      const snapshot = await store.load(kathaId);
+      if (!snapshot) throw new DomainError("NOT_FOUND");
+      const [queue, open] = await Promise.all([
+        store.listRequests(snapshot.artwork.id, pagination, wallet.walletAddress),
+        store.hasOpenDelivery(snapshot.artwork.id, wallet.walletAddress),
+      ]);
+      return collectorDeliveryReviewSchema.parse({
+        kathaId,
+        title: snapshot.artwork.title,
+        cluster,
+        ownerWallet: wallet.walletAddress,
+        custodyState: accounts.custodyState,
+        custodyRevision: accounts.custodyRevision.toString(),
+        canRequest: accounts.custodyState === "KATHA_HELD" && !open,
+        requests: queue.items.map((row) => response(row, kathaId)),
+        pagination: { ...pagination, hasMore: queue.hasMore },
+      });
+    },
+    async reportReceipt(bearer: string | undefined, id: string, input: unknown) {
+      const wallet = await session(bearer);
+      const parsed = fulfillmentReceiptRequestSchema.safeParse(input);
+      if (!parsed.success) throw new DomainError("INVALID_REQUEST");
+      const found = await store.findRequest(id);
+      if (!found) throw new DomainError("NOT_FOUND");
+      if (found.request.requesterWallet !== wallet.walletAddress)
+        throw new DomainError("FORBIDDEN");
+      const accounts = await read(found.artwork.kathaId);
+      if (accounts.ownerWallet !== wallet.walletAddress)
+        throw new DomainError("FORBIDDEN");
+      if (found.request.kind !== "DELIVERY" || found.request.status !== "DISPATCHED")
+        throw new DomainError("CONFLICT");
+      const row = await store.reportReceipt(
+        found,
+        wallet.walletAddress,
+        parsed.data.expectedUpdatedAt,
+      );
+      if (!row) throw new DomainError("CONFLICT");
+      return response(row, found.artwork.kathaId);
+    },
     async review(bearer: string | undefined, kathaId: string, pagination: Pagination) {
       const handler = await authorization.requireRole(bearer, "admin");
       if (handler.cluster !== cluster) throw new DomainError("FORBIDDEN");

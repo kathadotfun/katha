@@ -99,6 +99,13 @@
       "when": 1791440012077,
       "tag": "0013_marketplace_listing_cycles",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1791461724089,
+      "tag": "0014_collector_receipt_reports",
+      "breakpoints": true
     }
   ]
 }

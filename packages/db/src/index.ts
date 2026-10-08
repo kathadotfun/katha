@@ -223,3 +223,5 @@ export {
 } from "./marketplace-listing-store.js";
 
 export { createCollectorStore, type CollectorStore } from "./collector-store.js";
+
+export { fulfillmentReceiptReports } from "./schema/fulfillment-receipt-reports.js";

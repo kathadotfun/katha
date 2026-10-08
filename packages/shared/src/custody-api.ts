@@ -75,6 +75,7 @@ export const fulfillmentResponseSchema = z.strictObject({
   deliveryInstructions: z.string().nullable(),
   courier: z.string().nullable(),
   trackingReference: z.string().nullable(),
+  ownerReportedReceivedAt: timestamp.nullable(),
   createdAt: timestamp,
   updatedAt: timestamp,
 });
@@ -129,3 +130,28 @@ export const custodyAdministrationReviewSchema = z
 export type CustodyAdministrationReview = z.infer<
   typeof custodyAdministrationReviewSchema
 >;
+
+export const fulfillmentReceiptRequestSchema = z.strictObject({
+  expectedUpdatedAt: timestamp,
+  receiptConfirmed: z.literal(true),
+});
+export type FulfillmentReceiptRequest = z.infer<typeof fulfillmentReceiptRequestSchema>;
+export const collectorDeliveryReviewSchema = z
+  .strictObject({
+    kathaId: kathaIdSchema,
+    title: nonblank(200),
+    cluster: z.enum(["localnet", "devnet"]),
+    ownerWallet: walletAddressSchema,
+    custodyState: physicalCustodyStateSchema,
+    custodyRevision: custodyPreparationRequestSchema.shape.expectedCustodyRevision,
+    canRequest: z.boolean(),
+    requests: z.array(fulfillmentResponseSchema).max(100),
+    pagination: paginationResponseSchema,
+  })
+  .refine(
+    (v) =>
+      v.requests.length <= v.pagination.limit &&
+      v.requests.every((row) => row.kathaId === v.kathaId) &&
+      new Set(v.requests.map((row) => row.id)).size === v.requests.length,
+  );
+export type CollectorDeliveryReview = z.infer<typeof collectorDeliveryReviewSchema>;

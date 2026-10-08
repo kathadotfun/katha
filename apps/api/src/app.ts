@@ -42,6 +42,7 @@ import {
 import type { CustodyOperationsBoundary } from "./custody-operations.js";
 import {
   custodyPreparationRequestSchema,
+  fulfillmentReceiptRequestSchema,
   fulfillmentCreateRequestSchema,
   fulfillmentUpdateRequestSchema,
   fulfillmentIdParamsSchema,
@@ -645,6 +646,28 @@ export function createApi(
           await parseJson(c, custodyPreparationRequestSchema),
         ),
         201,
+      );
+    });
+    app.get("/fulfillment/artworks/:kathaId", async (c) => {
+      const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+      const pagination = parseQuery(c, paginationQuerySchema);
+      return c.json(
+        await custodyOperations.collectorReview(
+          c.req.header("Authorization"),
+          kathaId,
+          pagination,
+        ),
+      );
+    });
+    app.post("/fulfillment/:requestId/receipt", async (c) => {
+      const { requestId } = parseParams(c, fulfillmentIdParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await custodyOperations.reportReceipt(
+          c.req.header("Authorization"),
+          requestId,
+          await parseJson(c, fulfillmentReceiptRequestSchema),
+        ),
       );
     });
     app.post("/fulfillment/artworks/:kathaId", async (c) => {

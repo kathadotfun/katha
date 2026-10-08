@@ -8,6 +8,8 @@ Queries and unknown request fields are rejected by shared contracts.
 | -------------------------------------------------- | ------------------------------------------------------ | --------------------------------- | ---------------------------------------- |
 | `GET /admin/artworks/:kathaId/custody`             | Configured admin                                       | Pagination query                  | `custodyAdministrationReviewSchema`, 200 |
 | `POST /admin/artworks/:kathaId/operations/custody` | Admin allowlist and current Registry custody authority | `custodyPreparationRequestSchema` | `unsignedOperationResponseSchema`, 201   |
+| `GET /fulfillment/artworks/:kathaId`               | Session and current finalized Core owner               | Pagination query                  | `collectorDeliveryReviewSchema`, 200     |
+| `POST /fulfillment/:requestId/receipt`             | Original requester and current finalized Core owner    | `fulfillmentReceiptRequestSchema` | `fulfillmentResponseSchema`, 200         |
 | `POST /fulfillment/artworks/:kathaId`              | Session and current finalized Core owner               | `fulfillmentCreateRequestSchema`  | `fulfillmentResponseSchema`, 201         |
 | `GET /fulfillment/:requestId`                      | Original requester or configured admin                 | UUID path, empty query            | `fulfillmentResponseSchema`, 200         |
 | `PATCH /admin/fulfillment/:requestId`              | Configured admin                                       | `fulfillmentUpdateRequestSchema`  | `fulfillmentResponseSchema`, 200         |
@@ -142,3 +144,19 @@ Unresolved signed custody attempts block replacement preparation under the artwo
 lock; receipt writes acquire the same parent lock before locking their operation.
 See the [administration guide](custody-administration-web.md) for the linked
 dispatch/receipt sequence and explicit wallet approval.
+
+## Private collector review and receipt reports
+
+The artwork review returns only the authenticated current owner's requests, bounded
+by pagination, together with finalized custody and `canRequest`. Another owner's
+contact details never enter the response. DELIVERY creation rejects a second open
+REQUESTED/APPROVED/DISPATCHED request for the same owner and artwork.
+
+Receipt reporting accepts only `{ "expectedUpdatedAt": "2026-10-05T00:00:00.000Z",
+"receiptConfirmed": true }`. The original requester must still own the Core asset
+and the DELIVERY request must be DISPATCHED. Request version and artwork snapshot
+are rechecked under locks. An immutable separate report exposes
+`ownerReportedReceivedAt` (null until reported) on private fulfillment responses.
+The report does not change request status, verified custody, condition or ownership.
+Operators confirm receipt manually through the existing status/attestation routes.
+See the [collector delivery guide](delivery-web.md).

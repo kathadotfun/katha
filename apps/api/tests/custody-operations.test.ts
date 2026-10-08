@@ -70,15 +70,21 @@ async function fixture(minted = false) {
   const load = vi.fn<CustodyOperationStore["load"]>(async () => snapshot);
   const findRequest = vi.fn<CustodyOperationStore["findRequest"]>(async () => ({
     artwork: snapshot.artwork,
-    request: row,
+    request: { ...row, ownerReportedReceivedAt: null },
   }));
   const create = vi.fn<CustodyOperationStore["create"]>(async () => row);
   const update = vi.fn<CustodyOperationStore["update"]>(async () => ({
     ...row,
     status: "APPROVED",
+    ownerReportedReceivedAt: null,
   }));
   const store: CustodyOperationStore = {
-    listRequests: vi.fn(async () => ({ items: [row], hasMore: false })),
+    listRequests: vi.fn(async () => ({
+      items: [{ ...row, ownerReportedReceivedAt: null }],
+      hasMore: false,
+    })),
+    hasOpenDelivery: vi.fn(async () => false),
+    reportReceipt: vi.fn(async () => ({ ...row, ownerReportedReceivedAt: new Date() })),
     load,
     findRequest,
     create,
@@ -589,4 +595,103 @@ it("custody review route is private, paginated and validates query boundaries", 
       )
     ).status,
   ).toBe(400);
+});
+it("collector delivery reads are owner-scoped and reject stale owners before private reads", async () => {
+  const f = await fixture(true);
+  const review = await f.service.collectorReview(
+    "Bearer synthetic",
+    f.snapshot.artwork.kathaId,
+    { limit: 20, offset: 0 },
+  );
+  expect(review.canRequest).toBe(true);
+  expect(f.store.listRequests).toHaveBeenCalledWith(
+    f.snapshot.artwork.id,
+    { limit: 20, offset: 0 },
+    f.session.walletAddress,
+  );
+  f.accounts.ownerWallet = temporaryWallet().address;
+  vi.mocked(f.store.listRequests).mockClear();
+  await expect(
+    f.service.collectorReview("Bearer synthetic", f.snapshot.artwork.kathaId, {
+      limit: 20,
+      offset: 0,
+    }),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(f.store.listRequests).not.toHaveBeenCalled();
+});
+it("owner receipt is a private report without approving custody or condition", async () => {
+  const f = await fixture(true);
+  f.row.status = "DISPATCHED";
+  const result = await f.service.reportReceipt("Bearer synthetic", f.row.id, {
+    expectedUpdatedAt: f.row.updatedAt.toISOString(),
+    receiptConfirmed: true,
+  });
+  expect(result.status).toBe("DISPATCHED");
+  expect(result.ownerReportedReceivedAt).not.toBeNull();
+  expect(f.update).not.toHaveBeenCalled();
+  expect(f.save).not.toHaveBeenCalled();
+  expect(f.simulate).not.toHaveBeenCalled();
+});
+it.each(["owner", "requester", "early", "return", "unconfirmed", "stale"])(
+  "rejects invalid owner receipt: %s",
+  async (failure) => {
+    const f = await fixture(true);
+    f.row.status = "DISPATCHED";
+    if (failure === "owner") f.accounts.ownerWallet = temporaryWallet().address;
+    if (failure === "requester") f.row.requesterWallet = temporaryWallet().address;
+    if (failure === "early") f.row.status = "APPROVED";
+    if (failure === "return") f.row.kind = "RETURN_TO_KATHA";
+    if (failure === "stale")
+      vi.mocked(f.store.reportReceipt).mockResolvedValueOnce(null);
+    await expect(
+      f.service.reportReceipt("Bearer synthetic", f.row.id, {
+        expectedUpdatedAt: f.row.updatedAt.toISOString(),
+        receiptConfirmed: failure !== "unconfirmed",
+      }),
+    ).rejects.toBeInstanceOf(DomainError);
+    if (failure !== "stale") expect(f.store.reportReceipt).not.toHaveBeenCalled();
+    expect(f.update).not.toHaveBeenCalled();
+  },
+);
+it("delivery review and receipt routes validate inputs and prohibit public caching", async () => {
+  const f = await fixture(true);
+  f.row.status = "DISPATCHED";
+  const app = createApi(
+    undefined,
+    undefined,
+    [],
+    undefined,
+    f.authorization,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    f.service,
+  );
+  const path = `/fulfillment/artworks/${f.snapshot.artwork.kathaId}`;
+  const headers = { Authorization: "Bearer synthetic" };
+  const page = await app.request(`${path}?limit=20&offset=0`, { headers });
+  expect(page.status).toBe(200);
+  expect(page.headers.get("Cache-Control")).toBe("no-store");
+  expect((await app.request(path)).status).toBe(401);
+  expect((await app.request(`${path}?limit=101`, { headers })).status).toBe(400);
+  const receipt = await app.request(`/fulfillment/${f.row.id}/receipt`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      expectedUpdatedAt: f.row.updatedAt.toISOString(),
+      receiptConfirmed: true,
+    }),
+  });
+  expect(receipt.status).toBe(200);
+  expect(receipt.headers.get("Cache-Control")).toBe("no-store");
+  expect(fulfillmentResponseSchema.parse(await receipt.json()).status).toBe(
+    "DISPATCHED",
+  );
 });

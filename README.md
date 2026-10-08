@@ -271,3 +271,8 @@ Authenticated account and collection APIs now expose published indexed holdings,
 Core reconciliation status, and separate finalized physical custody. The `/account` page displays wallet/session details and the indexed artwork count.
 The `/collection` page shows published indexed artworks, separate physical custody,
 listing observations and indexing status. See the [collector API guide](docs/development/collector-api.md).
+
+Current Core owners can request physical delivery and report receipt through
+`/collection/{kathaId}/delivery`. Shipping details stay private; operator-confirmed
+custody and post-delivery inspections remain separate. See the
+[delivery guide](docs/development/delivery-web.md).

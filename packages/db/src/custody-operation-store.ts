@@ -1,8 +1,9 @@
-import { and, eq, desc, sql } from "drizzle-orm";
+import { and, eq, desc, sql, inArray, ne } from "drizzle-orm";
 import type { Database } from "./connection.js";
 
 import { artworks } from "./schema/artworks.js";
 import { fulfillmentRequests } from "./schema/custody-fulfillment.js";
+import { fulfillmentReceiptReports } from "./schema/fulfillment-receipt-reports.js";
 import { createOperationPreparationStore } from "./operation-preparation-store.js";
 type Request = typeof fulfillmentRequests.$inferSelect;
 type Artwork = typeof artworks.$inferSelect;
@@ -33,18 +34,95 @@ export function createCustodyOperationStore(
     async listRequests(
       artworkId: string,
       pagination: { limit: number; offset: number },
+      requesterWallet?: string,
     ) {
       const rows = await db
-        .select()
+        .select({
+          request: fulfillmentRequests,
+          ownerReportedReceivedAt: fulfillmentReceiptReports.reportedAt,
+        })
         .from(fulfillmentRequests)
-        .where(eq(fulfillmentRequests.artworkId, artworkId))
+        .leftJoin(
+          fulfillmentReceiptReports,
+          eq(fulfillmentReceiptReports.requestId, fulfillmentRequests.id),
+        )
+        .where(
+          and(
+            eq(fulfillmentRequests.artworkId, artworkId),
+            requesterWallet
+              ? eq(fulfillmentRequests.requesterWallet, requesterWallet)
+              : undefined,
+          ),
+        )
         .orderBy(desc(fulfillmentRequests.createdAt), desc(fulfillmentRequests.id))
         .limit(pagination.limit + 1)
         .offset(pagination.offset);
       return {
-        items: rows.slice(0, pagination.limit),
+        items: rows.slice(0, pagination.limit).map((row) => ({
+          ...row.request,
+          ownerReportedReceivedAt: row.ownerReportedReceivedAt,
+        })),
         hasMore: rows.length > pagination.limit,
       };
+    },
+    async hasOpenDelivery(artworkId: string, wallet: string) {
+      const rows = await db
+        .select({ id: fulfillmentRequests.id })
+        .from(fulfillmentRequests)
+        .where(
+          and(
+            eq(fulfillmentRequests.artworkId, artworkId),
+            eq(fulfillmentRequests.requesterWallet, wallet),
+            eq(fulfillmentRequests.kind, "DELIVERY"),
+            inArray(fulfillmentRequests.status, [
+              "REQUESTED",
+              "APPROVED",
+              "DISPATCHED",
+            ]),
+          ),
+        )
+        .limit(1);
+      return rows.length > 0;
+    },
+    async reportReceipt(
+      expected: { artwork: Artwork; request: Request },
+      wallet: string,
+      expectedUpdatedAt: string,
+    ) {
+      return db.transaction(async (tx) => {
+        const [artwork] = await tx
+          .select()
+          .from(artworks)
+          .where(eq(artworks.id, expected.artwork.id))
+          .for("update");
+        const [request] = await tx
+          .select()
+          .from(fulfillmentRequests)
+          .where(eq(fulfillmentRequests.id, expected.request.id))
+          .for("update");
+        if (
+          !artwork ||
+          !request ||
+          artwork.updatedAt.toISOString() !==
+            expected.artwork.updatedAt.toISOString() ||
+          request.updatedAt.toISOString() !== expectedUpdatedAt ||
+          request.requesterWallet !== wallet ||
+          request.artworkId !== artwork.id ||
+          request.kind !== "DELIVERY" ||
+          request.status !== "DISPATCHED"
+        )
+          return null;
+        await tx
+          .insert(fulfillmentReceiptReports)
+          .values({ requestId: request.id, reporterWallet: wallet })
+          .onConflictDoNothing();
+        const [report] = await tx
+          .select()
+          .from(fulfillmentReceiptReports)
+          .where(eq(fulfillmentReceiptReports.requestId, request.id));
+        if (!report || report.reporterWallet !== wallet) return null;
+        return { ...request, ownerReportedReceivedAt: report.reportedAt };
+      });
     },
     async load(kathaId: string, fulfillmentId?: string) {
       const [artwork] = await db
@@ -67,11 +145,27 @@ export function createCustodyOperationStore(
     },
     async findRequest(id: string) {
       const [row] = await db
-        .select({ request: fulfillmentRequests, artwork: artworks })
+        .select({
+          request: fulfillmentRequests,
+          artwork: artworks,
+          ownerReportedReceivedAt: fulfillmentReceiptReports.reportedAt,
+        })
         .from(fulfillmentRequests)
         .innerJoin(artworks, eq(artworks.id, fulfillmentRequests.artworkId))
+        .leftJoin(
+          fulfillmentReceiptReports,
+          eq(fulfillmentReceiptReports.requestId, fulfillmentRequests.id),
+        )
         .where(eq(fulfillmentRequests.id, id));
-      return row ?? null;
+      return row
+        ? {
+            artwork: row.artwork,
+            request: {
+              ...row.request,
+              ownerReportedReceivedAt: row.ownerReportedReceivedAt,
+            },
+          }
+        : null;
     },
     async create(
       expected: typeof artworks.$inferSelect,
@@ -89,6 +183,27 @@ export function createCustodyOperationStore(
           artwork.updatedAt.toISOString() !== expected.updatedAt.toISOString()
         )
           return null;
+        // Same-ID retries remain idempotent; another active delivery cannot be created.
+        if (input.kind === "DELIVERY") {
+          const active = await tx
+            .select({ id: fulfillmentRequests.id })
+            .from(fulfillmentRequests)
+            .where(
+              and(
+                eq(fulfillmentRequests.artworkId, artwork.id),
+                eq(fulfillmentRequests.requesterWallet, requesterWallet),
+                eq(fulfillmentRequests.kind, "DELIVERY"),
+                inArray(fulfillmentRequests.status, [
+                  "REQUESTED",
+                  "APPROVED",
+                  "DISPATCHED",
+                ]),
+                ne(fulfillmentRequests.id, input.requestId),
+              ),
+            )
+            .limit(1);
+          if (active.length) return null;
+        }
         const { requestId, ...details } = input;
         const values = {
           id: requestId,
@@ -170,7 +285,12 @@ export function createCustodyOperationStore(
           })
           .where(eq(fulfillmentRequests.id, request.id))
           .returning();
-        return updated ?? null;
+        if (!updated) return null;
+        const [report] = await tx
+          .select({ reportedAt: fulfillmentReceiptReports.reportedAt })
+          .from(fulfillmentReceiptReports)
+          .where(eq(fulfillmentReceiptReports.requestId, request.id));
+        return { ...updated, ownerReportedReceivedAt: report?.reportedAt ?? null };
       });
     },
     operations(expected: {

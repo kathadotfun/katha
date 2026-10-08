@@ -9,7 +9,7 @@ import {
   collectionFixture,
   collectionListingFixture,
 } from "../apps/web/tests/fixtures/collection.ts";
-/* global document, innerWidth */
+/* global document, innerWidth, window */
 import console from "node:console";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -313,6 +313,114 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await expect(main).toContainText("No artworks on this page");
       await main.getByRole("button", { name: "Previous page", exact: true }).click();
       await expect(main).toContainText("In Katha custody");
+      // Private shipping and owner receipt are independent of wallet signing and custody.
+      let deliveryRequests = [],
+        deliveryFail = false,
+        deliveryWrites = 0;
+      const deliveryId = collectionFixture(issuedSession.walletAddress).items[0].artwork
+        .kathaId;
+      await context.route(
+        `${apiOrigin}/fulfillment/artworks/${deliveryId}**`,
+        async (route) => {
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          if (deliveryFail) return route.fulfill({ status: 503, headers });
+          if (route.request().method() === "POST") {
+            deliveryWrites++;
+            const input = route.request().postDataJSON();
+            const now = new Date().toISOString();
+            const { requestId, ...fields } = input;
+            const row = {
+              ...fields,
+              id: requestId,
+              kathaId: deliveryId,
+              status: "REQUESTED",
+              courier: null,
+              trackingReference: null,
+              ownerReportedReceivedAt: null,
+              createdAt: now,
+              updatedAt: now,
+            };
+            deliveryRequests = [row];
+            return route.fulfill({ headers, json: row });
+          }
+          return route.fulfill({
+            headers,
+            json: {
+              kathaId: deliveryId,
+              title: "Synthetic delivery artwork",
+              cluster: "localnet",
+              ownerWallet: issuedSession.walletAddress,
+              custodyState: deliveryRequests.length ? "IN_TRANSIT" : "KATHA_HELD",
+              custodyRevision: "1",
+              canRequest: !deliveryRequests.length,
+              requests: deliveryRequests,
+              pagination: { limit: 20, offset: 0, hasMore: false },
+            },
+          });
+        },
+      );
+      await context.route(`${apiOrigin}/fulfillment/*/receipt`, async (route) => {
+        assert.equal(route.request().postDataJSON().receiptConfirmed, true);
+        deliveryRequests = [
+          { ...deliveryRequests[0], ownerReportedReceivedAt: new Date().toISOString() },
+        ];
+        return route.fulfill({ headers, json: deliveryRequests[0] });
+      });
+      await main
+        .getByRole("link", { name: "Delivery and receipt", exact: true })
+        .click();
+      await expect(
+        main.getByRole("heading", { name: "Bring the artwork home." }),
+      ).toBeVisible();
+      await main.getByRole("button", { name: "Refresh delivery requests" }).click();
+      await main
+        .getByLabel("Recipient name", { exact: true })
+        .fill("Synthetic recipient");
+      await main.getByLabel("Address lines", { exact: true }).fill("Synthetic address");
+      await main.getByLabel("City", { exact: true }).fill("Synthetic city");
+      await main.getByRole("button", { name: "Send private delivery request" }).click();
+      await expect(main.getByRole("alert")).toContainText("provide an email or phone");
+      assert.equal(deliveryWrites, 0);
+      await main
+        .getByLabel("Contact email", { exact: true })
+        .fill("synthetic@example.invalid");
+      await page.evaluate(() => {
+        document.activeElement?.blur();
+        window.scrollTo(0, 0);
+      });
+      await page.screenshot({
+        path: `/tmp/katha-127-delivery-${width}.png`,
+        fullPage: true,
+      });
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      await main.getByRole("button", { name: "Send private delivery request" }).click();
+      await expect(main).toContainText("Delivery · Requested");
+      assert.equal(deliveryWrites, 1);
+      deliveryRequests = [{ ...deliveryRequests[0], status: "DISPATCHED" }];
+      await main.getByRole("button", { name: "Refresh delivery requests" }).click();
+      await expect(
+        main.getByRole("button", { name: "Report physical receipt" }),
+      ).toBeDisabled();
+      await main.getByLabel("I physically received this artwork.").check();
+      await main.getByRole("button", { name: "Report physical receipt" }).click();
+      await expect(main).toContainText("You reported receipt");
+      await expect(main).toContainText("Delivery · Dispatched");
+      await expect(main).toContainText("Finalized custody: In transit");
+      deliveryFail = true;
+      await main.getByRole("button", { name: "Refresh delivery requests" }).click();
+      await expect(main.getByRole("alert")).toContainText("could not be confirmed");
+      await expect(main).not.toContainText("Synthetic address");
+      await main.getByRole("link", { name: "Back to my collection" }).click();
+      await main
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
       collectionMode = "COLLECTOR";
       listingUnavailable = true;
       await main
@@ -749,7 +857,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await context.close();
     }
     console.log(
-      "Collector account, collection, owner listing, release and purchase quote browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
+      "Collector account, collection, owner listing, release, purchase quote and private delivery/receipt browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
     );
   } finally {
     await browser.close();

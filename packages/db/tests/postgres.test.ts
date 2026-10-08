@@ -64,7 +64,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(14);
+    expect(applicationCount).toBe(15);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -3504,6 +3504,7 @@ it("serializes private fulfillment retries and status changes, and rejects stale
     });
     const secondRequest = await store.create(artwork, address, {
       ...input,
+      kind: "RETURN_TO_KATHA",
       requestId: randomUUID(),
     });
     expect(secondRequest).not.toBeNull();
@@ -3534,6 +3535,69 @@ it("serializes private fulfillment retries and status changes, and rejects stale
     if (!dispatched) throw new Error("Dispatch missing");
     const dispatchedSnapshot = await store.findRequest(input.requestId);
     if (!dispatchedSnapshot) throw new Error("Snapshot missing");
+    expect(await store.hasOpenDelivery(artwork.id, address)).toBe(true);
+    expect(
+      await store.create(artwork, address, { ...input, requestId: randomUUID() }),
+    ).toBeNull();
+    expect(
+      await store.reportReceipt(
+        dispatchedSnapshot,
+        "F".repeat(32),
+        dispatched.updatedAt.toISOString(),
+      ),
+    ).toBeNull();
+    expect(
+      await store.reportReceipt(
+        dispatchedSnapshot,
+        address,
+        artwork.createdAt.toISOString(),
+      ),
+    ).toBeNull();
+    const reports = await Promise.all([
+      store.reportReceipt(
+        dispatchedSnapshot,
+        address,
+        dispatched.updatedAt.toISOString(),
+      ),
+      store.reportReceipt(
+        dispatchedSnapshot,
+        address,
+        dispatched.updatedAt.toISOString(),
+      ),
+    ]);
+    expect(reports[0]?.ownerReportedReceivedAt).toEqual(
+      reports[1]?.ownerReportedReceivedAt,
+    );
+    expect(reports[0]).toMatchObject({
+      status: "DISPATCHED",
+      updatedAt: dispatched.updatedAt,
+    });
+    const { fulfillmentReceiptReports } = await import("../src/index.js");
+    const savedReports = await db
+      .select()
+      .from(fulfillmentReceiptReports)
+      .where(eq(fulfillmentReceiptReports.requestId, input.requestId));
+    expect(savedReports).toHaveLength(1);
+    await expect(
+      db
+        .update(fulfillmentReceiptReports)
+        .set({ reporterWallet: "F".repeat(32) })
+        .where(eq(fulfillmentReceiptReports.requestId, input.requestId)),
+    ).rejects.toThrow();
+    await expect(
+      db
+        .delete(fulfillmentReceiptReports)
+        .where(eq(fulfillmentReceiptReports.requestId, input.requestId)),
+    ).rejects.toThrow();
+    await expect(
+      db
+        .insert(fulfillmentReceiptReports)
+        .values({ requestId: secondRequest!.id, reporterWallet: address }),
+    ).rejects.toThrow();
+    expect(
+      (await store.listRequests(artwork.id, { limit: 20, offset: 0 }, "F".repeat(32)))
+        .items,
+    ).toHaveLength(0);
     expect(
       await store.update(dispatchedSnapshot, address, {
         expectedUpdatedAt: dispatched.updatedAt.toISOString(),
@@ -3546,7 +3610,10 @@ it("serializes private fulfillment retries and status changes, and rejects stale
         expectedUpdatedAt: dispatched.updatedAt.toISOString(),
         status: "RECEIVED",
       }),
-    ).toMatchObject({ status: "RECEIVED" });
+    ).toMatchObject({
+      status: "RECEIVED",
+      ownerReportedReceivedAt: reports[0]?.ownerReportedReceivedAt,
+    });
     expect(
       await db
         .select()

@@ -44,6 +44,11 @@ import {
   type FulfillmentUpdateRequest,
   custodyPreparationRequestSchema,
   custodyAdministrationReviewSchema,
+  collectorDeliveryReviewSchema,
+  fulfillmentCreateRequestSchema,
+  fulfillmentReceiptRequestSchema,
+  type FulfillmentCreateRequest,
+  type FulfillmentReceiptRequest,
   fulfillmentResponseSchema,
   fulfillmentIdParamsSchema,
   fulfillmentUpdateRequestSchema,
@@ -169,6 +174,78 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readDelivery(
+      kathaId: string,
+      pagination: Pagination,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const query = paginationQuerySchema.parse({
+        limit: String(pagination.limit),
+        offset: String(pagination.offset),
+      });
+      const page = collectorDeliveryReviewSchema.parse(
+        await request(
+          `/fulfillment/artworks/${path.kathaId}?limit=${query.limit}&offset=${query.offset}`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (
+        page.kathaId !== kathaId ||
+        page.pagination.limit !== query.limit ||
+        page.pagination.offset !== query.offset
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return page;
+    },
+    async createDelivery(
+      kathaId: string,
+      input: FulfillmentCreateRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const data = fulfillmentCreateRequestSchema.parse(input);
+      if (data.kind !== "DELIVERY") throw new WalletSessionApiError("UNAVAILABLE");
+      const result = fulfillmentResponseSchema.parse(
+        await request(`/fulfillment/artworks/${path.kathaId}`, data, token, signal),
+      );
+      if (
+        result.id !== data.requestId ||
+        result.kathaId !== kathaId ||
+        result.kind !== "DELIVERY"
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async reportDeliveryReceipt(
+      id: string,
+      input: FulfillmentReceiptRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = fulfillmentIdParamsSchema.parse({ requestId: id });
+      const result = fulfillmentResponseSchema.parse(
+        await request(
+          `/fulfillment/${path.requestId}/receipt`,
+          fulfillmentReceiptRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.id !== id ||
+        result.kind !== "DELIVERY" ||
+        !result.ownerReportedReceivedAt ||
+        result.status !== "DISPATCHED"
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async preparePurchase(
       kathaId: string,
       input: PurchasePrepareRequest,

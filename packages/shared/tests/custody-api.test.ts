@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  fulfillmentReceiptRequestSchema,
   custodyPreparationRequestSchema,
   custodyAdministrationReviewSchema,
   fulfillmentResponseSchema,
@@ -122,6 +123,7 @@ it("rejects request leakage across artwork pages and duplicate requests", () => 
       status: "REQUESTED",
       courier: null,
       trackingReference: null,
+      ownerReportedReceivedAt: null,
       createdAt: review.updatedAt,
       updatedAt: review.updatedAt,
     }),
@@ -141,4 +143,20 @@ it("rejects request leakage across artwork pages and duplicate requests", () => 
       ],
     }).success,
   ).toBe(false);
+});
+
+it("receipt reports require an exact version, explicit confirmation and no status authority", () => {
+  const report = {
+    expectedUpdatedAt: custody.expectedUpdatedAt,
+    receiptConfirmed: true,
+  };
+  expect(fulfillmentReceiptRequestSchema.parse(report).receiptConfirmed).toBe(true);
+  for (const change of [
+    { receiptConfirmed: false },
+    { expectedUpdatedAt: "invalid" },
+    { status: "RECEIVED" },
+  ])
+    expect(
+      fulfillmentReceiptRequestSchema.safeParse({ ...report, ...change }).success,
+    ).toBe(false);
 });

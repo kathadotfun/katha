@@ -146,6 +146,7 @@ export async function custodyFixture(
           deliveryInstructions: "Synthetic private instructions",
           courier: null,
           trackingReference: null,
+          ownerReportedReceivedAt: null,
           createdAt: base.page.updatedAt,
           updatedAt: base.page.updatedAt,
         },

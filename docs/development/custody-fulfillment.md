@@ -77,8 +77,7 @@ Public artwork and provenance responses must use explicit safe projections and
 never join or serialize fulfillment rows. Keep address/contact details out of
 metadata documents, custody evidence documents, logs and public Git history.
 Private request access belongs to the requester and authorized coordinators;
-storage in a separate table does not itself grant access control. No public
-endpoint or authenticated fulfillment endpoint is implemented by these tables.
+storage in a separate table does not itself grant access control. These tables do not grant access; the authenticated API uses explicit private projections.
 
 Inputs have database length bounds: recipient name 200 characters, email 254,
 phone 40, one to five nonblank address lines of at most 200 each, city/region 120,
@@ -110,3 +109,18 @@ database and real delivery information are never used.
 [Custody and manual fulfillment API](custody-operations-api.md) prepares unsigned
 custody attestations and exposes private owner requests/admin coordination. Manual
 request status never creates finalized custody or transfers Core ownership.
+
+## Immutable collector receipt claims
+
+Migration `0014_collector_receipt_reports.sql` adds an append-only private claim
+linked to a dispatched DELIVERY request. The reporter must match the original
+requester. A trigger rejects edits, deletions, return/undispatched requests and
+invalid timestamps; snapshots represent the table and constraints, not the custom
+trigger. The API independently verifies current finalized Core ownership.
+
+One claim per request survives operator status changes. Parent/request locks and
+an idempotent insert handle concurrent reports. A report never inserts custody
+history or condition inspection records. Store reads filter by requester for the
+collector page; authorized operators retain their private queue. Only one open
+DELIVERY per artwork/requester is accepted through the locked store, while exact
+same-UUID retries remain idempotent. See the [delivery UI guide](delivery-web.md).
