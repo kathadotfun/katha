@@ -1,3 +1,4 @@
+import { collectorAccountResponseSchema } from "@katha/shared";
 import {
   metadataRevisionRequestSchema,
   metadataRevisionReviewSchema,
@@ -146,6 +147,11 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readAccount(token: string, signal: AbortSignal) {
+      return collectorAccountResponseSchema.parse(
+        await request("/account", undefined, token, signal, "GET"),
+      );
+    },
     async readMetadataRevisions(kathaId: string, token: string, signal: AbortSignal) {
       const path = artworkDraftParamsSchema.parse({ kathaId });
       const result = metadataRevisionReviewSchema.parse(

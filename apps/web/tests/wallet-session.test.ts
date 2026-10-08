@@ -88,6 +88,11 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readAccount: async () => ({
+      session: response().session,
+      indexedArtworkCount: 0,
+      evaluatedAt: new Date().toISOString(),
+    }),
     readMetadataRevisions: async () => {
       throw new Error("Unused metadata review");
     },
@@ -385,5 +390,31 @@ test("admin requests keep bearer private, reject stale responses and clear revok
   await assert.rejects(auth.permissions(signal));
   assert.equal(auth.getSnapshot().session, null);
   assert.ok(!JSON.stringify(auth.getSnapshot()).includes(token));
+  auth.dispose();
+});
+
+test("collector account binds the session, clears revoked access and rejects wallet changes", async () => {
+  const f = fixture();
+  const auth = createWalletSession(f.connection, f.api, origin);
+  await auth.signIn();
+  const signal = new AbortController().signal;
+  f.api.readAccount = async () => ({
+    session: auth.getSnapshot().session!,
+    indexedArtworkCount: 0,
+    evaluatedAt: new Date().toISOString(),
+  });
+  assert.equal((await auth.readAccount(signal)).indexedArtworkCount, 0);
+  f.api.readAccount = async () => ({
+    ...f.response(),
+    session: { ...auth.getSnapshot().session!, walletAddress: second },
+    indexedArtworkCount: 0,
+    evaluatedAt: new Date().toISOString(),
+  });
+  await assert.rejects(auth.readAccount(signal));
+  f.api.readAccount = async () => {
+    throw new WalletSessionApiError("UNAUTHENTICATED");
+  };
+  await assert.rejects(auth.readAccount(signal));
+  assert.equal(auth.getSnapshot().session, null);
   auth.dispose();
 });

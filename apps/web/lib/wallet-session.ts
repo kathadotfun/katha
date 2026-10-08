@@ -126,6 +126,21 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readAccount(signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.readAccount(value, signal),
+        signal,
+      );
+      if (
+        result.session.walletAddress !== snapshot.session?.walletAddress ||
+        result.session.walletId !== snapshot.session?.walletId ||
+        result.session.cluster !== snapshot.session?.cluster ||
+        result.session.expiresAt !== snapshot.session?.expiresAt ||
+        Date.parse(result.session.expiresAt) <= now()
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readMetadataRevisions(kathaId: string, signal: AbortSignal) {
       const result = await authorized(
         (value) => api.readMetadataRevisions(kathaId, value, signal),

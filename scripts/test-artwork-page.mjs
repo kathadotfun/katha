@@ -433,6 +433,10 @@ try {
   }
   assert.ok(success.html.includes(`href="/artists/${artistFixture.slug}"`));
   assert.ok(catalogue.html.includes(`href="/artists/${artistFixture.slug}"`));
+  if (process.argv.includes("--account")) {
+    const { runCollectorAccountJourney } = await import("./test-collector-account.mjs");
+    await runCollectorAccountJourney({ origin, apiOrigin });
+  }
   if (process.argv.includes("--browser")) {
     const { runPublicBrowsingJourneys } = await import("./test-public-browsing.mjs");
     await runPublicBrowsingJourneys({

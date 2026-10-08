@@ -39,6 +39,9 @@ export function SiteHeader() {
             </li>
           </ul>
         </nav>
+        <Link href="/account" className="site-nav-link">
+          My account
+        </Link>
         <WalletControl />
       </div>
     </header>

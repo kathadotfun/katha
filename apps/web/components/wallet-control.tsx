@@ -116,6 +116,11 @@ export function WalletControl() {
                     : "Not signed in"}
               </p>
               {auth.session && (
+                <Link href="/account" className="text-link mt-4 block">
+                  My account
+                </Link>
+              )}
+              {auth.session && (
                 <Link href="/admin" className="text-link mt-4 block">
                   Administration
                 </Link>
