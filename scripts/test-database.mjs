@@ -3,15 +3,22 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { setTimeout } from "node:timers/promises";
 
+const collectorResale = process.argv[2] === "--collector-resale";
 const custodyResale = process.argv[2] === "--custody-resale";
-const primaryJourney = custodyResale || process.argv[2] === "--primary-journey";
+const primaryJourney =
+  collectorResale || custodyResale || process.argv[2] === "--primary-journey";
 const adminLifecycle = primaryJourney || process.argv[2] === "--admin-lifecycle";
 if (
   process.argv
     .slice(2)
     .some(
       (arg) =>
-        !["--admin-lifecycle", "--primary-journey", "--custody-resale"].includes(arg),
+        ![
+          "--admin-lifecycle",
+          "--primary-journey",
+          "--custody-resale",
+          "--collector-resale",
+        ].includes(arg),
     )
 )
   throw new Error("Unknown database test option");
@@ -91,15 +98,17 @@ try {
       process.execPath,
       [
         "scripts/test-core-cpi.mjs",
-        custodyResale
-          ? "--custody-resale"
-          : primaryJourney
-            ? "--primary-journey"
-            : "--admin-lifecycle",
+        collectorResale
+          ? "--collector-resale"
+          : custodyResale
+            ? "--custody-resale"
+            : primaryJourney
+              ? "--primary-journey"
+              : "--admin-lifecycle",
       ],
       {
         stdio: "inherit",
-        timeout: primaryJourney ? 600_000 : 360_000,
+        timeout: collectorResale ? 840_000 : primaryJourney ? 600_000 : 360_000,
         env: { ...process.env, KATHA_TEST_DATABASE_URL: url },
       },
     );

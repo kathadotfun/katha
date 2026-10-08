@@ -5,7 +5,10 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createRequire } from "node:module";
-import { runPrimaryJourney } from "../../../scripts/test-primary-journey.mjs";
+import {
+  runPrimaryJourney,
+  type CollectorJourneyStage,
+} from "../../../scripts/test-primary-journey.mjs";
 import {
   tokenProgram,
   fetchToken,
@@ -62,6 +65,9 @@ import {
   findInitializeMetadataHeadPda,
   findVerificationPda,
   getConditionHeadDecoder,
+  getConditionAttestationDecoder,
+  ConditionReason,
+  CustodyState,
   getCustodyHeadDecoder,
   getArtworkRecordDecoder,
 } from "../src/generated/registry/index.js";
@@ -121,6 +127,8 @@ async function lifecycleJourney() {
   const payout = wallet(),
     buyerB = wallet();
   const custodyResale = process.env.KATHA_TEST_CUSTODY_RESALE === "1";
+  const collectorResale = process.env.KATHA_TEST_COLLECTOR_RESALE === "1";
+  const resaleBrowser = custodyResale || collectorResale;
   const client = createClient()
     .use(signer(bootstrap))
     .use(
@@ -149,7 +157,7 @@ async function lifecycleJourney() {
     admin,
     verifier,
     outsider,
-    ...(custodyResale ? [buyerB] : []),
+    ...(resaleBrowser ? [buyerB] : []),
   ])
     await rpc("surfnet_setAccount", [actor.address, { lamports: 5_000_000_000 }]);
   const [collectionAuthority] = await findCollectionAuthorityPda();
@@ -442,7 +450,7 @@ async function lifecycleJourney() {
         outsider,
         payout,
         bootstrap,
-        ...(custodyResale ? [buyerB] : []),
+        ...(resaleBrowser ? [buyerB] : []),
       ])
         await client.token.instructions
           .mintToATA({
@@ -515,19 +523,23 @@ async function lifecycleJourney() {
       let primaryDetail: ReturnType<typeof publicArtworkDetailSchema.parse> | undefined;
       let primaryHistory:
         ReturnType<typeof artworkProvenanceResponseSchema.parse> | undefined;
+      let resaleDetail: typeof primaryDetail;
+      let resaleHistory: typeof primaryHistory;
+      let transitHistory: typeof primaryHistory;
       const immutable = new Map<string, Uint8Array>();
       async function unchanged(kathaId: string) {
         if (!primaryDetail || !primaryHistory)
           throw new Error("Primary evidence missing");
+        const baseline = resaleDetail ?? primaryDetail;
         const detail = publicArtworkDetailSchema.parse(
           await json(`/artworks/${kathaId}`),
         );
-        expect(detail.artist).toEqual(primaryDetail.artist);
-        expect(detail.creatorWallet).toEqual(primaryDetail.creatorWallet);
-        expect(detail.chain).toEqual(primaryDetail.chain);
-        expect(detail.custody).toEqual(primaryDetail.custody);
-        expect(detail.condition).toEqual(primaryDetail.condition);
-        expect(detail.metadata).toEqual(primaryDetail.metadata);
+        expect(detail.artist).toEqual(baseline.artist);
+        expect(detail.creatorWallet).toEqual(baseline.creatorWallet);
+        expect(detail.chain).toEqual(baseline.chain);
+        expect(detail.custody).toEqual(baseline.custody);
+        expect(detail.condition).toEqual(baseline.condition);
+        expect(detail.metadata).toEqual(baseline.metadata);
         for (const [key, bytes] of immutable) {
           const current = await fetchEncodedAccount(client.rpc, address(key));
           if (!current.exists) throw new Error(`Immutable account missing: ${key}`);
@@ -571,7 +583,238 @@ async function lifecycleJourney() {
           ]);
           await index();
         },
-        ...(custodyResale
+        ...(collectorResale
+          ? {
+              collectorDelivery: {
+                async waitForClock() {
+                  // A newly saved report uses wall time. Wait for the real chain
+                  // clock rather than weakening the no-future-report validation.
+                  const target = BigInt(Math.floor(Date.now() / 1000));
+                  for (let attempt = 0; attempt < 40; attempt++) {
+                    const clock = await fetchEncodedAccount(
+                      client.rpc,
+                      address("SysvarC1ock11111111111111111111111111111111"),
+                    );
+                    if (!clock.exists) throw new Error("Chain clock missing");
+                    const time = new DataView(
+                      Uint8Array.from(clock.data).buffer,
+                    ).getBigInt64(32, true);
+                    if (time >= target) return;
+                    await new Promise((resolve) => setTimeout(resolve, 500));
+                  }
+                  throw new Error("Chain clock did not reach the saved report time");
+                },
+                async assertState(kathaId: string, stage: CollectorJourneyStage) {
+                  if (!primaryDetail || !primaryHistory)
+                    throw new Error("Primary snapshot missing");
+                  const stages = {
+                    IN_TRANSIT_A: {
+                      revision: 2n,
+                      state: CustodyState.InTransit,
+                      owner: outsider.address,
+                      holder: null,
+                      version: 1,
+                      reason: ConditionReason.InitialVerification,
+                    },
+                    RECEIPT_A: {
+                      revision: 2n,
+                      state: CustodyState.InTransit,
+                      owner: outsider.address,
+                      holder: null,
+                      version: 1,
+                      reason: ConditionReason.InitialVerification,
+                    },
+                    HELD_A: {
+                      revision: 3n,
+                      state: CustodyState.CollectorHeld,
+                      owner: outsider.address,
+                      holder: outsider.address,
+                      version: 1,
+                      reason: ConditionReason.InitialVerification,
+                    },
+                    POST_DELIVERY_A: {
+                      revision: 3n,
+                      state: CustodyState.CollectorHeld,
+                      owner: outsider.address,
+                      holder: outsider.address,
+                      version: 2,
+                      reason: ConditionReason.PostDelivery,
+                    },
+                    APPROVED_A: {
+                      revision: 3n,
+                      state: CustodyState.CollectorHeld,
+                      owner: outsider.address,
+                      holder: outsider.address,
+                      version: 3,
+                      reason: ConditionReason.PreResale,
+                    },
+                    SOLD_HELD_A: {
+                      revision: 3n,
+                      state: CustodyState.CollectorHeld,
+                      owner: buyerB.address,
+                      holder: outsider.address,
+                      version: 3,
+                      reason: ConditionReason.PreResale,
+                    },
+                    IN_TRANSIT_B: {
+                      revision: 4n,
+                      state: CustodyState.InTransit,
+                      owner: buyerB.address,
+                      holder: null,
+                      version: 3,
+                      reason: ConditionReason.PreResale,
+                    },
+                    HELD_B: {
+                      revision: 5n,
+                      state: CustodyState.CollectorHeld,
+                      owner: buyerB.address,
+                      holder: buyerB.address,
+                      version: 3,
+                      reason: ConditionReason.PreResale,
+                    },
+                    POST_DELIVERY_B: {
+                      revision: 5n,
+                      state: CustodyState.CollectorHeld,
+                      owner: buyerB.address,
+                      holder: buyerB.address,
+                      version: 4,
+                      reason: ConditionReason.PostDelivery,
+                    },
+                  };
+                  const expected = stages[stage];
+                  const detail = publicArtworkDetailSchema.parse(
+                    await json(`/artworks/${kathaId}`),
+                  );
+                  const history = artworkProvenanceResponseSchema.parse(
+                    await json(`/artworks/${kathaId}/provenance`),
+                  );
+                  expect(detail.artist).toEqual(primaryDetail.artist);
+                  expect(detail.metadata).toEqual(primaryDetail.metadata);
+                  expect(detail.chain).toEqual(primaryDetail.chain);
+                  expect(detail.ownership.ownerWallet).toBe(expected.owner);
+                  expect(detail.custody.state).toBe(
+                    expected.state === CustodyState.InTransit
+                      ? "IN_TRANSIT"
+                      : "COLLECTOR_HELD",
+                  );
+                  expect(detail.condition?.version).toBe(expected.version);
+                  const [artwork] = await findArtworkPda({ kathaId });
+                  const [custodyKey] = await findInitializeCustodyHeadPda({ artwork });
+                  const [conditionKey] = await findHeadPda({ artwork });
+                  const custody = await fetchEncodedAccount(client.rpc, custodyKey);
+                  const condition = await fetchEncodedAccount(client.rpc, conditionKey);
+                  if (!custody.exists || !condition.exists)
+                    throw new Error("Custody/condition missing");
+                  const head = getCustodyHeadDecoder().decode(custody.data);
+                  expect(head).toMatchObject({
+                    revision: expected.revision,
+                    state: expected.state,
+                  });
+                  expect(head.subject).toEqual(
+                    expected.holder
+                      ? { __option: "Some", value: expected.holder }
+                      : { __option: "None" },
+                  );
+                  const reportHead = getConditionHeadDecoder().decode(condition.data);
+                  expect(reportHead.version).toBe(expected.version);
+                  const reportAccount = await fetchEncodedAccount(
+                    client.rpc,
+                    reportHead.currentReport,
+                  );
+                  if (!reportAccount.exists)
+                    throw new Error("Condition report missing");
+                  const report = getConditionAttestationDecoder().decode(
+                    reportAccount.data,
+                  );
+                  expect(report.reason).toBe(expected.reason);
+                  if (expected.version > 1) {
+                    expect(report.ownerScope).toEqual({
+                      __option: "Some",
+                      value: expected.version === 4 ? buyerB.address : outsider.address,
+                    });
+                    expect(report.custodyRevisionScope).toEqual({
+                      __option: "Some",
+                      value: expected.version === 4 ? 5n : 3n,
+                    });
+                  }
+                  const core = await fetchEncodedAccount(
+                    client.rpc,
+                    address(detail.chain.coreAssetAddress),
+                  );
+                  if (!core.exists) throw new Error("Core asset missing");
+                  const view = readCoreAsset(core, core.address, collection.address);
+                  expect(view.owner).toBe(expected.owner);
+                  expect(view.uri).toBe(primaryDetail.metadata.uri);
+                  if (stage === "IN_TRANSIT_A") transitHistory = history;
+                  if (stage === "RECEIPT_A")
+                    expect(history.items).toEqual(transitHistory!.items);
+                  if (stage === "POST_DELIVERY_A" || stage === "APPROVED_A")
+                    immutable.set(
+                      reportHead.currentReport,
+                      new Uint8Array(reportAccount.data),
+                    );
+                  if (stage === "APPROVED_A") {
+                    resaleDetail = detail;
+                    resaleHistory = history;
+                    immutable.set(custodyKey, new Uint8Array(custody.data));
+                    immutable.set(conditionKey, new Uint8Array(condition.data));
+                    const transition = await fetchEncodedAccount(
+                      client.rpc,
+                      head.latestTransition,
+                    );
+                    if (!transition.exists)
+                      throw new Error("Custody transition missing");
+                    immutable.set(
+                      head.latestTransition,
+                      new Uint8Array(transition.data),
+                    );
+                  }
+                  for (const text of [
+                    "Private Test Lane",
+                    "synthetic-collector@example.invalid",
+                    "PRIVATE-TEST-TRACKING",
+                    "Synthetic private",
+                  ]) {
+                    expect(JSON.stringify(history)).not.toContain(text);
+                    expect(JSON.stringify(detail)).not.toContain(text);
+                    expect(logs).not.toContain(text);
+                  }
+                  if (stage === "POST_DELIVERY_B") {
+                    for (const [key, bytes] of immutable) {
+                      if (key === custodyKey || key === conditionKey) continue;
+                      const account = await fetchEncodedAccount(
+                        client.rpc,
+                        address(key),
+                      );
+                      if (!account.exists)
+                        throw new Error("Historical account missing");
+                      expect(new Uint8Array(account.data)).toEqual(bytes);
+                    }
+                    expect(
+                      history.items.filter((e) => e.type === "TRANSFER"),
+                    ).toHaveLength(2);
+                    expect(
+                      history.items.filter((e) => e.type === "CONDITION"),
+                    ).toHaveLength(4);
+                    expect(
+                      history.items.filter((e) => e.type === "CUSTODY"),
+                    ).toHaveLength(5);
+                    await index();
+                    expect(
+                      artworkProvenanceResponseSchema.parse(
+                        await json(`/artworks/${kathaId}/provenance`),
+                      ).items,
+                    ).toEqual(history.items);
+                    expect(await balance(outsider.address)).toBe(10850000n);
+                    expect(await balance(buyerB.address)).toBe(8000000n);
+                    expect(await balance(payout.address)).toBe(1075000n);
+                    expect(await balance(bootstrap.address)).toBe(75000n);
+                  }
+                },
+              },
+            }
+          : {}),
+        ...(resaleBrowser
           ? {
               custodyResale: {
                 async assertListed(kathaId: string) {
@@ -594,7 +837,9 @@ async function lifecycleJourney() {
                   const history = artworkProvenanceResponseSchema.parse(
                     await json(`/artworks/${kathaId}/provenance`),
                   );
-                  expect(history.items).toEqual(primaryHistory!.items);
+                  expect(history.items).toEqual(
+                    (resaleHistory ?? primaryHistory)!.items,
+                  );
                 },
                 async assertResale(kathaId: string) {
                   const detail = await unchanged(kathaId);
@@ -632,8 +877,12 @@ async function lifecycleJourney() {
                   const history = artworkProvenanceResponseSchema.parse(
                     await json(`/artworks/${kathaId}/provenance`),
                   );
-                  expect(history.items).toHaveLength(primaryHistory!.items.length + 1);
-                  expect(history.items.slice(0, -1)).toEqual(primaryHistory!.items);
+                  expect(history.items).toHaveLength(
+                    (resaleHistory ?? primaryHistory)!.items.length + 1,
+                  );
+                  expect(history.items.slice(0, -1)).toEqual(
+                    (resaleHistory ?? primaryHistory)!.items,
+                  );
                   expect(
                     history.items.filter((e) => e.type === "TRANSFER"),
                   ).toHaveLength(2);
@@ -705,7 +954,7 @@ async function lifecycleJourney() {
           expect(JSON.stringify(history)).not.toContain(
             "Synthetic private inspection notes",
           );
-          if (custodyResale) {
+          if (resaleBrowser) {
             primaryDetail = detail;
             primaryHistory = history;
             const [conditionHead] = await findHeadPda({ artwork: recordAddress });
@@ -1212,11 +1461,17 @@ async function lifecycleJourney() {
 }
 
 it(
-  process.env.KATHA_TEST_CUSTODY_RESALE === "1"
-    ? "resells through two browser wallets while preserving Katha custody and history"
-    : process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
-      ? "collects an artwork through the production browser, API, local programs and finalized indexer"
-      : "onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer",
+  process.env.KATHA_TEST_COLLECTOR_RESALE === "1"
+    ? "inspects and resells collector-held artwork through actual browser delivery coordination"
+    : process.env.KATHA_TEST_CUSTODY_RESALE === "1"
+      ? "resells through two browser wallets while preserving Katha custody and history"
+      : process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
+        ? "collects an artwork through the production browser, API, local programs and finalized indexer"
+        : "onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer",
   lifecycleJourney,
-  process.env.KATHA_TEST_PRIMARY_BROWSER === "1" ? 480_000 : 300_000,
+  process.env.KATHA_TEST_COLLECTOR_RESALE === "1"
+    ? 720_000
+    : process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
+      ? 480_000
+      : 300_000,
 );

@@ -150,10 +150,10 @@ export async function runPrimaryJourney(context) {
       ).toBeVisible();
       await page.getByRole("button", { name: "Wallet connected", exact: true }).click();
     }
-    async function postResult(page, path, action) {
+    async function postResult(page, path, action, method = "POST") {
       const pending = page.waitForResponse(
         (r) =>
-          r.url() === `${context.apiOrigin}${path}` && r.request().method() === "POST",
+          r.url() === `${context.apiOrigin}${path}` && r.request().method() === method,
       );
       await action();
       const response = await pending;
@@ -450,6 +450,177 @@ export async function runPrimaryJourney(context) {
     await expect(
       buyer.getByText("Synthetic Patan Paubha", { exact: true }),
     ).toBeVisible();
+    async function move(action, requestId) {
+      await visit(admin, `/admin/artworks/${id}/custody`);
+      if (requestId)
+        await admin
+          .getByLabel("Related fulfillment request", { exact: true })
+          .selectOption(requestId);
+      await admin.getByLabel("Physical movement", { exact: true }).selectOption(action);
+      await admin
+        .getByRole("checkbox", { name: /I confirmed that this physical movement/ })
+        .check();
+      await transact(admin, "Prepare custody attestation");
+    }
+    async function inspect(reason) {
+      await visit(verifier, `/admin/artworks/${id}/condition`);
+      await verifier.getByRole("checkbox", { name: /Evidence 1/ }).check();
+      await verifier.getByLabel(/^Inspection reason/).selectOption(reason);
+      await verifier
+        .getByLabel("Inspector record UUID", { exact: true })
+        .fill(randomUUID());
+      await verifier
+        .getByLabel("Actual inspection date and time (your local timezone)", {
+          exact: true,
+        })
+        .fill(new Date(Date.now() - 60000).toISOString().slice(0, 19));
+      await verifier
+        .getByLabel("Private condition notes", { exact: true })
+        .fill(`Synthetic private ${reason} inspection`);
+      await verifier
+        .getByRole("checkbox", {
+          name: /I physically inspected this artwork and approve these notes/,
+        })
+        .check();
+      await verifier
+        .getByRole("button", { name: "Save private condition report", exact: true })
+        .click();
+      await verifier
+        .getByRole("checkbox", { name: /I reviewed the exact saved report/ })
+        .check();
+      await context.collectorDelivery.waitForClock();
+      await transact(verifier, "Prepare and simulate condition attestation");
+    }
+    let delivery;
+    if (context.collectorDelivery) {
+      await visit(buyer, `/collection/${id}/delivery`);
+      await buyer
+        .getByRole("button", { name: "Refresh delivery requests", exact: true })
+        .click();
+      await buyer
+        .getByLabel("Recipient name", { exact: true })
+        .fill("Synthetic Collector A");
+      await buyer
+        .getByLabel("Contact email", { exact: true })
+        .fill("synthetic-collector@example.invalid");
+      await buyer
+        .getByLabel("Address lines", { exact: true })
+        .fill("Private Test Lane");
+      await buyer.getByLabel("City", { exact: true }).fill("Patan");
+      delivery = await postResult(buyer, `/fulfillment/artworks/${id}`, () =>
+        buyer
+          .getByRole("button", { name: "Send private delivery request", exact: true })
+          .click(),
+      );
+      const status = async (value) => {
+        await visit(admin, `/admin/artworks/${id}/custody`);
+        await admin.locator("summary").filter({ hasText: delivery.id }).click();
+        await admin
+          .getByLabel("Fulfillment status", { exact: true })
+          .selectOption(value);
+        if (value === "DISPATCHED") {
+          await admin.getByLabel("Courier", { exact: true }).fill("Synthetic courier");
+          await admin
+            .getByLabel("Tracking reference", { exact: true })
+            .fill("PRIVATE-TEST-TRACKING");
+        }
+        await admin
+          .getByRole("checkbox", {
+            name: /I confirmed this fulfillment status manually/,
+          })
+          .check();
+        delivery = await postResult(
+          admin,
+          `/admin/fulfillment/${delivery.id}`,
+          () =>
+            admin
+              .getByRole("button", { name: "Save fulfillment status", exact: true })
+              .click(),
+          "PATCH",
+        );
+      };
+      await status("APPROVED");
+      await move("DISPATCH_FROM_KATHA", delivery.id);
+      await status("DISPATCHED");
+      await context.collectorDelivery.assertState(id, "IN_TRANSIT_A");
+      await visit(buyer, `/collection/${id}/delivery`);
+      await buyer
+        .getByRole("button", { name: "Refresh delivery requests", exact: true })
+        .click();
+      await buyer
+        .getByRole("checkbox", {
+          name: "I physically received this artwork.",
+          exact: true,
+        })
+        .check();
+      delivery = await postResult(buyer, `/fulfillment/${delivery.id}/receipt`, () =>
+        buyer
+          .getByRole("button", { name: "Report physical receipt", exact: true })
+          .click(),
+      );
+      assert.equal(delivery.status, "DISPATCHED");
+      assert.ok(delivery.ownerReportedReceivedAt);
+      await context.collectorDelivery.assertState(id, "RECEIPT_A");
+      await move("RECEIVE_BY_COLLECTOR", delivery.id);
+      await status("RECEIVED");
+      await context.collectorDelivery.assertState(id, "HELD_A");
+      await inspect("POST_DELIVERY");
+      await context.collectorDelivery.assertState(id, "POST_DELIVERY_A");
+      await visit(buyer, `/collection/${id}/resale`);
+      await buyer
+        .getByRole("button", { name: "Refresh inspection status", exact: true })
+        .click();
+      await expect(
+        buyer.getByText("Inspection approval: required.", { exact: true }),
+      ).toBeVisible();
+      const request = await postResult(buyer, `/resale/artworks/${id}`, () =>
+        buyer
+          .getByRole("button", { name: "Request Katha resale inspection", exact: true })
+          .click(),
+      );
+      assert.equal(request.inspection.status, "REQUIRED");
+      assert.equal(request.canList, false);
+      await visit(buyer, `/collection/${id}/list`);
+      await buyer
+        .getByRole("button", { name: "Refresh listing state", exact: true })
+        .click();
+      await expect(buyer.getByText(/Inspection approval: required/)).toBeVisible();
+      await expect(
+        buyer.getByRole("button", { name: "Prepare listing for review", exact: true }),
+      ).toBeDisabled();
+      const refused = await globalThis.fetch(
+        `${context.apiOrigin}/artworks/${id}/operations/listing`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${tokens[2]}`,
+          },
+          body: JSON.stringify({
+            idempotencyKey: randomUUID(),
+            expectedRevision: "2",
+            price: "2000000",
+            expiresAt: String(Math.floor(Date.now() / 1000) + 3600),
+            supportedTransactionVersions: [0],
+          }),
+        },
+      );
+      assert.equal(refused.status, 409);
+      await visit(verifier, `/admin/artworks/${id}/condition`);
+      await verifier
+        .getByRole("button", { name: "Refresh inspection status", exact: true })
+        .click();
+      await expect(verifier.getByText(/Owner .*Custody revision 3/)).toBeVisible();
+      await inspect("PRE_RESALE");
+      await context.collectorDelivery.assertState(id, "APPROVED_A");
+      await visit(buyer, `/collection/${id}/resale`);
+      await buyer
+        .getByRole("button", { name: "Refresh inspection status", exact: true })
+        .click();
+      await expect(
+        buyer.getByText("Inspection approval: approved.", { exact: true }),
+      ).toBeVisible();
+    }
     if (context.custodyResale) {
       const listingRequest = {
         idempotencyKey: randomUUID(),
@@ -489,7 +660,13 @@ export async function runPrimaryJourney(context) {
       await buyer
         .getByRole("button", { name: "Refresh listing state", exact: true })
         .click();
-      await expect(buyer.getByText(/Inspection approval: not_required/)).toBeVisible();
+      await expect(
+        buyer.getByText(
+          context.collectorDelivery
+            ? /Inspection approval: approved/
+            : /Inspection approval: not_required/,
+        ),
+      ).toBeVisible();
       await buyer.getByLabel("Price in test tokens", { exact: true }).fill("2");
       await buyer
         .getByLabel("Listing expiry (your local time)", { exact: true })
@@ -583,6 +760,38 @@ export async function runPrimaryJourney(context) {
       await expect(
         secondBuyer.getByText("Synthetic Patan Paubha", { exact: true }),
       ).toBeVisible();
+    }
+    if (context.collectorDelivery) {
+      await context.collectorDelivery.assertState(id, "SOLD_HELD_A");
+      const priorDelivery = await globalThis.fetch(
+        `${context.apiOrigin}/fulfillment/${delivery.id}`,
+        { headers: { authorization: `Bearer ${tokens[4]}` } },
+      );
+      assert.equal(priorDelivery.status, 403);
+      const mismatchedScope = await globalThis.fetch(
+        `${context.apiOrigin}/resale/artworks/${id}`,
+        { headers: { authorization: `Bearer ${tokens[4]}` } },
+      );
+      assert.equal(mismatchedScope.status, 409);
+      // Collector-held shipping is manually coordinated; the old owner's private
+      // delivery request cannot be reused for the new owner.
+      await move("DISPATCH_FROM_COLLECTOR");
+      await context.collectorDelivery.assertState(id, "IN_TRANSIT_B");
+      await move("RECEIVE_BY_COLLECTOR");
+      await context.collectorDelivery.assertState(id, "HELD_B");
+      await visit(secondBuyer, `/collection/${id}/resale`);
+      await secondBuyer
+        .getByRole("button", { name: "Refresh inspection status", exact: true })
+        .click();
+      await expect(
+        secondBuyer.getByText("Inspection approval: stale.", { exact: true }),
+      ).toBeVisible();
+      await inspect("POST_DELIVERY");
+      await context.collectorDelivery.assertState(id, "POST_DELIVERY_B");
+      const finalTag = await globalThis.fetch(`${context.apiOrigin}/nfc/${tagId}`, {
+        redirect: "manual",
+      });
+      assert.equal(finalTag.headers.get("location"), resolved.headers.get("location"));
     }
     assert.deepEqual(errors, [], "Production browser errors");
   } catch (error) {
