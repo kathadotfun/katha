@@ -50,12 +50,19 @@ import {
 } from "@katha/shared";
 import { expect, it } from "vitest";
 import { buildCreateCoreCollectionInstruction, readCoreAsset } from "../src/core.js";
+import { readListingDelegates } from "./fixtures/core-plugins.js";
 import { surfpoolIndexerRpc } from "./fixtures/surfpool-indexer-rpc.js";
 import { buildInitializePlatformTransaction } from "../src/registration.js";
 import {
   KATHA_REGISTRY_PROGRAM_ADDRESS as REGISTRY,
   findCollectionAuthorityPda,
   findArtworkPda,
+  findHeadPda,
+  findInitializeCustodyHeadPda,
+  findInitializeMetadataHeadPda,
+  findVerificationPda,
+  getConditionHeadDecoder,
+  getCustodyHeadDecoder,
   getArtworkRecordDecoder,
 } from "../src/generated/registry/index.js";
 
@@ -111,7 +118,9 @@ async function lifecycleJourney() {
   const bootstrap = await generateKeyPairSigner(),
     collection = await generateKeyPairSigner();
   const primaryBrowser = process.env.KATHA_TEST_PRIMARY_BROWSER === "1";
-  const payout = wallet();
+  const payout = wallet(),
+    buyerB = wallet();
+  const custodyResale = process.env.KATHA_TEST_CUSTODY_RESALE === "1";
   const client = createClient()
     .use(signer(bootstrap))
     .use(
@@ -135,7 +144,13 @@ async function lifecycleJourney() {
   }
   // Cheatcodes are limited to bootstrap authority and synthetic SOL balances.
   await rpc("surfnet_setProgramAuthority", [REGISTRY, bootstrap.address]);
-  for (const actor of [bootstrap, admin, verifier, outsider])
+  for (const actor of [
+    bootstrap,
+    admin,
+    verifier,
+    outsider,
+    ...(custodyResale ? [buyerB] : []),
+  ])
     await rpc("surfnet_setAccount", [actor.address, { lamports: 5_000_000_000 }]);
   const [collectionAuthority] = await findCollectionAuthorityPda();
   await client.sendTransaction([
@@ -422,13 +437,19 @@ async function lifecycleJourney() {
           freezeAuthority: null,
         })
         .sendTransaction();
-      for (const actor of [admin, outsider, payout, bootstrap])
+      for (const actor of [
+        admin,
+        outsider,
+        payout,
+        bootstrap,
+        ...(custodyResale ? [buyerB] : []),
+      ])
         await client.token.instructions
           .mintToATA({
             owner: actor.address,
             mint: mint.address,
             mintAuthority: bootstrap,
-            amount: actor === outsider ? 10000000n : 0n,
+            amount: actor === outsider || actor === buyerB ? 10000000n : 0n,
             decimals: 6,
           })
           .sendTransaction();
@@ -478,13 +499,52 @@ async function lifecycleJourney() {
         stream!.on("data", (chunk: Buffer) => {
           logs += chunk.toString();
         });
+      const balance = async (owner: typeof outsider.address) =>
+        (
+          await fetchToken(
+            client.rpc,
+            (
+              await findAssociatedTokenPda({
+                owner,
+                mint: mint.address,
+                tokenProgram: TOKEN_PROGRAM_ADDRESS,
+              })
+            )[0],
+          )
+        ).data.amount;
+      let primaryDetail: ReturnType<typeof publicArtworkDetailSchema.parse> | undefined;
+      let primaryHistory:
+        ReturnType<typeof artworkProvenanceResponseSchema.parse> | undefined;
+      const immutable = new Map<string, Uint8Array>();
+      async function unchanged(kathaId: string) {
+        if (!primaryDetail || !primaryHistory)
+          throw new Error("Primary evidence missing");
+        const detail = publicArtworkDetailSchema.parse(
+          await json(`/artworks/${kathaId}`),
+        );
+        expect(detail.artist).toEqual(primaryDetail.artist);
+        expect(detail.creatorWallet).toEqual(primaryDetail.creatorWallet);
+        expect(detail.chain).toEqual(primaryDetail.chain);
+        expect(detail.custody).toEqual(primaryDetail.custody);
+        expect(detail.condition).toEqual(primaryDetail.condition);
+        expect(detail.metadata).toEqual(primaryDetail.metadata);
+        for (const [key, bytes] of immutable) {
+          const current = await fetchEncodedAccount(client.rpc, address(key));
+          if (!current.exists) throw new Error(`Immutable account missing: ${key}`);
+          expect(
+            new Uint8Array(current.data),
+            `Preserved Registry account ${key}`,
+          ).toEqual(bytes);
+        }
+        return detail;
+      }
       await runPrimaryJourney({
         origin: webOrigin,
         apiOrigin: origin,
-        actors: [admin, verifier, outsider, payout],
+        actors: [admin, verifier, outsider, payout, buyerB],
         index,
         signTransaction(actor, bytes) {
-          const identity = [admin, verifier, outsider][actor];
+          const identity = [admin, verifier, outsider, undefined, buyerB][actor];
           if (!identity) throw new Error("Unexpected synthetic signer");
           const tx = getTransactionDecoder().decode(Uint8Array.from(bytes));
           if (Object.keys(tx.signatures).some((a) => a !== identity.address))
@@ -511,6 +571,101 @@ async function lifecycleJourney() {
           ]);
           await index();
         },
+        ...(custodyResale
+          ? {
+              custodyResale: {
+                async assertListed(kathaId: string) {
+                  const detail = await unchanged(kathaId);
+                  const core = await fetchEncodedAccount(
+                    client.rpc,
+                    address(detail.chain.coreAssetAddress),
+                  );
+                  if (!core.exists) throw new Error("Listed Core asset missing");
+                  const [listing] = await marketplace.findListingPda({
+                    asset: core.address,
+                  });
+                  expect(readListingDelegates(core)).toEqual({
+                    owner: outsider.address,
+                    freeze: { frozen: true, authority: "Address", address: listing },
+                    transfer: { authority: "Address", address: listing },
+                  });
+                  expect(await balance(outsider.address)).toBe(9000000n);
+                  expect(await balance(buyerB.address)).toBe(10000000n);
+                  const history = artworkProvenanceResponseSchema.parse(
+                    await json(`/artworks/${kathaId}/provenance`),
+                  );
+                  expect(history.items).toEqual(primaryHistory!.items);
+                },
+                async assertResale(kathaId: string) {
+                  const detail = await unchanged(kathaId);
+                  expect(detail.ownership.ownerWallet).toBe(buyerB.address);
+                  const core = await fetchEncodedAccount(
+                    client.rpc,
+                    address(detail.chain.coreAssetAddress),
+                  );
+                  if (!core.exists) throw new Error("Purchased Core asset missing");
+                  expect(
+                    readCoreAsset(core, core.address, collection.address).owner,
+                  ).toBe(buyerB.address);
+                  expect(readListingDelegates(core)).toEqual({
+                    owner: buyerB.address,
+                    freeze: { frozen: false, authority: "Owner", address: null },
+                    transfer: { authority: "Owner", address: null },
+                  });
+                  expect(await balance(outsider.address)).toBe(10850000n);
+                  expect(await balance(buyerB.address)).toBe(8000000n);
+                  expect(await balance(payout.address)).toBe(1075000n);
+                  expect(await balance(bootstrap.address)).toBe(75000n);
+                  const [listing] = await marketplace.findListingPda({
+                    asset: core.address,
+                  });
+                  const ledger = await fetchEncodedAccount(client.rpc, listing);
+                  if (!ledger.exists) throw new Error("Completed listing missing");
+                  expect(
+                    marketplace.getListingRecordDecoder().decode(ledger.data),
+                  ).toMatchObject({
+                    status: marketplace.ListingStatus.Purchased,
+                    revision: 4n,
+                    completedSales: 2n,
+                    saleKind: marketplace.SaleKind.Secondary,
+                  });
+                  const history = artworkProvenanceResponseSchema.parse(
+                    await json(`/artworks/${kathaId}/provenance`),
+                  );
+                  expect(history.items).toHaveLength(primaryHistory!.items.length + 1);
+                  expect(history.items.slice(0, -1)).toEqual(primaryHistory!.items);
+                  expect(
+                    history.items.filter((e) => e.type === "TRANSFER"),
+                  ).toHaveLength(2);
+                  expect(history.items.at(-1)).toMatchObject({
+                    type: "TRANSFER",
+                    data: {
+                      newOwner: buyerB.address,
+                      sale: {
+                        isPrimary: false,
+                        listingRevision: "3",
+                        sellerWallet: outsider.address,
+                        buyerWallet: buyerB.address,
+                        price: "2000000",
+                        proceedsAmount: "1850000",
+                        royaltyAmount: "100000",
+                        platformFee: "50000",
+                      },
+                    },
+                  });
+                  expect(JSON.stringify(history)).not.toContain(
+                    "Synthetic private inspection notes",
+                  );
+                  await index();
+                  expect(
+                    artworkProvenanceResponseSchema.parse(
+                      await json(`/artworks/${kathaId}/provenance`),
+                    ).items,
+                  ).toEqual(history.items);
+                },
+              },
+            }
+          : {}),
         async assertPurchase(kathaId, artistId) {
           const detail = publicArtworkDetailSchema.parse(
             await json(`/artworks/${kathaId}`),
@@ -533,19 +688,6 @@ async function lifecycleJourney() {
           expect(readCoreAsset(asset, asset.address, collection.address).owner).toBe(
             outsider.address,
           );
-          const balance = async (owner: typeof outsider.address) =>
-            (
-              await fetchToken(
-                client.rpc,
-                (
-                  await findAssociatedTokenPda({
-                    owner,
-                    mint: mint.address,
-                    tokenProgram: TOKEN_PROGRAM_ADDRESS,
-                  })
-                )[0],
-              )
-            ).data.amount;
           expect(await balance(outsider.address)).toBe(9000000n);
           expect(await balance(payout.address)).toBe(975000n);
           expect(await balance(bootstrap.address)).toBe(25000n);
@@ -563,6 +705,44 @@ async function lifecycleJourney() {
           expect(JSON.stringify(history)).not.toContain(
             "Synthetic private inspection notes",
           );
+          if (custodyResale) {
+            primaryDetail = detail;
+            primaryHistory = history;
+            const [conditionHead] = await findHeadPda({ artwork: recordAddress });
+            const [custodyHead] = await findInitializeCustodyHeadPda({
+              artwork: recordAddress,
+            });
+            const [metadataHead] = await findInitializeMetadataHeadPda({
+              artwork: recordAddress,
+            });
+            const [verification] = await findVerificationPda({
+              artwork: recordAddress,
+            });
+            const condition = await fetchEncodedAccount(client.rpc, conditionHead);
+            const custody = await fetchEncodedAccount(client.rpc, custodyHead);
+            if (!condition.exists || !custody.exists)
+              throw new Error("Attestation heads missing");
+            const currentReport = getConditionHeadDecoder().decode(
+              condition.data,
+            ).currentReport;
+            const custodyState = getCustodyHeadDecoder().decode(custody.data);
+            expect(custodyState.revision).toBe(1n);
+            for (const key of [
+              recordAddress,
+              conditionHead,
+              currentReport,
+              custodyHead,
+              custodyState.latestTransition,
+              metadataHead,
+              verification,
+            ]) {
+              const account = await fetchEncodedAccount(client.rpc, key);
+              if (!account.exists)
+                throw new Error("Preserved Registry account missing");
+              immutable.set(key, new Uint8Array(account.data));
+            }
+            expect(await balance(buyerB.address)).toBe(10000000n);
+          }
           await index();
           expect(
             artworkProvenanceResponseSchema.parse(
@@ -1032,9 +1212,11 @@ async function lifecycleJourney() {
 }
 
 it(
-  process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
-    ? "collects an artwork through the production browser, API, local programs and finalized indexer"
-    : "onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer",
+  process.env.KATHA_TEST_CUSTODY_RESALE === "1"
+    ? "resells through two browser wallets while preserving Katha custody and history"
+    : process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
+      ? "collects an artwork through the production browser, API, local programs and finalized indexer"
+      : "onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer",
   lifecycleJourney,
   process.env.KATHA_TEST_PRIMARY_BROWSER === "1" ? 480_000 : 300_000,
 );

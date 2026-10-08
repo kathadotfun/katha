@@ -3,12 +3,16 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { setTimeout } from "node:timers/promises";
 
-const primaryJourney = process.argv[2] === "--primary-journey";
+const custodyResale = process.argv[2] === "--custody-resale";
+const primaryJourney = custodyResale || process.argv[2] === "--primary-journey";
 const adminLifecycle = primaryJourney || process.argv[2] === "--admin-lifecycle";
 if (
   process.argv
     .slice(2)
-    .some((arg) => !["--admin-lifecycle", "--primary-journey"].includes(arg))
+    .some(
+      (arg) =>
+        !["--admin-lifecycle", "--primary-journey", "--custody-resale"].includes(arg),
+    )
 )
   throw new Error("Unknown database test option");
 const container = `katha-db-test-${randomUUID()}`;
@@ -87,7 +91,11 @@ try {
       process.execPath,
       [
         "scripts/test-core-cpi.mjs",
-        primaryJourney ? "--primary-journey" : "--admin-lifecycle",
+        custodyResale
+          ? "--custody-resale"
+          : primaryJourney
+            ? "--primary-journey"
+            : "--admin-lifecycle",
       ],
       {
         stdio: "inherit",

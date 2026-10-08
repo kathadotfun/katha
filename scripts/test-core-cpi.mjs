@@ -8,12 +8,16 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
-const primaryJourney = process.argv[2] === "--primary-journey";
+const custodyResale = process.argv[2] === "--custody-resale";
+const primaryJourney = custodyResale || process.argv[2] === "--primary-journey";
 const adminLifecycle = primaryJourney || process.argv[2] === "--admin-lifecycle";
 if (
   process.argv
     .slice(2)
-    .some((arg) => !["--admin-lifecycle", "--primary-journey"].includes(arg))
+    .some(
+      (arg) =>
+        !["--admin-lifecycle", "--primary-journey", "--custody-resale"].includes(arg),
+    )
 )
   throw new Error("Unknown program test option");
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -221,6 +225,7 @@ async function main() {
         KATHA_TEST_REGISTRY_SO: registryBinary,
         ...(!adminLifecycle ? { KATHA_TEST_MARKETPLACE_SO: marketplaceBinary } : {}),
         ...(primaryJourney ? { KATHA_TEST_PRIMARY_BROWSER: "1" } : {}),
+        ...(custodyResale ? { KATHA_TEST_CUSTODY_RESALE: "1" } : {}),
         KATHA_TEST_SURFPOOL_RPC: url,
         KATHA_TEST_SURFPOOL_WS: wsUrl,
       },

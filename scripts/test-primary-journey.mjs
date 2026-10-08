@@ -40,7 +40,7 @@ export async function runPrimaryJourney(context) {
   const tokens = [];
   const pages = [];
   try {
-    for (let actor = 0; actor < 3; actor++) {
+    for (const actor of context.custodyResale ? [0, 1, 2, 4] : [0, 1, 2]) {
       const session = await browser.newContext({ timezoneId: "UTC" });
       const page = await session.newPage();
       pages.push(page);
@@ -133,7 +133,7 @@ export async function runPrimaryJourney(context) {
         );
       }, context.actors[actor]);
     }
-    const [admin, verifier, buyer] = pages;
+    const [admin, verifier, buyer, secondBuyer] = pages;
     async function visit(page, path) {
       globalThis.console.log(`Primary journey: ${path}`);
       await page.goto(`${context.origin}${path}`);
@@ -450,6 +450,140 @@ export async function runPrimaryJourney(context) {
     await expect(
       buyer.getByText("Synthetic Patan Paubha", { exact: true }),
     ).toBeVisible();
+    if (context.custodyResale) {
+      const listingRequest = {
+        idempotencyKey: randomUUID(),
+        expectedRevision: "2",
+        price: "2000000",
+        expiresAt: String(Math.floor(Date.now() / 1000) + 3600),
+        supportedTransactionVersions: [0],
+      };
+      const post = (path, actor, body) =>
+        globalThis.fetch(`${context.apiOrigin}${path}`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${tokens[actor]}`,
+          },
+          body: JSON.stringify(body),
+        });
+      // An administrator role does not override Core ownership after the primary sale.
+      await visit(admin, `/collection/${id}/list`);
+      await admin
+        .getByRole("button", { name: "Refresh listing state", exact: true })
+        .click();
+      await expect(
+        admin.getByText("The connected wallet is not the observed Core owner.", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        admin.getByRole("button", { name: "Prepare listing for review", exact: true }),
+      ).toBeDisabled();
+      assert.equal(
+        (await post(`/artworks/${id}/operations/listing`, 0, listingRequest)).status,
+        403,
+      );
+
+      await visit(buyer, `/collection/${id}/list`);
+      await buyer
+        .getByRole("button", { name: "Refresh listing state", exact: true })
+        .click();
+      await expect(buyer.getByText(/Inspection approval: not_required/)).toBeVisible();
+      await buyer.getByLabel("Price in test tokens", { exact: true }).fill("2");
+      await buyer
+        .getByLabel("Listing expiry (your local time)", { exact: true })
+        .fill(new Date(Date.now() + 3600000).toISOString().slice(0, 16));
+      await transact(
+        buyer,
+        "Prepare listing for review",
+        "Transaction finalized and active listing observed",
+      );
+      await context.custodyResale.assertListed(id);
+      assert.equal(
+        (
+          await post(`/artworks/${id}/purchase-quote`, 2, {
+            supportedTransactionVersions: [0],
+          })
+        ).status,
+        403,
+      );
+
+      await visit(secondBuyer, new URL(resolved.headers.get("location")).pathname);
+      await secondBuyer
+        .getByRole("link", { name: "Review purchase quote", exact: true })
+        .click();
+      const quote = await postResult(
+        secondBuyer,
+        `/artworks/${id}/purchase-quote`,
+        () =>
+          secondBuyer
+            .getByRole("button", { name: "Refresh purchase quote", exact: true })
+            .click(),
+      );
+      assert.equal(quote.saleKind, "SECONDARY");
+      assert.equal(quote.revision, "3");
+      assert.deepEqual(quote.distribution.sellerProceeds, "1850000");
+      assert.deepEqual(quote.distribution.artistProceeds, "100000");
+      assert.deepEqual(quote.distribution.treasuryFee, "50000");
+      await expect(
+        secondBuyer.getByText("Secondary sale", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        secondBuyer.getByText("Total: 2.000000 test tokens", { exact: true }),
+      ).toBeVisible();
+      await transact(
+        secondBuyer,
+        "Prepare reviewed purchase",
+        "Purchase finalized; buyer Core ownership confirmed and transfer history indexed",
+      );
+      // A consumed quote and the previous owner cannot create another settlement.
+      assert.equal(
+        (
+          await post(`/artworks/${id}/operations/purchase`, 4, {
+            supportedTransactionVersions: [0],
+            idempotencyKey: randomUUID(),
+            quoteHash: quote.quoteHash,
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (
+          await post(`/artworks/${id}/operations/listing`, 2, {
+            ...listingRequest,
+            idempotencyKey: randomUUID(),
+            expectedRevision: "4",
+          })
+        ).status,
+        403,
+      );
+      await context.custodyResale.assertResale(id);
+      const finalTag = await globalThis.fetch(`${context.apiOrigin}/nfc/${tagId}`, {
+        redirect: "manual",
+      });
+      assert.equal(finalTag.status, 302);
+      assert.equal(finalTag.headers.get("location"), resolved.headers.get("location"));
+      await visit(buyer, "/collection");
+      await buyer
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      await expect(
+        buyer.getByText("No published artworks are indexed to this wallet yet", {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        buyer.getByText("Synthetic Patan Paubha", { exact: true }),
+      ).toHaveCount(0);
+      await visit(secondBuyer, "/collection");
+      await secondBuyer
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      await expect(
+        secondBuyer.getByText("Synthetic Patan Paubha", { exact: true }),
+      ).toBeVisible();
+    }
     assert.deepEqual(errors, [], "Production browser errors");
   } catch (error) {
     error.message += `\nRequests: ${requests.join("\n")}`;
