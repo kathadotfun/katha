@@ -66,4 +66,5 @@ bindings, bounded pagination, cache headers, privacy, and indexing status.
 Disposable PostgreSQL coverage uses real temporary signed wallet sessions and
 synthetic finalized events to verify published-only holdings, cluster isolation,
 owner changes, unchanged custody, and stale reconciliation after transfer.
-Collector account and collection pages are subsequent frontend steps.
+See the [account page](collector-account-web.md) and
+[collection page](collector-collection-web.md) for browser behavior.

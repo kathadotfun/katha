@@ -21,8 +21,8 @@ reads and discard late results. Refreshes cannot restore another wallet’s data
 Private errors and bearer tokens are not displayed or written to browser storage.
 
 The page explains the configured six-decimal test-token simulation. It does not
-load token balances, claim production USDC, or offer fiat settlement. Collection
-browsing and purchase controls are subsequent features. It never prepares or
+load token balances, claim production USDC, or offer fiat settlement. Collection browsing is available at [`/collection`](collector-collection-web.md);
+purchase controls remain subsequent features. It never prepares or
 submits a transaction.
 
 The typed session client calls the [collector API](collector-api.md) using a

@@ -155,6 +155,9 @@ async function fixture(
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    readCollection: async () => {
+      throw new Error("Unused collection fixture");
+    },
     readAccount: async () => {
       throw new Error("Unused account read");
     },

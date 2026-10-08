@@ -88,6 +88,9 @@ function fixture() {
     },
   });
   const api: WalletSessionApi = {
+    readCollection: async () => {
+      throw new Error("Unused collection fixture");
+    },
     readAccount: async () => ({
       session: response().session,
       indexedArtworkCount: 0,
@@ -415,6 +418,27 @@ test("collector account binds the session, clears revoked access and rejects wal
     throw new WalletSessionApiError("UNAUTHENTICATED");
   };
   await assert.rejects(auth.readAccount(signal));
+  assert.equal(auth.getSnapshot().session, null);
+  auth.dispose();
+});
+
+test("collection session binds wallet/cluster and clears revoked access", async () => {
+  const { collectionFixture } = await import("./fixtures/collection.ts");
+  const f = fixture(),
+    auth = createWalletSession(f.connection, f.api, origin);
+  await auth.signIn();
+  const signal = new AbortController().signal;
+  f.api.readCollection = async () => collectionFixture(first);
+  assert.equal(
+    (await auth.readCollection({ limit: 20, offset: 0 }, signal)).walletAddress,
+    first,
+  );
+  f.api.readCollection = async () => collectionFixture(second);
+  await assert.rejects(auth.readCollection({ limit: 20, offset: 0 }, signal));
+  f.api.readCollection = async () => {
+    throw new WalletSessionApiError("UNAUTHENTICATED");
+  };
+  await assert.rejects(auth.readCollection({ limit: 20, offset: 0 }, signal));
   assert.equal(auth.getSnapshot().session, null);
   auth.dispose();
 });

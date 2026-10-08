@@ -1,3 +1,4 @@
+import type { CollectorCollectionQuery } from "@katha/shared";
 import type {
   MetadataRevisionDocumentRequest,
   MetadataRevisionRequest,
@@ -126,6 +127,18 @@ export function createWalletSession(
     return result;
   }
   return {
+    async readCollection(query: CollectorCollectionQuery, signal: AbortSignal) {
+      const result = await authorized(
+        (value) => api.readCollection(query, value, signal),
+        signal,
+      );
+      if (
+        result.walletAddress !== snapshot.session?.walletAddress ||
+        result.cluster !== snapshot.session?.cluster
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readAccount(signal: AbortSignal) {
       const result = await authorized(
         (value) => api.readAccount(value, signal),

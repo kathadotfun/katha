@@ -121,6 +121,11 @@ export function WalletControl() {
                 </Link>
               )}
               {auth.session && (
+                <Link href="/collection" className="text-link mt-4 block">
+                  My collection
+                </Link>
+              )}
+              {auth.session && (
                 <Link href="/admin" className="text-link mt-4 block">
                   Administration
                 </Link>

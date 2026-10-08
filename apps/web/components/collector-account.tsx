@@ -204,6 +204,12 @@ export function CollectorAccountPanel() {
           live wallet balance.
         </p>
         <Link
+          href="/collection"
+          className="text-link mt-5 inline-flex min-h-11 items-center"
+        >
+          View my collection
+        </Link>
+        <Link
           href="/explore"
           className="text-link mt-5 inline-flex min-h-11 items-center"
         >

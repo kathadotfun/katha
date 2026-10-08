@@ -1,3 +1,8 @@
+import {
+  collectorCollectionQuerySchema,
+  collectorCollectionResponseSchema,
+  type CollectorCollectionQuery,
+} from "@katha/shared";
 import { collectorAccountResponseSchema } from "@katha/shared";
 import {
   metadataRevisionRequestSchema,
@@ -147,6 +152,34 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async readCollection(
+      query: CollectorCollectionQuery,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const parsed = collectorCollectionQuerySchema.parse({
+        limit: String(query.limit),
+        offset: String(query.offset),
+      });
+      const page = collectorCollectionResponseSchema.parse(
+        await request(
+          `/account/collection?${new URLSearchParams({ limit: String(parsed.limit), offset: String(parsed.offset) })}`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (
+        page.pagination.limit !== parsed.limit ||
+        page.pagination.offset !== parsed.offset ||
+        new Set(page.items.map((item) => item.artwork.kathaId)).size !==
+          page.items.length ||
+        new Set(page.items.map((item) => item.assetAddress)).size !== page.items.length
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return page;
+    },
     async readAccount(token: string, signal: AbortSignal) {
       return collectorAccountResponseSchema.parse(
         await request("/account", undefined, token, signal, "GET"),

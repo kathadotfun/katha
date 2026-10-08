@@ -1,3 +1,4 @@
+import { artworkListingResponseSchema } from "@katha/shared";
 import {
   artistSlugSchema,
   artworkDiscoveryQuerySchema,
@@ -146,6 +147,17 @@ export function createPublicApi(
         {},
         request,
       );
+    },
+    async listing(id: string, request: RequestOptions = {}) {
+      const kathaId = kathaIdSchema.parse(id);
+      const result = await read(
+        `/artworks/${encodeURIComponent(kathaId)}/listing`,
+        artworkListingResponseSchema,
+        {},
+        request,
+      );
+      if (result.kathaId !== kathaId) throw new PublicApiError("INVALID_RESPONSE");
+      return result;
     },
     provenance(id: string, query: Query = {}, request: RequestOptions = {}) {
       const parsed = artworkProvenanceQuerySchema.parse(query);

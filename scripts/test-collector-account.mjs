@@ -1,3 +1,7 @@
+import {
+  collectionFixture,
+  collectionListingFixture,
+} from "../apps/web/tests/fixtures/collection.ts";
 /* global document, innerWidth */
 import console from "node:console";
 import assert from "node:assert/strict";
@@ -21,6 +25,9 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       let issuedSession;
       let mode = "EMPTY";
       let accountCalls = 0;
+      let collectionMode = "READY";
+      let listingUnavailable = false;
+      let listingActive = false;
       const headers = {
         "Access-Control-Allow-Origin": origin,
         "Access-Control-Allow-Headers": "content-type,authorization",
@@ -53,6 +60,49 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
             session: issuedSession,
             indexedArtworkCount: mode === "EMPTY" ? 0 : 2,
             evaluatedAt: new Date().toISOString(),
+          },
+        });
+      });
+      await context.route(`${apiOrigin}/account/collection?**`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers });
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        if (collectionMode === "FAIL") return route.fulfill({ status: 503, headers });
+        const offset = Number(
+          new URL(route.request().url()).searchParams.get("offset"),
+        );
+        const value = collectionFixture(issuedSession.walletAddress, offset);
+        if (collectionMode === "EMPTY") value.items = [];
+        if (collectionMode === "COLLECTOR" && value.items[0])
+          value.items[0].custody.state = "COLLECTOR_HELD";
+        return route.fulfill({ headers, json: value });
+      });
+      await context.route(`${apiOrigin}/artworks/*/listing`, async (route) => {
+        assert.equal(route.request().headers().authorization, undefined);
+        if (listingUnavailable) return route.fulfill({ status: 503, headers });
+        return route.fulfill({
+          headers,
+          json: {
+            ...collectionListingFixture(issuedSession.walletAddress),
+            listing: listingActive
+              ? {
+                  address: "11111111111111111111111111111113",
+                  status: "ACTIVE",
+                  revision: "1",
+                  completedSales: "0",
+                  saleKind: "PRIMARY",
+                  seller: issuedSession.walletAddress,
+                  paymentMint: "11111111111111111111111111111114",
+                  decimals: 6,
+                  price: "1000000",
+                  createdAt: "1700000000",
+                  expiresAt: "1900000000",
+                  active: true,
+                }
+              : null,
           },
         });
       });
@@ -226,6 +276,52 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         path: `/tmp/katha-121-account-${width}.png`,
         fullPage: true,
       });
+      await main.getByRole("link", { name: "View my collection", exact: true }).click();
+      await expect(main).toContainText("Your collection, with its stories intact.");
+      await expect(main).toContainText("In Katha custody");
+      await expect(main).toContainText("Indexing is catching up");
+      await expect(main).toContainText("No listing recorded");
+      listingActive = true;
+      await main
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      await expect(main).toContainText("Active listing");
+      await expect(main).toContainText("In Katha custody");
+      const collectionAudit = await new AxeBuilder({ page }).analyze();
+      assert.deepEqual(collectionAudit.violations, []);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      await page.evaluate(() => document.activeElement?.blur());
+      await page.screenshot({
+        path: `/tmp/katha-122-collection-${width}.png`,
+        fullPage: true,
+      });
+      await main.getByRole("button", { name: "Next page", exact: true }).click();
+      await expect(main).toContainText("No artworks on this page");
+      await main.getByRole("button", { name: "Previous page", exact: true }).click();
+      await expect(main).toContainText("In Katha custody");
+      collectionMode = "COLLECTOR";
+      listingUnavailable = true;
+      await main
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      await expect(main).toContainText("Collector-held");
+      await expect(main).toContainText("Listing status unavailable");
+      collectionMode = "FAIL";
+      await main
+        .getByRole("button", { name: "Refresh collection", exact: true })
+        .click();
+      await expect(main.getByRole("alert")).toContainText("could not be loaded");
+      await expect(main).not.toContainText("Collector-held");
+      collectionMode = "EMPTY";
+      await main.getByRole("button", { name: "Try again", exact: true }).click();
+      await expect(main).toContainText(
+        "No published artworks are indexed to this wallet yet",
+      );
+      await main.getByRole("link", { name: "Wallet & account", exact: true }).click();
+      await expect(main).toContainText("This count reflects");
       mode = "FAIL";
       await main.getByRole("button", { name: "Refresh account" }).click();
       await expect(main.getByRole("alert")).toContainText("could not be loaded");
@@ -243,7 +339,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await context.close();
     }
     console.log(
-      "Collector account browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
+      "Collector account and collection browser checks passed at 375, 768 and 1280px, including axe accessibility, retry and revoked sessions.",
     );
   } finally {
     await browser.close();
