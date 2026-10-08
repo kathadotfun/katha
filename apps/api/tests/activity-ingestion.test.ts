@@ -343,3 +343,67 @@ it.each(["metadata", "condition", "custody", "mint", "platform"])(
     await expect(prepareActivityEvents(page([tx]), collection)).rejects.toThrow();
   },
 );
+
+it("prepares exact integer Marketplace settlements without turning sales into custody", async () => {
+  const m = await import("@katha/solana/marketplace");
+  const [artwork] = await findArtworkPda({ kathaId: "KATHA-PAUBHA-000001" });
+  const [asset] = await findAssetPda({ artwork });
+  const [listing] = await m.findListingPda({ asset });
+  const tx = transaction(8, 30n, 0);
+  tx.activities = [
+    {
+      programAddress: m.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+      kind: "MARKETPLACE",
+      collection,
+      outerInstructionIndex: 0,
+      innerInstructionIndex: -1,
+      eventIndex: 0,
+      event: {
+        name: "ArtworkPurchased",
+        value: {
+          listing,
+          artwork,
+          asset,
+          seller: collection,
+          buyer: KATHA_REGISTRY_PROGRAM_ADDRESS,
+          artistPayout: collection,
+          treasury: collection,
+          paymentMint: collection,
+          price: 101n,
+          sellerProceeds: 0n,
+          artistProceeds: 99n,
+          treasuryFee: 2n,
+          saleKind: m.SaleKind.Primary,
+          revision: 2n,
+          completedSales: 1n,
+          conditionReport: asset,
+          conditionHash: new Uint8Array(32).fill(1),
+          conditionVersion: 1,
+          custodyRevision: 1n,
+          purchasedAt: 1n,
+        },
+      },
+    },
+  ];
+  const [saved] = await prepareActivityEvents(page([tx]), collection);
+  expect(saved).toMatchObject({
+    kind: "SALE",
+    kathaId: null,
+    assetAddress: asset,
+    payload: {
+      proceedsAmount: "99",
+      royaltyAmount: "0",
+      platformFee: "2",
+      isPrimary: true,
+      ownerWallet: KATHA_REGISTRY_PROGRAM_ADDRESS,
+    },
+  });
+  expect(saved!.payload).not.toHaveProperty("custodyState");
+  const activity = tx.activities[0]!;
+  if (activity.kind !== "MARKETPLACE" || activity.event.name !== "ArtworkPurchased")
+    throw new Error("fixture");
+  activity.event.value.treasuryFee = 3n;
+  await expect(prepareActivityEvents(page([tx]), collection)).rejects.toThrow(
+    "settlement amounts",
+  );
+});

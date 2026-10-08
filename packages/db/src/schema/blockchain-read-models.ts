@@ -196,6 +196,9 @@ export const artworkListings = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     ...projectionColumns(),
     listingAddress: varchar("listing_address", { length: 44 }).notNull(),
+    listingRevision: numeric("listing_revision", { mode: "bigint" })
+      .notNull()
+      .default(sql`1`),
     sellerWallet: varchar("seller_wallet", { length: 44 }).notNull(),
     paymentMint: varchar("payment_mint", { length: 44 }).notNull(),
     price: amount("price"),
@@ -203,7 +206,15 @@ export const artworkListings = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
   },
   (t) => [
-    unique("artwork_listings_address_unique").on(t.cluster, t.listingAddress),
+    unique("artwork_listings_revision_unique").on(
+      t.cluster,
+      t.listingAddress,
+      t.listingRevision,
+    ),
+    check(
+      "artwork_listings_revision_valid",
+      sql`scale(${t.listingRevision}) = 0 AND ${t.listingRevision} BETWEEN 1 AND 18446744073709551615`,
+    ),
     unique("artwork_listings_sale_reference_unique").on(t.id, t.cluster, t.artworkId),
     uniqueIndex("artwork_listings_active_unique")
       .on(t.cluster, t.artworkId)

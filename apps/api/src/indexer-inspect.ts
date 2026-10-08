@@ -1,3 +1,4 @@
+import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "@katha/solana/marketplace";
 import { createActivityReader, CORE_PROGRAM_ADDRESS } from "@katha/solana";
 import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "@katha/solana/registry";
 import { readServerConfiguration, ConfigurationError } from "./config.js";
@@ -23,7 +24,11 @@ async function inspect() {
     // Preview only: no database connection, persistent cursor or raw payload output.
     await pollActivityPages(
       read,
-      [KATHA_REGISTRY_PROGRAM_ADDRESS, CORE_PROGRAM_ADDRESS].map((programAddress) => ({
+      [
+        KATHA_REGISTRY_PROGRAM_ADDRESS,
+        CORE_PROGRAM_ADDRESS,
+        KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+      ].map((programAddress) => ({
         programAddress,
       })),
       async (page) => {

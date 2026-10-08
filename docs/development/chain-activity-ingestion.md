@@ -1,4 +1,4 @@
-# Finalized Registry and Core activity
+# Finalized Registry, Marketplace and Core activity
 
 The Solana package provides `createActivityReader`, `decodeFinalizedActivity` and
 `decodeRegistryEvent`. The API codebase provides an awaited polling loop and a
@@ -18,7 +18,7 @@ pnpm indexer:inspect
 
 The inspector validates the same server configuration as the API, including a
 syntactically valid `DATABASE_URL`, but never connects to PostgreSQL. It reads one
-page each for the configured Registry and Core program, then exits. Each page has
+page each for the configured Registry, Core and Marketplace programs, then exits. Each page has
 at most 25 signatures. Output contains only fixed events, cluster and transaction/
 activity counts; no raw RPC error, endpoint, instruction, document or payload is
 printed. `Ctrl+C`/SIGTERM aborts in-flight requests. It does not sign, submit or
@@ -31,7 +31,7 @@ configured collection before producing ownership projections. A count is not pro
 
 ## Discovery and exact evidence
 
-`ActivityPageRequest` selects one of the fixed Registry/Core program addresses,
+`ActivityPageRequest` selects one of the fixed Registry/Core/Marketplace program addresses,
 optional `before`/`until` signatures and a page size of 1–100 (default 25). Each
 read verifies the configured cluster genesis with the same guard used by receipt
 reconciliation. Devnet must match its known genesis; localnet rejects known public
@@ -88,8 +88,8 @@ reported as the previous owner. Umi types remain inside the adapter.
 
 Other Core instruction kinds are not interpreted as transfers. A Registry mint
 already supplies initial ownership through `ArtworkMinted`; its Core creation CPI
-is not turned into an extra ownership event. Marketplace sale semantics and sale/
-Core deduplication remain separate work. Compressed assets, burns and arbitrary
+is not turned into an extra ownership event. Marketplace settlement records correlate
+with Core transfer evidence as described below. Compressed assets, burns and arbitrary
 Core instruction projections are outside this ingestion scope.
 
 Activities are retained only when their invocation and every enclosing frame
@@ -169,8 +169,9 @@ retried, up to three attempts with 250/500 ms abortable delays. Validation and
 permission errors are not retried. Continuous polling waits five seconds after a
 recoverable gap or exhausted transient failure. One-shot mode exits unsuccessfully for unresolved gaps, exhausted transient
 failures or unresolved current ownership checks.
-Uninitialized/mismatched scope, database conflicts and changed network bindings
-stop the worker with a redacted failure.
+Uninitialized/mismatched scope and changed network bindings stop the worker with a
+redacted failure. Invalid persistence evidence records EVIDENCE_INVALID and requires
+complete recovery before advancing the affected checkpoint.
 
 Finalized Core account reads verify context slot, program owner, layout and expected
 collection. MATCH/MISMATCH/MISSING/INVALID diagnostics bind the exact indexed source
@@ -202,7 +203,7 @@ remain guarded.
 
 No worker starts automatically with HTTP. No signing, submission, publication,
 shipping or manual custody change occurs. Public provenance/status is served by the [provenance API](artwork-provenance-api.md);
-marketplace settlement indexing remains a later feature.
+Marketplace settlements are indexed with actual integer role distributions and revisioned listing cycles.
 
 ## Verification
 
@@ -220,7 +221,7 @@ Tests cover direct and inner activity, failed transactions/CPI rollback, scoped
 forgery rejection, all Registry event codecs, loaded keys, malformed/truncated
 logs, cluster binding, pagination, block ordering, awaited consumption and abort.
 A loopback mock RPC exercises actual Kit transport and numeric transformations;
-subprocess tests exercise inspector configuration and both program reads without
+subprocess tests exercise inspector configuration and all three program reads without
 connecting to an unavailable database. Persistence tests verify concurrent replay, exact-content conflicts, same-slot
 ownership order, restart, overlapping streams, stale cursor rejection and whole-batch
 rollback against disposable PostgreSQL. These use synthetic data; live Devnet
@@ -228,5 +229,48 @@ ingestion is not claimed. Recovery tests cover multiple pages, frozen ranges,
 missing/pruned history, budgets, resets, retries, races and non-invented ownership.
 
 The [public provenance API](artwork-provenance-api.md) returns retained finalized
-events with both stream checkpoints, persisted network observations and owner-check
+events with all three stream checkpoints, persisted network observations and owner-check
 freshness. It does not query RPC or turn reconciliation diagnostics into events.
+
+## Marketplace settlement ingestion
+
+Apply migration `0013_marketplace_listing_cycles.sql` with `pnpm db:migrate`
+before restarting the worker. Existing synthetic listing rows retain revision 1;
+new observations retain each creation revision in a separate row. The same ledger
+address can have multiple terminal cycles and sales, but only one active cycle.
+Earlier sale terms and fees remain immutable.
+
+Every successful Marketplace invocation must emit its expected generated event
+(or no event for eligibility/sale-term initialization). Exact codec round trips,
+instruction account positions, expected revision/price and invocation log nesting
+bind the event to finalized execution. Purchase requires exactly one successful
+Core transfer inside that invocation with the same asset, listing delegate,
+buyer and collection. Failed transactions and rolled-back CPI calls contribute no
+settlements. Missing or conflicting evidence is a gap, not a fabricated sale.
+
+The worker processes Registry bindings first, then Core and Marketplace streams.
+A transaction observed by either stream carries the same event identities. One
+cluster advisory lock serializes event, listing, sale, ownership and checkpoint
+writes in one database transaction. Replay must reproduce the retained contents.
+Terminal events resolve their exact preceding creation revision, including replay
+after a later resale. Missing cycles, changed mint/price, duplicate settlement,
+stale revision and invalid amounts fail without partial projections or checkpoints.
+
+`artwork_sales` records the actual emitted amounts rather than recalculating from
+current fee configuration. Primary artist proceeds occupy `proceeds_amount` with
+zero `royalty_amount`; secondary seller proceeds and artist royalty occupy those
+fields separately. `platform_fee` is the treasury role amount. All amounts are
+integer base units. Recipient overlap does not create an additional payment or
+change the role accounting.
+
+Raw settlement and Core transfer evidence are retained separately. The existing
+public provenance timeline selects Registry/Core observations and therefore shows
+one Core transfer per purchase. Marketplace fee presentation is added in the
+collector timeline step; it must replace or correlate that transfer rather than
+append a second ownership change. Marketplace checkpoints participate in public
+indexing health now. No listing, cancellation or sale changes physical custody,
+authorship, private fulfillment records, or historical condition reports.
+
+Tests use synthetic RPC evidence and disposable PostgreSQL, including primary and
+secondary sale cycles, concurrent overlapping streams, replay/restart, exact fees,
+cancellation and whole-batch rollback. No live Devnet indexing is claimed.

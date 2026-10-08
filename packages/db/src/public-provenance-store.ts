@@ -23,7 +23,7 @@ const names = {
 export function createPublicProvenanceStore(
   db: Database,
   cluster: "LOCALNET" | "DEVNET",
-  programs: { registry: string; core: string },
+  programs: { registry: string; core: string; marketplace?: string },
 ) {
   return {
     async find(
@@ -112,6 +112,7 @@ export function createPublicProvenanceStore(
                 inArray(indexerCheckpoints.programAddress, [
                   programs.registry,
                   programs.core,
+                  ...(programs.marketplace ? [programs.marketplace] : []),
                 ]),
               ),
             );

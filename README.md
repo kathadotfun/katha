@@ -52,7 +52,7 @@ manual custody history and separate private fulfillment requests, plus unique
 wallet records, single-use challenges and hashed session persistence, and
 idempotent blockchain operations with retained transaction attempts. Database
 read models now preserve indexed events, gap-aware checkpoints, ownership,
-listings and sale distributions. Finalized Registry/Core polling and decoding now
+listings and sale distributions. Finalized Registry/Core/Marketplace polling and decoding now
 provide validated activity pages; an explicit bounded worker atomically persists
 events, ownership and replay-safe checkpoints. Paginated backfill, bounded RPC
 retries, persisted gaps, network binding and Core ownership diagnostics support
@@ -124,7 +124,7 @@ review boundary now validates and simulates prepared Registry messages, requests
 explicit wallet approval, records signed attempts and reconciles finalized outcomes
 with separate indexing feedback; the protected administration page now supports artist creation, saved-profile review and explicit manual artist verification. Artwork drafts, media management and the registration workflow are connected, with exact document review, simulation, explicit wallet approval and protected receipt/indexing feedback. Artwork authenticity now connects manual inspection and authorship approval to verifier-authorized preparation, wallet signing and finalized receipt/indexing feedback. Condition inspection now connects private evidence upload and immutable report preparation to explicit verifier signing, current owner/custody scope checks and report-specific finalized receipt/indexing feedback. Custody administration now connects finalized physical state and private fulfillment requests to explicit manual status confirmation, authority-bound custody signing and separate receipt/indexing feedback. Marketplace transaction builders now prepare owner-bound listings, seller cancellation,
 permissionless expiry recovery and buyer-bound purchases through generated clients.
-Marketplace API and collector screens remain planned.
+Listing and purchase preparation APIs are available; collector marketplace screens remain planned.
 
 The MVP targets local development and a reproducible Solana Devnet demonstration.
 Hosted production deployment, mainnet, production payment economics, auctions,
@@ -160,7 +160,7 @@ outside the current scope.
 - [Artwork mint preparation](docs/development/artwork-minting-api.md)
 - [Metadata commitment preparation](docs/development/metadata-revisions-api.md)
 - [Finalized operation receipts](docs/development/operation-receipts-api.md)
-- [Finalized Registry/Core activity ingestion](docs/development/chain-activity-ingestion.md)
+- [Finalized Registry/Core/Marketplace activity ingestion](docs/development/chain-activity-ingestion.md)
 - [API environment and public configuration](docs/development/api-configuration.md)
 - [API errors and logging](docs/development/api-errors-logging.md)
 - [API health and shutdown](docs/development/api-health.md)
@@ -249,3 +249,8 @@ files, private evidence, fulfillment details, local data, uploads, build output,
 agent configuration, working notes, and source design files.
 
 No license has been granted for this repository at this stage.
+
+Finalized Marketplace settlements now preserve primary/secondary sale amounts,
+fees and immutable listing cycles across resale and indexer replay. Core transfer
+evidence remains the single public ownership timeline entry for each purchase;
+physical custody stays separate. See the [indexer guide](docs/development/chain-activity-ingestion.md).

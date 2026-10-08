@@ -1,3 +1,10 @@
+import {
+  KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+  findConfigPda as findMarketplaceConfigPda,
+  findListingPda,
+  SaleKind,
+  ListingStatus,
+} from "@katha/solana/marketplace";
 import type { ActivityStore, ActivityStream, StoredActivity } from "@katha/db";
 import {
   CORE_PROGRAM_ADDRESS,
@@ -62,6 +69,86 @@ export async function prepareActivityEvents(
             ...activity.transfer,
             ownerWallet: activity.transfer.newOwner,
           },
+        });
+        continue;
+      }
+      if (activity.kind === "MARKETPLACE") {
+        if (activity.programAddress !== KATHA_MARKETPLACE_PROGRAM_ADDRESS)
+          throw new Error("Unexpected Marketplace program");
+        const { name, value } = activity.event;
+        if (activity.collection !== collection)
+          throw new Error("Unexpected marketplace collection");
+        if (name === "MarketplaceInitialized") {
+          if (
+            value.config !== (await findMarketplaceConfigPda())[0] ||
+            value.registryProgram !== KATHA_REGISTRY_PROGRAM_ADDRESS ||
+            value.registryConfig !== (await findConfigPda())[0] ||
+            value.collection !== collection
+          )
+            throw new Error("Unexpected marketplace configuration");
+          continue;
+        }
+        if (
+          value.asset !== (await findAssetPda({ artwork: value.artwork }))[0] ||
+          value.listing !== (await findListingPda({ asset: value.asset }))[0] ||
+          value.revision < 1n
+        )
+          throw new Error("Unexpected marketplace binding");
+        const payload: Record<string, unknown> = {
+          name,
+          ...(jsonValue(value) as Record<string, unknown>),
+          listingAddress: value.listing,
+          sellerWallet: value.seller,
+        };
+        if (name === "ListingCreated") {
+          if (
+            value.price < 1n ||
+            value.expiresAt <= value.createdAt ||
+            value.conditionVersion < 1 ||
+            value.custodyRevision < 1n
+          )
+            throw new Error("Invalid listing terms");
+          payload.expiresAt = new Date(Number(value.expiresAt) * 1000).toISOString();
+          payload.status = "ACTIVE";
+        } else if (name === "ListingReleased") {
+          if (![ListingStatus.Cancelled, ListingStatus.Expired].includes(value.status))
+            throw new Error("Invalid listing release");
+          payload.status =
+            value.status === ListingStatus.Cancelled ? "CANCELLED" : "EXPIRED";
+        } else {
+          if (
+            value.price < 1n ||
+            value.sellerProceeds + value.artistProceeds + value.treasuryFee !==
+              value.price ||
+            value.completedSales < 1n ||
+            (value.saleKind === SaleKind.Primary &&
+              (value.sellerProceeds !== 0n || value.completedSales !== 1n))
+          )
+            throw new Error("Invalid settlement amounts");
+          const primary = value.saleKind === SaleKind.Primary;
+          Object.assign(payload, {
+            status: "PURCHASED",
+            buyerWallet: value.buyer,
+            ownerWallet: value.buyer,
+            isPrimary: primary,
+            proceedsWallet: primary ? value.artistPayout : value.seller,
+            proceedsAmount: (primary
+              ? value.artistProceeds
+              : value.sellerProceeds
+            ).toString(),
+            artistWallet: value.artistPayout,
+            royaltyAmount: (primary ? 0n : value.artistProceeds).toString(),
+            treasuryWallet: value.treasury,
+            platformFee: value.treasuryFee.toString(),
+          });
+        }
+        result.push({
+          ...base,
+          programAddress: activity.programAddress,
+          kind: name === "ArtworkPurchased" ? "SALE" : "LISTING",
+          kathaId: null,
+          assetAddress: value.asset,
+          payload,
         });
         continue;
       }
@@ -160,7 +247,9 @@ export async function ingestActivityStream(options: {
       ? KATHA_REGISTRY_PROGRAM_ADDRESS
       : options.stream.programAddress === CORE_PROGRAM_ADDRESS
         ? CORE_PROGRAM_ADDRESS
-        : null;
+        : options.stream.programAddress === KATHA_MARKETPLACE_PROGRAM_ADDRESS
+          ? KATHA_MARKETPLACE_PROGRAM_ADDRESS
+          : null;
   if (!programAddress) throw new Error("Unexpected activity stream");
   const expected = await options.store.cursor(options.stream);
   options.signal?.throwIfAborted();

@@ -20,7 +20,12 @@ export type IndexerGapReason =
   | "NETWORK_UNBOUND";
 export function createIndexerRecoveryStore(
   db: Database,
-  programs: { registry: string; core: string; collection: string },
+  programs: {
+    registry: string;
+    core: string;
+    marketplace?: string;
+    collection: string;
+  },
 ) {
   const lock = (cluster: string) =>
     sql`select pg_advisory_xact_lock(hashtextextended(${`katha-indexer:${cluster}`}, 0))`;
@@ -73,6 +78,7 @@ export function createIndexerRecoveryStore(
                   inArray(indexerCheckpoints.programAddress, [
                     programs.registry,
                     programs.core,
+                    ...(programs.marketplace ? [programs.marketplace] : []),
                   ]),
                 ),
               );
@@ -96,6 +102,7 @@ export function createIndexerRecoveryStore(
                   inArray(indexerCheckpoints.programAddress, [
                     programs.registry,
                     programs.core,
+                    ...(programs.marketplace ? [programs.marketplace] : []),
                   ]),
                 ),
               );
@@ -114,6 +121,7 @@ export function createIndexerRecoveryStore(
               inArray(indexerCheckpoints.programAddress, [
                 programs.registry,
                 programs.core,
+                ...(programs.marketplace ? [programs.marketplace] : []),
               ]),
             ),
           )
@@ -140,6 +148,7 @@ export function createIndexerRecoveryStore(
                 inArray(indexerCheckpoints.programAddress, [
                   programs.registry,
                   programs.core,
+                  ...(programs.marketplace ? [programs.marketplace] : []),
                 ]),
               ),
             );
@@ -148,7 +157,11 @@ export function createIndexerRecoveryStore(
     },
     async gap(stream: ActivityStream, reason: IndexerGapReason, through: bigint) {
       if (
-        ![programs.registry, programs.core].includes(stream.programAddress) ||
+        ![
+          programs.registry,
+          programs.core,
+          ...(programs.marketplace ? [programs.marketplace] : []),
+        ].includes(stream.programAddress) ||
         through < stream.fromSlot
       )
         throw new Error("Invalid gap scope");
@@ -205,7 +218,11 @@ export function createIndexerRecoveryStore(
         .where(
           and(
             eq(artworkOwnership.cluster, cluster),
-            inArray(indexedEvents.programAddress, [programs.registry, programs.core]),
+            inArray(indexedEvents.programAddress, [
+              programs.registry,
+              programs.core,
+              ...(programs.marketplace ? [programs.marketplace] : []),
+            ]),
           ),
         );
     },

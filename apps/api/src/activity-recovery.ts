@@ -1,3 +1,5 @@
+import { ActivityStoreConflict } from "@katha/db";
+import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "@katha/solana/marketplace";
 import type {
   ActivityStore,
   ActivityStream,
@@ -71,7 +73,9 @@ export async function recoverActivityStream(options: {
       ? KATHA_REGISTRY_PROGRAM_ADDRESS
       : stream.programAddress === CORE_PROGRAM_ADDRESS
         ? CORE_PROGRAM_ADDRESS
-        : null;
+        : stream.programAddress === KATHA_MARKETPLACE_PROGRAM_ADDRESS
+          ? KATHA_MARKETPLACE_PROGRAM_ADDRESS
+          : null;
   const maxPages = options.maxPages ?? 100;
   const through = options.throughSlot ?? snapshot.finalizedSlot;
   if (
@@ -238,7 +242,11 @@ export async function recoverActivityStream(options: {
       );
       throw error;
     }
-    if (error instanceof ActivityEvidenceError) return fail("EVIDENCE_INVALID");
+    if (
+      error instanceof ActivityEvidenceError ||
+      error instanceof ActivityStoreConflict
+    )
+      return fail("EVIDENCE_INVALID");
     throw error;
   }
 }

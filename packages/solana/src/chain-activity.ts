@@ -14,6 +14,22 @@ import {
 } from "./generated/registry/index.js";
 import { decodeRegistryEvent, type RegistryActivityEvent } from "./registry-events.js";
 
+import * as marketplace from "./generated/marketplace/index.js";
+import {
+  decodeMarketplaceEvent,
+  type MarketplaceActivityEvent,
+} from "./marketplace-events.js";
+
+const marketplaceEventNames: Partial<
+  Record<marketplace.KathaMarketplaceInstruction, MarketplaceActivityEvent["name"]>
+> = {
+  [marketplace.KathaMarketplaceInstruction.InitializeMarketplace]:
+    "MarketplaceInitialized",
+  [marketplace.KathaMarketplaceInstruction.CreateListing]: "ListingCreated",
+  [marketplace.KathaMarketplaceInstruction.CancelListing]: "ListingReleased",
+  [marketplace.KathaMarketplaceInstruction.ExpireListing]: "ListingReleased",
+  [marketplace.KathaMarketplaceInstruction.PurchaseListing]: "ArtworkPurchased",
+};
 const registryEventNames: Record<
   KathaRegistryInstruction,
   RegistryActivityEvent["name"]
@@ -85,6 +101,12 @@ export type DecodedActivity = Position &
         kind: "REGISTRY";
         event: RegistryActivityEvent;
         metadataUri?: string;
+      }
+    | {
+        programAddress: Address;
+        kind: "MARKETPLACE";
+        event: MarketplaceActivityEvent;
+        collection: Address;
       }
     | { programAddress: Address; kind: "CORE_TRANSFER"; transfer: CoreTransferActivity }
   );
@@ -267,6 +289,35 @@ export function decodeFinalizedActivity(
             frame.eventCount !== 1
           )
             fail();
+          if (invocation.program === marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS) {
+            const expected =
+              marketplaceEventNames[
+                marketplace.identifyKathaMarketplaceInstruction(invocation.data)
+              ];
+            if (frame.eventCount !== (expected ? 1 : 0)) fail();
+            const purchase = frame.activities.find(
+              (a) => a.kind === "MARKETPLACE" && a.event.name === "ArtworkPurchased",
+            );
+            if (
+              purchase?.kind === "MARKETPLACE" &&
+              purchase.event.name === "ArtworkPurchased"
+            ) {
+              const value = purchase.event.value;
+              const transfers = frame.activities.filter(
+                (a) => a.kind === "CORE_TRANSFER",
+              );
+              const transfer = transfers[0];
+              if (
+                transfers.length !== 1 ||
+                transfer?.kind !== "CORE_TRANSFER" ||
+                transfer.transfer.asset !== value.asset ||
+                transfer.transfer.newOwner !== value.buyer ||
+                transfer.transfer.authority !== value.listing ||
+                transfer.transfer.collection !== invocation.accounts[12]
+              )
+                fail();
+            }
+          }
           if (invocation.program === CORE_PROGRAM_ADDRESS) {
             const transfer = decodeCoreTransferInstruction(
               invocation.data,
@@ -285,6 +336,104 @@ export function decodeFinalizedActivity(
           (stack.at(-1)?.activities ?? activities).push(...frame.activities);
         } else if (frame.invocation.inner === -1) fail();
         continue;
+      }
+      if (
+        line.startsWith("Program data: ") &&
+        stack.at(-1)?.invocation.program ===
+          marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS
+      ) {
+        const encoded = line.slice(14),
+          data = Buffer.from(encoded, "base64");
+        if (data.toString("base64") !== encoded) fail();
+        const frame = stack.at(-1)!,
+          event = decodeMarketplaceEvent(data);
+        const kind = marketplace.identifyKathaMarketplaceInstruction(
+          frame.invocation.data,
+        );
+        if (event.name !== marketplaceEventNames[kind]) fail();
+        const accounts = frame.invocation.accounts;
+        if (event.name === "MarketplaceInitialized") {
+          const codec = marketplace.getInitializeMarketplaceInstructionDataCodec(),
+            value = codec.decode(frame.invocation.data);
+          if (
+            !Buffer.from(codec.encode(value)).equals(frame.invocation.data) ||
+            value.commissionBps !== event.value.commissionBps ||
+            value.secondaryRoyaltyBps !== event.value.secondaryRoyaltyBps ||
+            value.inspectionValiditySeconds !== event.value.inspectionValiditySeconds ||
+            event.value.authority !== accounts[6] ||
+            event.value.paymentMint !== accounts[7] ||
+            event.value.tokenProgram !== accounts[8]
+          )
+            fail();
+          if (
+            event.value.config !== accounts[0] ||
+            event.value.registryProgram !== accounts[4] ||
+            event.value.registryConfig !== accounts[5]
+          )
+            fail();
+        } else {
+          const released = event.name === "ListingReleased";
+          if (
+            event.value.artwork !== accounts[3] ||
+            event.value.asset !== accounts[released ? 4 : 9] ||
+            event.value.listing !== accounts[released ? 5 : 11]
+          )
+            fail();
+          if (event.name === "ListingCreated") {
+            const codec = marketplace.getCreateListingInstructionDataCodec(),
+              value = codec.decode(frame.invocation.data);
+            if (
+              !Buffer.from(codec.encode(value)).equals(frame.invocation.data) ||
+              value.expectedRevision + 1n !== event.value.revision ||
+              value.price !== event.value.price ||
+              value.expiresAt !== event.value.expiresAt ||
+              event.value.seller !== accounts[10]
+            )
+              fail();
+          }
+          if (event.name === "ListingReleased") {
+            const codec =
+              kind === marketplace.KathaMarketplaceInstruction.CancelListing
+                ? marketplace.getCancelListingInstructionDataCodec()
+                : marketplace.getExpireListingInstructionDataCodec();
+            const value = codec.decode(frame.invocation.data);
+            if (
+              !Buffer.from(codec.encode(value)).equals(frame.invocation.data) ||
+              value.expectedRevision + 1n !== event.value.revision ||
+              event.value.actor !== accounts[6] ||
+              event.value.status !==
+                (kind === marketplace.KathaMarketplaceInstruction.CancelListing
+                  ? marketplace.ListingStatus.Cancelled
+                  : marketplace.ListingStatus.Expired)
+            )
+              fail();
+          }
+          if (event.name === "ArtworkPurchased") {
+            const codec = marketplace.getPurchaseListingInstructionDataCodec(),
+              value = codec.decode(frame.invocation.data);
+            if (
+              !Buffer.from(codec.encode(value)).equals(frame.invocation.data) ||
+              value.expectedPrice !== event.value.price ||
+              value.expectedRevision + 1n !== event.value.revision ||
+              event.value.buyer !== accounts[14] ||
+              event.value.seller !== accounts[10] ||
+              event.value.paymentMint !== accounts[15]
+            )
+              fail();
+          }
+        }
+        frame.activities.push({
+          programAddress: marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+          kind: "MARKETPLACE",
+          collection:
+            event.name === "MarketplaceInitialized"
+              ? event.value.collection
+              : accounts[event.name === "ListingReleased" ? 7 : 12]!,
+          event,
+          outerInstructionIndex: frame.invocation.outer,
+          innerInstructionIndex: frame.invocation.inner,
+          eventIndex: frame.eventCount++,
+        });
       }
       if (
         line.startsWith("Program data: ") &&

@@ -1,3 +1,4 @@
+import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "@katha/solana/marketplace";
 import {
   createActivityStore,
   createIndexerRecoveryStore,
@@ -81,11 +82,13 @@ async function run() {
     const store = createActivityStore(connection.db, {
       registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
       core: CORE_PROGRAM_ADDRESS,
+      marketplace: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
       collection,
     });
     const recoveryStore = createIndexerRecoveryStore(connection.db, {
       registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
       core: CORE_PROGRAM_ADDRESS,
+      marketplace: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
       collection,
     });
     let backfill = flags.includes("--backfill");
@@ -109,6 +112,7 @@ async function run() {
         for (const programAddress of [
           KATHA_REGISTRY_PROGRAM_ADDRESS,
           CORE_PROGRAM_ADDRESS,
+          KATHA_MARKETPLACE_PROGRAM_ADDRESS,
         ]) {
           await recoverActivityStream({
             read,

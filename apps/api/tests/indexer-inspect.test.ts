@@ -31,7 +31,7 @@ it("rejects invalid inspector configuration without logging private values", asy
   expect(result.stderr).not.toContain("SYNTHETIC_PRIVATE_CONFIG");
   expect(JSON.parse(result.stderr)).toMatchObject({ event: "configuration_invalid" });
 });
-it("inspects both streams without opening the unavailable database", async () => {
+it("inspects all three streams without opening the unavailable database", async () => {
   const methods: string[] = [];
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
@@ -63,7 +63,7 @@ it("inspects both streams without opening the unavailable database", async () =>
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
     for (const line of lines)
       expect(line).toMatchObject({
         event: "activity_page_observed",
@@ -72,6 +72,8 @@ it("inspects both streams without opening the unavailable database", async () =>
         activities: 0,
       });
     expect(methods).toEqual([
+      "getGenesisHash",
+      "getSignaturesForAddress",
       "getGenesisHash",
       "getSignaturesForAddress",
       "getGenesisHash",

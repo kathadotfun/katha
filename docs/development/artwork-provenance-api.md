@@ -71,7 +71,7 @@ rehash documents; document retrieval/integrity behavior is a separate boundary.
 
 `indexing.network` is nullable. When bound, it reports the dataset's genesis,
 collection, last worker-observed finalized slot/time and blocked flag.
-`indexing.streams` always lists Registry and Core, each with a nullable checkpoint:
+`indexing.streams` lists Registry, Core and Marketplace, each with a nullable checkpoint:
 start slot, scanned-through slot, exact lag against the observed head, gap bounds,
 reason and update time. These are persisted observations, not fresh RPC calls.
 Coverage starts at the configured checkpoint start, not universally at genesis.
@@ -81,19 +81,19 @@ check time. It becomes `STALE` when its indexed source/owner no longer matches,
 its observation predates the network head, or its timestamp is outside the freshness
 window. It never changes ownership or creates events.
 
-| Status             | Meaning                                                                                                                                                                                 |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GAP_DETECTED`     | A checkpoint gap, blocked network or applicable nonmatching Core diagnostic exists; retained events remain available                                                                    |
-| `UNKNOWN`          | Network, either stream, registration/mint binding, current ownership or owner check is missing; coverage starts after registration; or checkpoint is ahead of the observed network head |
-| `LAGGING`          | Both streams exist, but at least one is behind the worker's last observed finalized slot                                                                                                |
-| `STALE`            | Coverage reaches the observed head, but network/checkpoint timestamps or the current owner diagnostic are stale                                                                         |
-| `AT_OBSERVED_HEAD` | Both streams cover registration through the observed head, with recent matching owner diagnostics and bound network                                                                     |
+| Status             | Meaning                                                                                                                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GAP_DETECTED`     | A checkpoint gap, blocked network or applicable nonmatching Core diagnostic exists; retained events remain available                                                                          |
+| `UNKNOWN`          | Network, any required stream, registration/mint binding, current ownership or owner check is missing; coverage starts after registration; or checkpoint is ahead of the observed network head |
+| `LAGGING`          | All required streams exist, but at least one is behind the worker's last observed finalized slot                                                                                              |
+| `STALE`            | Coverage reaches the observed head, but network/checkpoint timestamps or the current owner diagnostic are stale                                                                               |
+| `AT_OBSERVED_HEAD` | All required streams cover registration through the observed head, with recent matching owner diagnostics and bound network                                                                   |
 
 The freshness window is 30 seconds, measured against the database transaction's
 clock. Future observations cannot qualify as fresh. `AT_OBSERVED_HEAD` describes
 that persisted observation only; it is not a guarantee that a newer finalized
 transaction does not exist. Existing artwork detail retains its earlier single-source
-checkpoint summary; use this provenance endpoint for two-stream and reconciliation
+checkpoint summary; use this provenance endpoint for three-stream and reconciliation
 status. Gap recovery is described in [chain ingestion](chain-activity-ingestion.md).
 
 ## Checks and operation

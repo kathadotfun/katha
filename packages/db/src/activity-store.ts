@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { projectActivityAttestations } from "./activity-attestations.js";
 import { indexerNetworks } from "./schema/indexer-recovery.js";
@@ -7,6 +7,8 @@ import {
   indexedEvents,
   indexerCheckpoints,
   artworkOwnership,
+  artworkListings,
+  artworkSales,
   type NewIndexedEventRecord,
 } from "./schema/blockchain-read-models.js";
 
@@ -65,12 +67,21 @@ export class ActivityStoreConflict extends Error {
 /** Trusted worker boundary, never exposed as an HTTP write endpoint. */
 export function createActivityStore(
   db: Database,
-  programs: { registry: string; core: string; collection: string },
+  programs: {
+    registry: string;
+    core: string;
+    marketplace?: string;
+    collection: string;
+  },
 ) {
   function validate(stream: ActivityStream) {
     if (
       !["LOCALNET", "DEVNET"].includes(stream.cluster) ||
-      ![programs.registry, programs.core].includes(stream.programAddress) ||
+      ![
+        programs.registry,
+        programs.core,
+        ...(programs.marketplace ? [programs.marketplace] : []),
+      ].includes(stream.programAddress) ||
       stream.fromSlot < 0n ||
       stream.fromSlot > 9223372036854775807n
     )
@@ -165,8 +176,12 @@ export function createActivityStore(
             !batch.head ||
             event.slot < batch.fromSlot ||
             event.slot > batch.head.slot ||
-            !["REGISTRY", "OWNERSHIP"].includes(event.kind) ||
-            ![programs.registry, programs.core].includes(event.programAddress)
+            !["REGISTRY", "OWNERSHIP", "LISTING", "SALE"].includes(event.kind) ||
+            ![
+              programs.registry,
+              programs.core,
+              ...(programs.marketplace ? [programs.marketplace] : []),
+            ].includes(event.programAddress)
           )
             throw new ActivityStoreConflict();
           if (
@@ -253,6 +268,35 @@ export function createActivityStore(
             )
               throw new ActivityStoreConflict();
             artworkId = binding.artworkId;
+          } else if (event.programAddress === programs.marketplace) {
+            if (
+              !event.assetAddress ||
+              kathaId !== null ||
+              !["LISTING", "SALE"].includes(event.kind) ||
+              !["ListingCreated", "ListingReleased", "ArtworkPurchased"].includes(
+                String(event.payload.name),
+              ) ||
+              (event.kind === "SALE") !== (event.payload.name === "ArtworkPurchased")
+            )
+              throw new ActivityStoreConflict();
+            const [binding] = await tx
+              .select()
+              .from(indexedEvents)
+              .where(
+                and(
+                  eq(indexedEvents.cluster, batch.cluster),
+                  eq(indexedEvents.programAddress, programs.registry),
+                  eq(indexedEvents.assetAddress, event.assetAddress),
+                  sql`${indexedEvents.payload}->>'name' = 'ArtworkMinted'`,
+                ),
+              );
+            if (
+              !binding?.artworkId ||
+              binding.payload.collection !== programs.collection ||
+              ordered(binding, event) >= 0
+            )
+              throw new ActivityStoreConflict();
+            artworkId = binding.artworkId;
           } else if (event.payload.name === "ArtworkMinted") {
             if (
               !artworkId ||
@@ -262,6 +306,69 @@ export function createActivityStore(
             )
               throw new ActivityStoreConflict();
           } else if (event.kind !== "REGISTRY") throw new ActivityStoreConflict();
+          if (event.kind === "SALE") {
+            const transfers = batch.events.filter(
+              (e) =>
+                e.programAddress === programs.core &&
+                e.signature === event.signature &&
+                e.outerInstructionIndex === event.outerInstructionIndex &&
+                e.assetAddress === event.assetAddress,
+            );
+            if (
+              transfers.length !== 1 ||
+              transfers[0]?.payload.name !== "CoreTransfer" ||
+              transfers[0]?.payload.ownerWallet !== event.payload.buyerWallet ||
+              transfers[0]?.payload.authority !== event.payload.listingAddress ||
+              transfers[0]?.payload.collection !== programs.collection
+            )
+              throw new ActivityStoreConflict();
+          }
+          // Terminal events omit immutable listing terms. Resolve the exact preceding
+          // cycle, including on replay after a newer cycle has already been indexed.
+          let cycle: typeof artworkListings.$inferSelect | undefined;
+          if (event.programAddress === programs.marketplace) {
+            const revision = event.payload.revision;
+            if (
+              typeof revision !== "string" ||
+              !/^[1-9][0-9]{0,19}$/.test(revision) ||
+              BigInt(revision) > 18446744073709551615n
+            )
+              throw new ActivityStoreConflict();
+            if (event.payload.name !== "ListingCreated") {
+              [cycle] = await tx
+                .select()
+                .from(artworkListings)
+                .where(
+                  and(
+                    eq(artworkListings.cluster, batch.cluster),
+                    eq(artworkListings.artworkId, artworkId!),
+                    eq(
+                      artworkListings.listingAddress,
+                      String(event.payload.listingAddress),
+                    ),
+                    eq(artworkListings.listingRevision, BigInt(revision) - 1n),
+                  ),
+                );
+              if (
+                !cycle ||
+                cycle.assetAddress !== event.assetAddress ||
+                cycle.sellerWallet !== event.payload.sellerWallet
+              )
+                throw new ActivityStoreConflict();
+              if (
+                event.kind === "SALE" &&
+                (event.payload.paymentMint !== cycle.paymentMint ||
+                  event.payload.price !== cycle.price.toString())
+              )
+                throw new ActivityStoreConflict();
+              data.payload = {
+                ...event.payload,
+                paymentMint: cycle.paymentMint,
+                price: cycle.price.toString(),
+                expiresAt: cycle.expiresAt.toISOString(),
+              };
+            }
+          }
           const identity = and(
             eq(indexedEvents.cluster, batch.cluster),
             eq(indexedEvents.signature, event.signature),
@@ -279,7 +386,7 @@ export function createActivityStore(
               existing.artworkId !== artworkId ||
               existing.assetAddress !== (event.assetAddress ?? null) ||
               existing.chainRecordedAt.getTime() !== event.chainRecordedAt.getTime() ||
-              canonical(existing.payload) !== canonical(event.payload)
+              canonical(existing.payload) !== canonical(data.payload)
             )
               throw new ActivityStoreConflict();
             if (artworkId && event.programAddress === programs.registry)
@@ -296,7 +403,89 @@ export function createActivityStore(
           inserted++;
           if (artworkId && event.programAddress === programs.registry)
             await projectActivityAttestations(tx, batch.cluster, artworkId, event);
-          if (event.kind === "OWNERSHIP") {
+          if (
+            event.programAddress === programs.marketplace &&
+            artworkId &&
+            event.assetAddress
+          ) {
+            const p = data.payload;
+            if (p.name === "ListingCreated") {
+              const [previousCycle] = await tx
+                .select()
+                .from(artworkListings)
+                .where(
+                  and(
+                    eq(artworkListings.cluster, batch.cluster),
+                    eq(artworkListings.listingAddress, String(p.listingAddress)),
+                  ),
+                )
+                .orderBy(desc(artworkListings.listingRevision))
+                .limit(1);
+              if (
+                BigInt(String(p.revision)) !==
+                  (previousCycle ? previousCycle.listingRevision + 2n : 1n) ||
+                previousCycle?.status === "ACTIVE"
+              )
+                throw new ActivityStoreConflict();
+              if (
+                p.status !== "ACTIVE" ||
+                typeof p.paymentMint !== "string" ||
+                typeof p.price !== "string" ||
+                typeof p.expiresAt !== "string" ||
+                typeof p.sellerWallet !== "string" ||
+                typeof p.listingAddress !== "string"
+              )
+                throw new ActivityStoreConflict();
+              await tx.insert(artworkListings).values({
+                cluster: batch.cluster,
+                artworkId,
+                assetAddress: event.assetAddress,
+                sourceEventId: saved.id,
+                listingAddress: p.listingAddress,
+                listingRevision: BigInt(String(p.revision)),
+                sellerWallet: p.sellerWallet,
+                paymentMint: p.paymentMint,
+                price: BigInt(p.price),
+                expiresAt: new Date(p.expiresAt),
+                status: "ACTIVE",
+              });
+            } else {
+              if (
+                !cycle ||
+                cycle.status !== "ACTIVE" ||
+                !["PURCHASED", "CANCELLED", "EXPIRED"].includes(String(p.status))
+              )
+                throw new ActivityStoreConflict();
+              if (p.name === "ArtworkPurchased") {
+                await tx.insert(artworkSales).values({
+                  cluster: batch.cluster,
+                  artworkId,
+                  assetAddress: event.assetAddress,
+                  sourceEventId: saved.id,
+                  listingId: cycle.id,
+                  buyerWallet: String(p.buyerWallet),
+                  sellerWallet: cycle.sellerWallet,
+                  paymentMint: cycle.paymentMint,
+                  price: cycle.price,
+                  isPrimary: p.isPrimary === true,
+                  proceedsWallet: String(p.proceedsWallet),
+                  proceedsAmount: BigInt(String(p.proceedsAmount)),
+                  artistWallet: String(p.artistWallet),
+                  royaltyAmount: BigInt(String(p.royaltyAmount)),
+                  treasuryWallet: String(p.treasuryWallet),
+                  platformFee: BigInt(String(p.platformFee)),
+                });
+              }
+              await tx
+                .update(artworkListings)
+                .set({
+                  sourceEventId: saved.id,
+                  status: p.status as "PURCHASED" | "CANCELLED" | "EXPIRED",
+                })
+                .where(eq(artworkListings.id, cycle.id));
+            }
+          }
+          if (event.kind === "OWNERSHIP" || event.kind === "SALE") {
             const ownerWallet = event.payload.ownerWallet;
             if (typeof ownerWallet !== "string" || !artworkId || !event.assetAddress)
               throw new ActivityStoreConflict();

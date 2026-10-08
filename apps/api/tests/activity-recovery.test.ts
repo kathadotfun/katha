@@ -286,3 +286,26 @@ it("does not reconcile observations across a network reset", async () => {
   );
   expect(options.recoveryStore.reconcile).not.toHaveBeenCalled();
 });
+
+it("records invalid Marketplace persistence evidence as a gap without advancing", async () => {
+  const { KATHA_MARKETPLACE_PROGRAM_ADDRESS } =
+    await import("@katha/solana/marketplace");
+  const { ActivityStoreConflict } = await import("@katha/db");
+  const f = setup();
+  f.store.commit.mockRejectedValue(new ActivityStoreConflict());
+  const p = { ...page([]), programAddress: KATHA_MARKETPLACE_PROGRAM_ADDRESS };
+  await expect(
+    recoverActivityStream({
+      ...f,
+      read: vi.fn().mockResolvedValue(p),
+      stream: { ...stream, programAddress: KATHA_MARKETPLACE_PROGRAM_ADDRESS },
+      collection,
+      snapshot,
+    }),
+  ).rejects.toThrow("needs recovery");
+  expect(f.recoveryStore.gap).toHaveBeenCalledWith(
+    { ...stream, programAddress: KATHA_MARKETPLACE_PROGRAM_ADDRESS },
+    "EVIDENCE_INVALID",
+    30n,
+  );
+});

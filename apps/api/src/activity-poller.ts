@@ -9,7 +9,7 @@ export async function pollActivityPages(
   signal?: AbortSignal,
 ): Promise<void> {
   if (
-    requests.length > 2 ||
+    requests.length > 3 ||
     new Set(requests.map((r) => r.programAddress)).size !== requests.length
   )
     throw new Error("Invalid activity streams");

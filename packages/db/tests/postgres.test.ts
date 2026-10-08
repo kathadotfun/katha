@@ -64,7 +64,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(13);
+    expect(applicationCount).toBe(14);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -5918,6 +5918,321 @@ it("projects finalized attestations atomically, rejects mismatches, and repairs 
         .from(indexedEvents)
         .where(eq(indexedEvents.artworkId, artwork.id)),
     ).toHaveLength(4);
+  } finally {
+    await connection.close();
+  }
+});
+
+it("indexes primary and secondary settlements once across streams, replay and listing cycles", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL) throw new Error("Run pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const { createActivityStore } = await import("../src/activity-store.js");
+  const programs = {
+    registry: "Q".repeat(32),
+    core: "J".repeat(32),
+    marketplace: "M".repeat(32),
+    collection: "D".repeat(32),
+  };
+  const sig = (n: number) => `s${String(n).repeat(63)}`;
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "settlement-indexer-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist!.id,
+        category: "PAUBHA",
+        title: "Synthetic settlements",
+        creationYear: 2026,
+        authorshipEvidenceHash: "a".repeat(64),
+      })
+      .returning();
+    const assetAddress = "Z".repeat(31) + "A",
+      seller = "B".repeat(32),
+      buyer = "E".repeat(32),
+      nextBuyer = "F".repeat(32),
+      mint = "T".repeat(32),
+      listing = "Z".repeat(31) + "L",
+      treasury = "H".repeat(32);
+    const store = createActivityStore(db, programs);
+    const base = {
+      signature: sig(1),
+      slot: 10n,
+      transactionIndex: 0,
+      outerInstructionIndex: 0,
+      innerInstructionIndex: -1,
+      eventIndex: 0,
+      chainRecordedAt: new Date(1000),
+      kathaId: artwork!.kathaId,
+      assetAddress: null,
+    };
+    await store.commit({
+      cluster: "LOCALNET",
+      programAddress: programs.registry,
+      fromSlot: 1n,
+      expected: null,
+      head: { signature: sig(2), slot: 11n },
+      events: [
+        {
+          ...base,
+          programAddress: programs.registry,
+          kind: "REGISTRY",
+          payload: {
+            name: "ArtworkRegistered",
+            collection: programs.collection,
+            artistId: artist!.id,
+            category: "PAUBHA",
+            creationYear: 2026,
+            authorshipEvidenceHash: "a".repeat(64),
+            creatorWallet: null,
+          },
+        },
+        {
+          ...base,
+          signature: sig(2),
+          slot: 11n,
+          programAddress: programs.registry,
+          kind: "OWNERSHIP",
+          assetAddress,
+          payload: {
+            name: "ArtworkMinted",
+            collection: programs.collection,
+            ownerWallet: seller,
+          },
+        },
+      ],
+    });
+    const event = (
+      n: number,
+      kind: "LISTING" | "SALE",
+      payload: Record<string, unknown>,
+    ) => ({
+      ...base,
+      signature: sig(n),
+      slot: BigInt(10 + n),
+      programAddress: programs.marketplace,
+      kind,
+      kathaId: null,
+      assetAddress,
+      payload,
+    });
+    const listed = (n: number, revision: string, owner: string) =>
+      event(n, "LISTING", {
+        name: "ListingCreated",
+        listingAddress: listing,
+        sellerWallet: owner,
+        paymentMint: mint,
+        price: "101",
+        status: "ACTIVE",
+        revision,
+        expiresAt: new Date(2000000).toISOString(),
+      });
+    const purchased = (
+      n: number,
+      revision: string,
+      owner: string,
+      newOwner: string,
+      primary: boolean,
+    ) =>
+      event(n, "SALE", {
+        name: "ArtworkPurchased",
+        listingAddress: listing,
+        sellerWallet: owner,
+        paymentMint: mint,
+        price: "101",
+        status: "PURCHASED",
+        revision,
+        buyerWallet: newOwner,
+        ownerWallet: newOwner,
+        isPrimary: primary,
+        proceedsWallet: primary ? seller : owner,
+        proceedsAmount: primary ? "99" : "94",
+        artistWallet: seller,
+        royaltyAmount: primary ? "0" : "5",
+        treasuryWallet: treasury,
+        platformFee: "2",
+      });
+    const transfer = (n: number, newOwner: string) => ({
+      ...base,
+      signature: sig(n),
+      slot: BigInt(10 + n),
+      innerInstructionIndex: 0,
+      programAddress: programs.core,
+      kind: "OWNERSHIP" as const,
+      kathaId: null,
+      assetAddress,
+      payload: {
+        name: "CoreTransfer",
+        collection: programs.collection,
+        asset: assetAddress,
+        newOwner,
+        ownerWallet: newOwner,
+        authority: listing,
+      },
+    });
+    const custodyBefore = await db
+      .select()
+      .from(custodyEvents)
+      .where(eq(custodyEvents.artworkId, artwork!.id));
+    const batch = {
+      cluster: "LOCALNET" as const,
+      programAddress: programs.marketplace,
+      fromSlot: 1n,
+      expected: null,
+      head: { signature: sig(6), slot: 16n },
+      events: [
+        listed(3, "1", seller),
+        purchased(4, "2", seller, buyer, true),
+        transfer(4, buyer),
+        listed(5, "3", buyer),
+        purchased(6, "4", buyer, nextBuyer, false),
+        transfer(6, nextBuyer),
+      ],
+    };
+    const outcomes = await Promise.all([
+      store.commit(batch),
+      store.commit({ ...batch, programAddress: programs.core }),
+    ]);
+    expect(outcomes.map((o) => o.inserted).sort()).toEqual([0, 6]);
+    expect(await createActivityStore(db, programs).commit(batch)).toEqual({
+      inserted: 0,
+      replay: true,
+    });
+    const sales = await db
+      .select()
+      .from(artworkSales)
+      .where(eq(artworkSales.artworkId, artwork!.id));
+    expect(sales).toHaveLength(2);
+    expect(sales.map((s) => s.platformFee)).toEqual([2n, 2n]);
+    expect(sales.map((s) => s.royaltyAmount)).toEqual([0n, 5n]);
+    const cycles = await db
+      .select()
+      .from(artworkListings)
+      .where(eq(artworkListings.artworkId, artwork!.id))
+      .orderBy(asc(artworkListings.listingRevision));
+    expect(cycles.map((c) => [c.listingRevision, c.status])).toEqual([
+      [1n, "PURCHASED"],
+      [3n, "PURCHASED"],
+    ]);
+    expect(cycles[0]!.id).not.toBe(cycles[1]!.id);
+    expect(
+      (
+        await db
+          .select()
+          .from(artworkOwnership)
+          .where(eq(artworkOwnership.artworkId, artwork!.id))
+      )[0]!.ownerWallet,
+    ).toBe(nextBuyer);
+    expect(
+      await db
+        .select()
+        .from(custodyEvents)
+        .where(eq(custodyEvents.artworkId, artwork!.id)),
+    ).toEqual(custodyBefore);
+    // One CoreTransfer per purchase remains the public ownership timeline source.
+    expect(
+      await db
+        .select()
+        .from(indexedEvents)
+        .where(
+          and(
+            eq(indexedEvents.artworkId, artwork!.id),
+            eq(indexedEvents.programAddress, programs.core),
+          ),
+        ),
+    ).toHaveLength(2);
+    const next = {
+      ...batch,
+      expected: batch.head,
+      head: { signature: sig(8), slot: 18n },
+    };
+    await expect(
+      store.commit({
+        ...next,
+        events: [
+          listed(7, "5", nextBuyer),
+          {
+            ...purchased(8, "6", nextBuyer, buyer, false),
+            payload: {
+              ...purchased(8, "6", nextBuyer, buyer, false).payload,
+              platformFee: "3",
+            },
+          },
+          transfer(8, buyer),
+        ],
+      }),
+    ).rejects.toThrow();
+    expect(await store.cursor(batch)).toEqual(batch.head);
+    for (const mismatch of [{ paymentMint: treasury }, { price: "102" }]) {
+      const sale = purchased(8, "6", nextBuyer, buyer, false);
+      await expect(
+        store.commit({
+          ...next,
+          events: [
+            listed(7, "5", nextBuyer),
+            { ...sale, payload: { ...sale.payload, ...mismatch } },
+            transfer(8, buyer),
+          ],
+        }),
+      ).rejects.toThrow();
+      expect(await store.cursor(batch)).toEqual(batch.head);
+    }
+    await expect(
+      store.commit({
+        ...next,
+        events: [listed(7, "5", nextBuyer), purchased(8, "6", nextBuyer, buyer, false)],
+      }),
+    ).rejects.toThrow();
+    await expect(
+      store.commit({ ...next, events: [listed(7, "7", nextBuyer)] }),
+    ).rejects.toThrow();
+    expect(
+      await db
+        .select()
+        .from(artworkListings)
+        .where(eq(artworkListings.artworkId, artwork!.id)),
+    ).toHaveLength(2);
+    // Terminal releases preserve terms and cannot change ownership.
+    const release = event(8, "LISTING", {
+      name: "ListingReleased",
+      listingAddress: listing,
+      sellerWallet: nextBuyer,
+      revision: "6",
+      status: "CANCELLED",
+    });
+    await store.commit({ ...next, events: [listed(7, "5", nextBuyer), release] });
+    expect(
+      (
+        await db
+          .select()
+          .from(artworkOwnership)
+          .where(eq(artworkOwnership.artworkId, artwork!.id))
+      )[0]!.ownerWallet,
+    ).toBe(nextBuyer);
+    await expect(
+      store.commit({
+        ...next,
+        expected: next.head,
+        head: { signature: sig(9), slot: 19n },
+        events: [purchased(9, "6", nextBuyer, buyer, false), transfer(9, buyer)],
+      }),
+    ).rejects.toThrow();
+    expect(
+      await db
+        .select()
+        .from(artworkSales)
+        .where(eq(artworkSales.artworkId, artwork!.id)),
+    ).toHaveLength(2);
   } finally {
     await connection.close();
   }

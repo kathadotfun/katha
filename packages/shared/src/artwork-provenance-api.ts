@@ -170,7 +170,8 @@ export const provenanceIndexingSchema = z.strictObject({
           .nullable(),
       }),
     )
-    .length(2),
+    .min(2)
+    .max(3),
   ownerCheck: z
     .strictObject({
       status: z.enum(["MATCH", "MISMATCH", "MISSING", "INVALID", "STALE"]),

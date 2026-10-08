@@ -65,7 +65,7 @@ async function withFreshDatabase(
           sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
         )
       )[0]?.count,
-    ).toBe(13);
+    ).toBe(14);
     await check(first.db, second.db, url.toString());
   } finally {
     await first?.close();

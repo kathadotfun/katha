@@ -189,3 +189,8 @@ export {
   readMarketplacePurchaseTerms,
   calculateMarketplaceDistribution,
 } from "./marketplace-quote.js";
+
+export {
+  decodeMarketplaceEvent,
+  type MarketplaceActivityEvent,
+} from "./marketplace-events.js";

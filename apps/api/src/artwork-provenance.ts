@@ -263,30 +263,32 @@ function indexing(record: Snapshot) {
   const recent = (d: Date) =>
     d.getTime() <= record.evaluatedAt.getTime() &&
     record.evaluatedAt.getTime() - d.getTime() <= observationMaxAgeMs;
-  const streams = [KATHA_REGISTRY_PROGRAM_ADDRESS, CORE_PROGRAM_ADDRESS].map(
-    (programAddress) => {
-      const c = record.checkpoints.find((c) => c.programAddress === programAddress);
-      return {
-        programAddress,
-        checkpoint: c
-          ? {
-              fromSlot: c.fromSlot.toString(),
-              scannedThroughSlot: c.scannedThroughSlot?.toString() ?? null,
-              lagSlots:
-                network &&
-                c.scannedThroughSlot !== null &&
-                c.scannedThroughSlot <= network.finalizedSlot
-                  ? (network.finalizedSlot - c.scannedThroughSlot).toString()
-                  : null,
-              gapFromSlot: c.gapFromSlot?.toString() ?? null,
-              gapThroughSlot: c.gapThroughSlot?.toString() ?? null,
-              gapReason: c.gapReason,
-              updatedAt: c.updatedAt.toISOString(),
-            }
-          : null,
-      };
-    },
-  );
+  const streams = [
+    KATHA_REGISTRY_PROGRAM_ADDRESS,
+    CORE_PROGRAM_ADDRESS,
+    ...(record.programs.marketplace ? [record.programs.marketplace] : []),
+  ].map((programAddress) => {
+    const c = record.checkpoints.find((c) => c.programAddress === programAddress);
+    return {
+      programAddress,
+      checkpoint: c
+        ? {
+            fromSlot: c.fromSlot.toString(),
+            scannedThroughSlot: c.scannedThroughSlot?.toString() ?? null,
+            lagSlots:
+              network &&
+              c.scannedThroughSlot !== null &&
+              c.scannedThroughSlot <= network.finalizedSlot
+                ? (network.finalizedSlot - c.scannedThroughSlot).toString()
+                : null,
+            gapFromSlot: c.gapFromSlot?.toString() ?? null,
+            gapThroughSlot: c.gapThroughSlot?.toString() ?? null,
+            gapReason: c.gapReason,
+            updatedAt: c.updatedAt.toISOString(),
+          }
+        : null,
+    };
+  });
   const staleCheck =
     rec &&
     (staleSource ||

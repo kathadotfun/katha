@@ -13,6 +13,7 @@ import {
   type KathaCluster,
 } from "./client.js";
 import { assertKathaRpcCluster } from "./rpc-cluster.js";
+import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "./generated/marketplace/index.js";
 import { CORE_PROGRAM_ADDRESS } from "./core.js";
 import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "./generated/registry/index.js";
 import {
@@ -51,7 +52,8 @@ export function createActivityReaderFromRpc(
     const limit = request.limit ?? 25;
     if (
       (request.programAddress !== KATHA_REGISTRY_PROGRAM_ADDRESS &&
-        request.programAddress !== CORE_PROGRAM_ADDRESS) ||
+        request.programAddress !== CORE_PROGRAM_ADDRESS &&
+        request.programAddress !== KATHA_MARKETPLACE_PROGRAM_ADDRESS) ||
       !Number.isInteger(limit) ||
       limit < 1 ||
       limit > 100 ||

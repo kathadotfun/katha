@@ -1,3 +1,4 @@
+import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "@katha/solana/marketplace";
 import { createArtworkPurchases } from "./artwork-purchases.js";
 import { createDevnetPaymentProvider } from "./payment.js";
 import {
@@ -287,7 +288,11 @@ function startApi() {
       createPublicProvenanceStore(
         database.db,
         config.KATHA_CLUSTER === "devnet" ? "DEVNET" : "LOCALNET",
-        { registry: KATHA_REGISTRY_PROGRAM_ADDRESS, core: CORE_PROGRAM_ADDRESS },
+        {
+          registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
+          core: CORE_PROGRAM_ADDRESS,
+          marketplace: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+        },
       ),
     ),
     createNfcTags(createNfcTagStore(database.db)),
