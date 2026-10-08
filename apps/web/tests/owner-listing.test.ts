@@ -9,6 +9,7 @@ import {
   listingObservationMatches,
 } from "../lib/owner-listing.ts";
 import { inspectPreparedTransaction } from "../lib/prepared-transaction.ts";
+import { purchaseFixture } from "./fixtures/purchase.ts";
 import { listingFixture, cancellationFixture } from "./fixtures/listing.ts";
 import { createWalletSessionApi } from "../lib/wallet-session-api.ts";
 import { collectionListingFixture } from "./fixtures/collection.ts";
@@ -213,7 +214,7 @@ test("owner-only workflow rejects nonowner and active listings without preparing
   assert.equal(listeners.size, 0);
 });
 
-for (const kind of ["create", "cancel"] as const)
+for (const kind of ["create", "cancel", "purchase"] as const)
   test(`${kind} listing lifecycle simulates, requires approval, signs exact wire and confirms indexing`, async () => {
     const { generateKeyPairSigner, signTransaction, getSignatureFromTransaction } =
       await import("@solana/kit");
@@ -222,9 +223,12 @@ for (const kind of ["create", "cancel"] as const)
     const { createTransactionLifecycle } =
       await import("../lib/transaction-lifecycle.ts");
     const signer = await generateKeyPairSigner();
-    const { operation, expected } = await (
-      kind === "create" ? listingFixture : cancellationFixture
-    )({ wallet: signer.address });
+    const { operation, expected } =
+      kind === "purchase"
+        ? await purchaseFixture(signer.address)
+        : await (kind === "create" ? listingFixture : cancellationFixture)({
+            wallet: signer.address,
+          });
     const signed = await signTransaction(
       [signer.keyPair],
       decodeCanonicalTransaction(operation.transactionBase64),
@@ -341,6 +345,7 @@ for (const kind of ["create", "cancel"] as const)
         },
       },
       async () => provenanceFixture,
+      async () => true,
       async () => true,
     );
     await flow.load(operation, expected);

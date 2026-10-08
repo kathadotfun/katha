@@ -1,4 +1,4 @@
-import type { PurchaseQuoteRequest } from "@katha/shared";
+import type { PurchaseQuoteRequest, PurchasePrepareRequest } from "@katha/shared";
 import type { ListingCreateRequest, ListingCancelRequest } from "@katha/shared";
 import type { WalletOperation } from "./wallet-operation.ts";
 import type { CollectorCollectionQuery } from "@katha/shared";
@@ -129,6 +129,24 @@ export function createWalletSession(
     return result;
   }
   return {
+    async preparePurchase(
+      kathaId: string,
+      input: PurchasePrepareRequest,
+      signal: AbortSignal,
+    ) {
+      const result = await authorized(
+        (value) => api.preparePurchase(kathaId, input, value, signal),
+        signal,
+      );
+      if (
+        result.cluster !== snapshot.session?.cluster ||
+        result.feePayer !== snapshot.session?.walletAddress ||
+        result.quote.buyer !== snapshot.session?.walletAddress ||
+        result.quote.cluster !== result.cluster
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readPurchaseQuote(
       kathaId: string,
       input: PurchaseQuoteRequest,

@@ -7,7 +7,9 @@ approves, signs and submits the transaction. Physical delivery remains a separat
 manual workflow; no quote, preparation or receipt changes physical custody.
 
 The [purchase quote screen](purchase-quotes-web.md) displays these authenticated
-terms without preparing or signing a transaction.
+terms without automatically preparing or signing a transaction. The explicit
+[buyer purchase flow](purchase-web.md) prepares reviewed terms and requires wallet
+approval before submission.
 
 ## Quote
 

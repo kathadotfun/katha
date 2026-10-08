@@ -135,6 +135,9 @@ test("quote controller clears old terms on outage, coalesces requests and discar
     {
       getSnapshot: () => auth,
       subscribe,
+      preparePurchase: async () => {
+        throw new Error("Unexpected prepare");
+      },
       readPurchaseQuote: async (_, input) => {
         assert.deepEqual(input.supportedTransactionVersions, [0]);
         reads++;

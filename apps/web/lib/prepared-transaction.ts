@@ -1,6 +1,6 @@
 import { parseWalletOperation, type WalletOperation } from "./wallet-operation.ts";
 import * as market from "@katha/solana/marketplace";
-import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
+import { CORE_PROGRAM_ADDRESS, calculateMarketplaceDistribution } from "@katha/solana";
 import {
   getBase64Encoder,
   getBase64Decoder,
@@ -14,9 +14,14 @@ import {
   verifySignature,
   address,
   AccountRole,
+  getAddressEncoder,
+  getProgramDerivedAddress,
   unwrapOption,
 } from "@solana/kit";
 import {
+  purchaseQuoteResponseSchema,
+  purchaseQuoteTermsSchema,
+  type PurchaseQuoteResponse,
   metadataRevisionReviewSchema,
   metadataDocumentSchema,
   type MetadataRevisionReview,
@@ -117,6 +122,7 @@ export async function inspectPreparedTransaction(
       asset: string;
       collection: string;
     };
+    purchase?: { quote: PurchaseQuoteResponse; collection: string };
     kathaId: string;
     registration?: RegistrationIdentity;
     verification?: { authorshipEvidenceHash: string };
@@ -154,12 +160,134 @@ export async function inspectPreparedTransaction(
     !instruction?.data ||
     (operation.kind !== "CREATE_LISTING" &&
       operation.kind !== "CANCEL_LISTING" &&
+      operation.kind !== "PURCHASE_ARTWORK" &&
       (instruction.programAddress !== KATHA_REGISTRY_PROGRAM_ADDRESS ||
         !kinds[operation.kind].includes(
           identifyKathaRegistryInstruction(instruction.data),
         )))
   )
     throw new Error("Preparation does not match the requested operation.");
+  if (operation.kind === "PURCHASE_ARTWORK") {
+    const quote = purchaseQuoteResponseSchema.parse(context.purchase?.quote);
+    const terms = purchaseQuoteTermsSchema.strip().parse(quote);
+    const actualTerms = purchaseQuoteTermsSchema.strip().parse(operation.quote);
+    if (
+      !context.purchase ||
+      instruction.programAddress !== market.KATHA_MARKETPLACE_PROGRAM_ADDRESS ||
+      market.identifyKathaMarketplaceInstruction(instruction.data) !==
+        market.KathaMarketplaceInstruction.PurchaseListing ||
+      quote.kathaId !== context.kathaId ||
+      quote.cluster !== context.cluster ||
+      quote.buyer !== context.wallet ||
+      quote.quoteHash !== operation.quote.quoteHash ||
+      (await sha256Hex(canonicalDocumentBytes(terms))) !== quote.quoteHash ||
+      (await sha256Hex(canonicalDocumentBytes(actualTerms))) !== quote.quoteHash ||
+      JSON.stringify(
+        calculateMarketplaceDistribution(
+          quote.price,
+          quote.saleKind,
+          quote.fees,
+          quote,
+        ),
+      ) !== JSON.stringify(quote.distribution) ||
+      BigInt(operation.quote.chainTime) >= BigInt(quote.expiresAt) ||
+      [quote.seller, quote.artistPayout, quote.treasury].includes(quote.buyer) ||
+      BigInt(operation.nextRevision) !== BigInt(quote.revision) + 1n
+    )
+      throw new Error("Reviewed purchase changed");
+    const parsed = market.parsePurchaseListingInstruction({
+      ...instruction,
+      accounts: instruction.accounts ?? [],
+      data: instruction.data,
+    });
+    const [[artwork], [config], [registryConfig]] = await Promise.all([
+      findArtworkPda({ kathaId: operation.kathaId }),
+      market.findConfigPda(),
+      findConfigPda(),
+    ]);
+    const [[asset], [verification], [head], [custody], [saleTerms]] = await Promise.all(
+      [
+        findAssetPda({ artwork }),
+        findVerificationPda({ artwork }),
+        market.findConditionHeadPda(
+          { artwork },
+          { programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS },
+        ),
+        market.findCustodyHeadPda(
+          { artwork },
+          { programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS },
+        ),
+        market.findSaleTermsPda({ artwork }),
+      ],
+    );
+    const [listing] = await market.findListingPda({ asset });
+    const token = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+    const encoder = getAddressEncoder();
+    const ata = async (owner: string) =>
+      (
+        await getProgramDerivedAddress({
+          programAddress: address("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"),
+          seeds: [
+            encoder.encode(address(owner)),
+            encoder.encode(token),
+            encoder.encode(address(quote.payment.paymentMint)),
+          ],
+        })
+      )[0];
+    const tokens = await Promise.all(
+      [quote.buyer, quote.seller, quote.artistPayout, quote.treasury].map(ata),
+    );
+    const accounts = [
+      config,
+      KATHA_REGISTRY_PROGRAM_ADDRESS,
+      registryConfig,
+      artwork,
+      verification,
+      head,
+      address(quote.condition.report),
+      custody,
+      saleTerms,
+      asset,
+      address(quote.seller),
+      listing,
+      address(context.purchase.collection),
+      CORE_PROGRAM_ADDRESS,
+      address(quote.buyer),
+      address(quote.payment.paymentMint),
+      token,
+      ...tokens,
+      address("11111111111111111111111111111111"),
+    ];
+    const roles = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 3, 0, 0, 1, 1, 1, 1, 0];
+    if (
+      quote.asset !== asset ||
+      quote.listing !== listing ||
+      parsed.data.expectedPrice !== BigInt(quote.price) ||
+      parsed.data.expectedRevision !== BigInt(quote.revision) ||
+      instruction.data.length !== 24 ||
+      instruction.accounts?.length !== accounts.length ||
+      instruction.accounts.some(
+        (value, index) =>
+          value.address !== accounts[index] || value.role !== roles[index],
+      )
+    )
+      throw new Error("Purchase account or payment mismatch");
+    return {
+      operation,
+      transaction: {
+        ...transaction,
+        lifetimeConstraint: {
+          blockhash: message.lifetimeConstraint.blockhash,
+          lastValidBlockHeight: BigInt(operation.lastValidBlockHeight),
+        },
+      },
+      accounts: instruction.accounts.map((value) => ({
+        address: String(value.address),
+        role: value.role,
+      })),
+      program: String(instruction.programAddress),
+    };
+  }
   if (operation.kind === "CANCEL_LISTING") {
     const expected = context.listing;
     if (

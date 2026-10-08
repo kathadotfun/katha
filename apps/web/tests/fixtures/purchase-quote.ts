@@ -71,6 +71,7 @@ export async function purchaseQuoteFixture(
         ...artworkFixture.chain,
         coreAssetAddress: asset,
         registryRecordAddress: record,
+        collectionAddress: "11111111111111111111111111111118",
       },
     }),
   };

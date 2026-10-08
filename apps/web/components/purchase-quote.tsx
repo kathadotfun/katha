@@ -1,7 +1,13 @@
 "use client";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { useWalletSession, useWalletConnection } from "./wallet-provider";
+import {
+  useWalletSession,
+  useWalletConnection,
+  useTransactionLifecycle,
+} from "./wallet-provider";
+import { TransactionReviewView } from "./transaction-review";
+import { idleTransactionSnapshot } from "../lib/transaction-lifecycle";
 import { signedOutSnapshot } from "../lib/wallet-session";
 import { createPublicApi } from "../lib/public-api";
 import {
@@ -27,7 +33,13 @@ export function PurchaseQuotePanel({
   apiOrigin: string;
 }) {
   const session = useWalletSession(),
-    connection = useWalletConnection();
+    connection = useWalletConnection(),
+    transactions = useTransactionLifecycle();
+  const tx = useSyncExternalStore(
+    transactions?.subscribe ?? noop,
+    transactions?.getSnapshot ?? (() => idleTransactionSnapshot),
+    () => idleTransactionSnapshot,
+  );
   const auth = useSyncExternalStore(
     session?.subscribe ?? noop,
     session?.getSnapshot ?? emptyAuth,
@@ -41,10 +53,11 @@ export function PurchaseQuotePanel({
       connection,
       createPublicApi(apiOrigin),
       kathaId,
+      transactions ?? undefined,
     );
     setController(current);
     return () => current.dispose();
-  }, [session, connection, apiOrigin, kathaId]);
+  }, [session, connection, transactions, apiOrigin, kathaId]);
   const state = useSyncExternalStore(
     controller?.subscribe ?? noop,
     controller?.getSnapshot ?? empty,
@@ -77,27 +90,55 @@ export function PurchaseQuotePanel({
       <button
         type="button"
         className="button-primary mt-5"
-        disabled={!controller || state.status === "loading"}
+        disabled={
+          !controller ||
+          state.status === "loading" ||
+          state.preparing ||
+          (tx.signature !== null && tx.phase !== "failed")
+        }
         onClick={() => void controller?.refresh()}
       >
         Refresh purchase quote
       </button>
+      {state.preparationError && (
+        <p role="alert" className="mt-4">
+          {state.preparationError}
+        </p>
+      )}
+      {state.preparing && (
+        <p role="status" className="mt-4">
+          Preparing the reviewed purchase…
+        </p>
+      )}
+      {tx.operation?.kind === "PURCHASE_ARTWORK" &&
+        tx.operation.kathaId === kathaId && (
+          <TransactionReviewView
+            state={tx}
+            title="Purchase transaction review"
+            onApprove={() => void transactions?.approveAndSend()}
+            onCheck={() => void transactions?.checkConfirmation()}
+            onCancel={() => transactions?.cancel()}
+          />
+        )}
       {state.status === "loading" && (
         <p role="status" className="mt-4">
           Checking current terms and purchase simulation…
         </p>
       )}
-      {state.status === "unavailable" && (
+      {state.status === "unavailable" && !state.preparationError && (
         <p role="alert" className="mt-4">
           A purchase quote is unavailable. Check the active listing, buyer wallet,
           test-token funds and network, then refresh. Previous terms have been cleared.
         </p>
       )}
-      {!quote && state.status !== "loading" && state.status !== "unavailable" && (
-        <p className="mt-4">
-          Request current terms before reviewing this artwork’s purchase.
-        </p>
-      )}
+      {!quote &&
+        tx.phase === "idle" &&
+        state.status !== "loading" &&
+        state.status !== "unavailable" && (
+          <p className="mt-4">
+            Request current terms before reviewing this artwork’s purchase.
+          </p>
+        )}
       {quote && state.artwork && (
         <>
           <p className="mt-6 text-lead">{state.artwork.title}</p>
@@ -191,6 +232,18 @@ export function PurchaseQuotePanel({
             reserve the artwork, guarantee eligibility or prove payment. Delivery
             remains manually coordinated. Refresh terms before purchase; current
             ownership, inspection and listing eligibility must be rechecked.
+          </p>
+          <button
+            className="button-primary mt-6"
+            type="button"
+            disabled={!controller?.canPrepare()}
+            onClick={() => void controller?.prepare()}
+          >
+            Prepare reviewed purchase
+          </button>
+          <p className="mt-3 text-sm">
+            Preparation rechecks these terms and simulates the purchase. Review the
+            transaction, then explicitly approve in your wallet.
           </p>
           <details className="mt-5">
             <summary>Review buyer and quote commitment</summary>

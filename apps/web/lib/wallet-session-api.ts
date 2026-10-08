@@ -1,4 +1,7 @@
 import {
+  purchasePrepareRequestSchema,
+  purchasePreparationResponseSchema,
+  type PurchasePrepareRequest,
   purchaseQuoteRequestSchema,
   purchaseQuoteResponseSchema,
   type PurchaseQuoteRequest,
@@ -166,6 +169,29 @@ export function createWalletSessionApi(
     return response.json() as Promise<unknown>;
   }
   return {
+    async preparePurchase(
+      kathaId: string,
+      input: PurchasePrepareRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = listingParamsSchema.parse({ kathaId });
+      const result = purchasePreparationResponseSchema.parse(
+        await request(
+          `/artworks/${path.kathaId}/operations/purchase`,
+          purchasePrepareRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.quote.quoteHash !== input.quoteHash ||
+        result.quote.kathaId !== path.kathaId
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readPurchaseQuote(
       kathaId: string,
       input: PurchaseQuoteRequest,

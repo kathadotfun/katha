@@ -5,12 +5,14 @@ import {
   tokenAmountSchema,
   canonicalDocumentBytes,
   sha256Hex,
+  purchasePrepareRequestSchema,
   type PurchaseQuoteResponse,
   type PublicArtworkDetail,
 } from "@katha/shared";
 import { calculateMarketplaceDistribution } from "@katha/solana";
 import { findArtworkPda, findAssetPda } from "@katha/solana/registry";
 import { findListingPda } from "@katha/solana/marketplace";
+import type { TransactionLifecycle } from "./transaction-lifecycle.ts";
 import type { WalletSessionController } from "./wallet-session.ts";
 import type { WalletConnection } from "./wallet-connection.ts";
 import type { createPublicApi } from "./public-api.ts";
@@ -57,20 +59,25 @@ export type PurchaseQuoteSnapshot = Readonly<{
   status: "locked" | "loading" | "ready" | "unavailable";
   quote: PurchaseQuoteResponse | null;
   artwork: PublicArtworkDetail | null;
+  preparing: boolean;
+  preparationError: string | null;
 }>;
 export const emptyPurchaseQuote: PurchaseQuoteSnapshot = {
   status: "locked",
   quote: null,
   artwork: null,
+  preparing: false,
+  preparationError: null,
 };
 export function createPurchaseQuote(
   session: Pick<
     WalletSessionController,
-    "getSnapshot" | "subscribe" | "readPurchaseQuote"
+    "getSnapshot" | "subscribe" | "readPurchaseQuote" | "preparePurchase"
   >,
   connection: Pick<WalletConnection, "getSnapshot" | "subscribe" | "cluster">,
   api: Pick<ReturnType<typeof createPublicApi>, "artwork">,
   kathaId: string,
+  transactions?: Pick<TransactionLifecycle, "load" | "getSnapshot">,
 ) {
   let state = emptyPurchaseQuote,
     generation = 0,
@@ -104,7 +111,60 @@ export function createPurchaseQuote(
   };
   const unsubSession = session.subscribe(change),
     unsubWallet = connection.subscribe(change);
+  const canPrepare = () => {
+    const tx = transactions?.getSnapshot();
+    return (
+      !!current &&
+      state.status === "ready" &&
+      !!state.quote &&
+      !!state.artwork?.chain.collectionAddress &&
+      !state.preparing &&
+      !!tx &&
+      ["idle", "not-completed", "expired", "failed"].includes(tx.phase) &&
+      (!tx.signature || tx.phase === "failed")
+    );
+  };
   return {
+    canPrepare,
+    async prepare() {
+      if (disposed || !canPrepare()) return;
+      const quote = state.quote!,
+        collection = state.artwork!.chain.collectionAddress!,
+        version = ++generation;
+      abort?.abort();
+      abort = new AbortController();
+      const signal = abort.signal;
+      publish({ ...state, preparing: true, preparationError: null });
+      try {
+        const wallet = connection.getSnapshot().connected!;
+        const input = purchasePrepareRequestSchema.parse({
+          idempotencyKey: crypto.randomUUID(),
+          quoteHash: quote.quoteHash,
+          supportedTransactionVersions: [
+            ...(wallet.supportsV0 ? [0] : []),
+            ...(wallet.supportsV1 ? [1] : []),
+          ],
+        });
+        const prepared = await session.preparePurchase(kathaId, input, signal);
+        if (disposed || signal.aborted || version !== generation) return;
+        await transactions!.load(prepared, {
+          kind: "PURCHASE_ARTWORK",
+          kathaId,
+          purchase: { quote, collection },
+        });
+        if (disposed || signal.aborted || version !== generation) return;
+        // Clear the actionable preview: a new review must obtain current terms.
+        publish({ ...emptyPurchaseQuote, status: "locked" });
+      } catch {
+        if (!disposed && !signal.aborted && version === generation)
+          publish({
+            ...emptyPurchaseQuote,
+            status: "unavailable",
+            preparationError:
+              "Purchase preparation did not complete. The quote may be stale; refresh current terms and check any pending signature before trying again.",
+          });
+      }
+    },
     getSnapshot: () => state,
     subscribe(fn: () => void) {
       listeners.add(fn);
@@ -113,14 +173,14 @@ export function createPurchaseQuote(
       };
     },
     async refresh() {
-      if (disposed || !current || state.status === "loading") return;
+      if (disposed || !current || state.status === "loading" || state.preparing) return;
       const version = ++generation;
       abort?.abort();
       abort = new AbortController();
       const signal = abort.signal;
       const wallet = connection.getSnapshot().connected!,
         auth = session.getSnapshot().session!;
-      publish({ status: "loading", quote: null, artwork: null });
+      publish({ ...emptyPurchaseQuote, status: "loading" });
       try {
         const supportedTransactionVersions = [
           ...(wallet.supportsV0 ? [0 as const] : []),
@@ -136,10 +196,10 @@ export function createPurchaseQuote(
           cluster: auth.cluster,
         });
         if (disposed || signal.aborted || version !== generation) return;
-        publish({ status: "ready", ...checked });
+        publish({ ...emptyPurchaseQuote, status: "ready", ...checked });
       } catch {
         if (!disposed && !signal.aborted && version === generation)
-          publish({ status: "unavailable", quote: null, artwork: null });
+          publish({ ...emptyPurchaseQuote, status: "unavailable" });
       }
     },
     dispose() {

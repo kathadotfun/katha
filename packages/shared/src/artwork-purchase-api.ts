@@ -75,3 +75,8 @@ export type PurchaseQuoteTerms = z.infer<typeof purchaseQuoteTermsSchema>;
 export type PurchaseQuoteResponse = z.infer<typeof purchaseQuoteResponseSchema>;
 
 export type PurchaseQuoteRequest = z.infer<typeof purchaseQuoteRequestSchema>;
+
+export type PurchasePrepareRequest = z.infer<typeof purchasePrepareRequestSchema>;
+export type PurchasePreparationResponse = z.infer<
+  typeof purchasePreparationResponseSchema
+>;

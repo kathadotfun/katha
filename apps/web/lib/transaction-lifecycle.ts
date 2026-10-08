@@ -33,6 +33,7 @@ export type TransactionSnapshot = Readonly<{
   feeLamports: string | null;
   program: string | null;
   signature: string | null;
+  purchaseOwnerConfirmed: boolean;
   error: string | null;
 }>;
 export const idleTransactionSnapshot: TransactionSnapshot = {
@@ -42,6 +43,7 @@ export const idleTransactionSnapshot: TransactionSnapshot = {
   feeLamports: null,
   program: null,
   signature: null,
+  purchaseOwnerConfirmed: false,
   error: null,
 };
 export function createTransactionLifecycle(
@@ -55,6 +57,11 @@ export function createTransactionLifecycle(
   indexed?: (
     operation: WalletOperation,
     signature: string,
+    signal: AbortSignal,
+  ) => Promise<boolean>,
+  purchaseOwner?: (
+    operation: Extract<WalletOperation, { kind: "PURCHASE_ARTWORK" }>,
+    slot: string,
     signal: AbortSignal,
   ) => Promise<boolean>,
 ) {
@@ -172,6 +179,13 @@ export function createTransactionLifecycle(
     finalized = true;
     publish({ phase: "indexing-delay", error: null });
     try {
+      if (operation.kind === "PURCHASE_ARTWORK") {
+        const confirmed =
+          !!purchaseOwner && (await purchaseOwner(operation, result.slot!, signal()));
+        if (version !== generation || disposed) return;
+        publish({ purchaseOwnerConfirmed: confirmed });
+        if (!confirmed) return;
+      }
       if (indexed) {
         const seen = await indexed(operation, state.signature!, signal());
         if (version === generation && !disposed && seen) publish({ phase: "indexed" });
@@ -200,6 +214,10 @@ export function createTransactionLifecycle(
     async load(
       input: unknown,
       expected: Pick<WalletOperation, "kind" | "kathaId"> & {
+        purchase?: {
+          quote: import("@katha/shared").PurchaseQuoteResponse;
+          collection: string;
+        };
         listing?: {
           price: string;
           expiresAt: string;

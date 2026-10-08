@@ -1,3 +1,4 @@
+import { purchaseFixture } from "../apps/web/tests/fixtures/purchase.ts";
 import { purchaseQuoteFixture } from "../apps/web/tests/fixtures/purchase-quote.ts";
 import {
   listingFixture,
@@ -443,10 +444,10 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           getGenesisHash: "11111111111111111111111111111111",
           getBlockHeight: 1,
           simulateTransaction: {
-            context: { slot: 10 },
+            context: { slot: 30 },
             value: { err: null, unitsConsumed: 200 },
           },
-          getFeeForMessage: { context: { slot: 10 }, value: 5000 },
+          getFeeForMessage: { context: { slot: 30 }, value: 5000 },
         };
         assert.ok(method in results, `Unexpected RPC: ${method}`);
         return route.fulfill({
@@ -655,6 +656,75 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         quoteSigningBefore,
       );
+      const purchase = await purchaseFixture();
+      let purchaseMode = "STALE",
+        purchasePrepares = 0;
+      await context.route(
+        `${apiOrigin}/artworks/${fixture.operation.kathaId}/operations/purchase`,
+        async (route) => {
+          if (route.request().method() === "OPTIONS")
+            return route.fulfill({ status: 204, headers });
+          purchasePrepares++;
+          const body = route.request().postDataJSON();
+          assert.deepEqual(Object.keys(body).sort(), [
+            "idempotencyKey",
+            "quoteHash",
+            "supportedTransactionVersions",
+          ]);
+          assert.equal(body.quoteHash, purchase.quote.quoteHash);
+          assert.equal(
+            route.request().headers().authorization,
+            `Bearer ${"a".repeat(64)}`,
+          );
+          return purchaseMode === "STALE"
+            ? route.fulfill({ status: 409, headers })
+            : route.fulfill({ status: 201, headers, json: purchase.operation });
+        },
+      );
+      await main
+        .getByRole("button", { name: "Prepare reviewed purchase", exact: true })
+        .click();
+      await expect(main).toContainText("quote may be stale");
+      await expect(main).not.toContainText("Total: 100.000001 test tokens");
+      assert.equal(purchasePrepares, 1);
+      purchaseMode = "READY";
+      await refreshQuote.click();
+      await main
+        .getByRole("button", { name: "Prepare reviewed purchase", exact: true })
+        .click();
+      await expect(main).toContainText("Review transaction before wallet approval");
+      await expect(main).toContainText("test-token payment below is included");
+      await expect(main).toContainText("97500001 base units");
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
+        quoteSigningBefore,
+      );
+      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+      assert.equal(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+        true,
+      );
+      await page.evaluate(() => {
+        document.activeElement?.blur();
+        globalThis.scrollTo(0, 0);
+      });
+      await page.screenshot({
+        path: `/tmp/katha-126-purchase-${width}.png`,
+        fullPage: true,
+      });
+      await main
+        .getByRole("button", { name: "Approve in wallet and submit", exact: true })
+        .click();
+      await expect(main).toContainText(
+        "Wallet approval or preflight was not completed",
+      );
+      assert.equal(
+        await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
+        quoteSigningBefore + 1,
+      );
+      await main
+        .getByRole("button", { name: "Cancel transaction review", exact: true })
+        .click();
       await page.getByRole("button", { name: "Wallet connected", exact: true }).click();
       await page
         .locator("#wallet-connection-panel")

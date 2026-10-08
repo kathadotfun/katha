@@ -155,6 +155,9 @@ async function fixture(
   };
   let observed: "UNKNOWN" | "FAILED" | "FINALIZED" = "UNKNOWN";
   const session: WalletSessionController = {
+    preparePurchase: async () => {
+      throw new Error("Unexpected purchase preparation");
+    },
     readPurchaseQuote: async () => {
       throw new Error("Unexpected quote");
     },

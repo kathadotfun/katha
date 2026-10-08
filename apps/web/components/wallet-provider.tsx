@@ -16,6 +16,10 @@ import {
   type TransactionLifecycle,
 } from "../lib/transaction-lifecycle";
 import { createTransactionRpc } from "../lib/transaction-rpc";
+import {
+  createPurchaseOwnershipRpc,
+  purchaseHistoryMatches,
+} from "../lib/purchase-confirmation";
 import { listingObservationMatches } from "../lib/owner-listing";
 import { createPublicApi } from "../lib/public-api";
 
@@ -73,6 +77,14 @@ export function WalletProvider({
       (id, signal) =>
         createPublicApi(apiOrigin).provenance(id, { limit: "100" }, { signal }),
       async (operation, signature, signal) => {
+        if (operation.kind === "PURCHASE_ARTWORK") {
+          const history = await createPublicApi(apiOrigin).provenance(
+            operation.kathaId,
+            { limit: "100", type: "TRANSFER" },
+            { signal },
+          );
+          return purchaseHistoryMatches(operation, signature, history);
+        }
         if (
           operation.kind === "CREATE_LISTING" ||
           operation.kind === "CANCEL_LISTING"
@@ -147,6 +159,7 @@ export function WalletProvider({
           history.items.some((item) => item.transaction.signature === signature)
         );
       },
+      createPurchaseOwnershipRpc(cluster, rpcUrl),
     );
     publish({ connection: current.boundary, session: auth, transactions: flow });
     return () => {

@@ -74,3 +74,36 @@ test("transaction panel displays distinct pending, failure, finalization and ind
     }).includes("&lt;script&gt;"),
   );
 });
+
+test("purchase review shows exact payment/recipients and separates Core ownership from indexer catch-up", async () => {
+  const { purchaseFixture } = await import("./fixtures/purchase.ts");
+  const { operation } = await purchaseFixture();
+  const state = {
+    ...idleTransactionSnapshot,
+    phase: "review" as const,
+    operation,
+    feeLamports: "5000",
+  };
+  const html = render(state);
+  assert.ok(html.includes("100000001 base units"));
+  assert.ok(html.includes("97500001 base units"));
+  assert.ok(html.includes(operation.quote.payment.paymentMint));
+  assert.ok(!html.includes("No token payment is included"));
+  assert.ok(
+    render({ ...state, phase: "indexing-delay" }).includes(
+      "Core ownership and indexing checks pending",
+    ),
+  );
+  assert.ok(
+    render({
+      ...state,
+      phase: "indexing-delay",
+      purchaseOwnerConfirmed: true,
+    }).includes("buyer Core ownership confirmed; artwork indexing pending"),
+  );
+  assert.ok(
+    render({ ...state, phase: "indexed", purchaseOwnerConfirmed: true }).includes(
+      "transfer history indexed",
+    ),
+  );
+});

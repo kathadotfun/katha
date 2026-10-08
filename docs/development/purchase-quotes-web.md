@@ -42,7 +42,7 @@ They can become stale immediately after being read. Recorded custody is a separa
 public observation and can lag the quote's custody revision. The page makes no
 physical movement claim. Test tokens have no monetary value; SOL network fees are
 additional and are not included in the distribution. Purchase signing and finalized
-ownership confirmation are implemented in the following step.
+ownership confirmation use the [buyer purchase flow](purchase-web.md).
 
 Refresh clears previous terms before requesting replacements. Failed or malformed
 responses hide the old quote and show a redacted retry message. Wallet/session

@@ -66,7 +66,15 @@ export function TransactionReviewView({
           ? "Transaction finalized and active listing observed"
           : state.operation?.kind === "CANCEL_LISTING" && state.phase === "indexed"
             ? "Transaction finalized and cancelled listing observed"
-            : labels[state.phase]}
+            : state.operation?.kind === "PURCHASE_ARTWORK" &&
+                state.phase === "indexing-delay"
+              ? state.purchaseOwnerConfirmed
+                ? "Purchase finalized; buyer Core ownership confirmed; artwork indexing pending"
+                : "Purchase finalized; Core ownership and indexing checks pending"
+              : state.operation?.kind === "PURCHASE_ARTWORK" &&
+                  state.phase === "indexed"
+                ? "Purchase finalized; buyer Core ownership confirmed and transfer history indexed"
+                : labels[state.phase]}
       </p>
       {operation && (
         <>
@@ -82,8 +90,35 @@ export function TransactionReviewView({
           </p>
           <p className="mt-2">
             Estimated network fee: {state.feeLamports ?? "pending"} lamports. Account
-            rent may also apply. No token payment is included in this operation.
+            rent may also apply.{" "}
+            {operation.kind === "PURCHASE_ARTWORK"
+              ? "The test-token payment below is included in this operation."
+              : "No token payment is included in this operation."}
           </p>
+          {operation.kind === "PURCHASE_ARTWORK" && (
+            <div className="mt-4">
+              <p>
+                Test-token payment: {operation.quote.price} base units · Six decimals ·
+                No monetary value
+              </p>
+              <p>
+                Mint:{" "}
+                <span className="break-all">{operation.quote.payment.paymentMint}</span>
+              </p>
+              <p>Expected listing revision: {operation.quote.revision}</p>
+              <ul className="mt-3 space-y-2">
+                {operation.quote.distribution.recipients.map((recipient) => (
+                  <li key={recipient.wallet} className="break-all">
+                    {recipient.wallet} · {recipient.amount} base units
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3">
+                Digital ownership changes on a successful purchase. Physical custody and
+                artist authorship remain separate.
+              </p>
+            </div>
+          )}
           <p className="mt-2">
             Simulation checks execution but does not guarantee success.
           </p>

@@ -256,6 +256,8 @@ export {
   type PurchaseQuoteTerms,
   type PurchaseQuoteResponse,
   type PurchaseQuoteRequest,
+  type PurchasePrepareRequest,
+  type PurchasePreparationResponse,
 } from "./artwork-purchase-api.js";
 
 export * from "./collector-api.js";
