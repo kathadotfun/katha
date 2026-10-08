@@ -1,3 +1,7 @@
+import { createCollectorStore, createWalletSessionStore } from "@katha/db";
+import { collectorCollectionResponseSchema } from "@katha/shared";
+import { createCollector } from "../src/collector.js";
+import { createWalletSessions } from "../src/wallet-session.js";
 import { createNfcResolution } from "../src/nfc-resolution.js";
 import { createNfcResolutionStore, createNfcTagStore, wallets } from "@katha/db";
 import { createArtworkProvenance } from "../src/artwork-provenance.js";
@@ -1131,6 +1135,120 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     });
     expect(gapHistory.indexing.status).toBe("GAP_DETECTED");
     expect(gapHistory.items).toHaveLength(7);
+    // Collector queries use real wallet challenge/signature/session verification.
+    const collectorPrograms = {
+      registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
+      core: CORE_PROGRAM_ADDRESS,
+      marketplace: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+    };
+    const collectorSessions = createWalletSessions(
+      createWalletSessionStore(database.db),
+      { origin: "http://localhost:3000", cluster: "localnet" },
+    );
+    async function collectorHeader(identity: ReturnType<typeof temporaryWallet>) {
+      const challenge = await collectorSessions.challenge({
+        walletAddress: identity.address,
+        cluster: "localnet",
+      });
+      const result = await collectorSessions.verify({
+        challengeId: challenge.challengeId,
+        walletAddress: identity.address,
+        signature: identity.signMessage(challenge.message),
+      });
+      return `Bearer ${result.token}`;
+    }
+    const collectorService = createCollector(
+      createCollectorStore(database.db, "LOCALNET", collectorPrograms),
+      collectorSessions,
+      "localnet",
+    );
+    const collectorArgs: Parameters<typeof createApi> = [];
+    collectorArgs[0] = createLogger((line) => logs.push(line));
+    collectorArgs[3] = collectorSessions;
+    collectorArgs[24] = collectorService;
+    const collectorApp = createApi(...collectorArgs);
+    const ownerHeader = await collectorHeader(wallet),
+      otherWallet = temporaryWallet(),
+      otherHeader = await collectorHeader(otherWallet);
+    expect((await collectorApp.request("/account/collection")).status).toBe(401);
+    const collectionResponse = await collectorApp.request(
+      "/account/collection?limit=1",
+      { headers: { Authorization: ownerHeader } },
+    );
+    expect(collectionResponse.status).toBe(200);
+    expect(collectionResponse.headers.get("Cache-Control")).toBe("no-store");
+    const holdings = collectorCollectionResponseSchema.parse(
+      await collectionResponse.json(),
+    );
+    expect(holdings.items.map((item) => item.artwork.kathaId)).toEqual([
+      historical.kathaId,
+    ]);
+    expect(holdings.items[0]!.custody.state).toBe("KATHA_HELD");
+    expect(holdings.items[0]!.indexing.status).toBe("GAP_DETECTED");
+    expect(JSON.stringify(holdings)).not.toContain("PRIVATE");
+    expect((await collectorService.account(ownerHeader)).indexedArtworkCount).toBe(1);
+    expect((await collectorService.account(otherHeader)).indexedArtworkCount).toBe(0);
+    expect(
+      (await collectorService.collection(otherHeader, { limit: 20, offset: 0 })).items,
+    ).toEqual([]);
+    expect(
+      (await collectorService.collection(ownerHeader, { limit: 1, offset: 1 })).items,
+    ).toEqual([]);
+    const devnetCollector = createCollector(
+      createCollectorStore(database.db, "DEVNET", collectorPrograms),
+      collectorSessions,
+      "localnet",
+    );
+    expect((await devnetCollector.account(ownerHeader)).indexedArtworkCount).toBe(0);
+    const changedAt = new Date();
+    const [transfer] = await database.db
+      .insert(indexedEvents)
+      .values({
+        cluster: "LOCALNET",
+        programAddress: CORE_PROGRAM_ADDRESS,
+        signature: "z".repeat(88),
+        slot: 3n,
+        transactionIndex: 0,
+        outerInstructionIndex: 0,
+        innerInstructionIndex: -1,
+        eventIndex: 0,
+        kind: "OWNERSHIP",
+        artworkId: historical.id,
+        assetAddress: coreAsset,
+        payload: {
+          name: "CoreTransfer",
+          ownerWallet: otherWallet.address,
+          newOwner: otherWallet.address,
+          asset: coreAsset,
+          collection: wallet.address,
+          privateEvidence: "PRIVATE COLLECTOR TRANSFER",
+        },
+        chainRecordedAt: changedAt,
+        indexedAt: changedAt,
+      })
+      .returning();
+    await database.db
+      .$client`update artwork_ownership set owner_wallet=${otherWallet.address}, source_event_id=${transfer!.id} where artwork_id=${historical.id} and cluster='LOCALNET'`;
+    expect((await collectorService.account(ownerHeader)).indexedArtworkCount).toBe(0);
+    expect(
+      (await collectorService.collection(ownerHeader, { limit: 20, offset: 0 })).items,
+    ).toEqual([]);
+    const transferred = await collectorService.collection(otherHeader, {
+      limit: 20,
+      offset: 0,
+    });
+    expect(transferred.items[0]!.ownerWallet).toBe(otherWallet.address);
+    expect(transferred.items[0]!.indexing.ownerCheck?.status).toBe("STALE");
+    expect(transferred.items[0]!.custody.state).toBe("KATHA_HELD");
+    await collectorSessions.logout(otherHeader);
+    expect(
+      (
+        await collectorApp.request("/account/collection", {
+          headers: { Authorization: otherHeader },
+        })
+      ).status,
+    ).toBe(401);
+
     // Synthetic finalized read-model changes exercise HTTP identity stability,
     // not a real Core transfer, sale, metadata revision or physical delivery.
     const taggedWork = await fixture();

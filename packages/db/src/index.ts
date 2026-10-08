@@ -221,3 +221,5 @@ export {
   createMarketplaceListingStore,
   type MarketplaceListingStore,
 } from "./marketplace-listing-store.js";
+
+export { createCollectorStore, type CollectorStore } from "./collector-store.js";

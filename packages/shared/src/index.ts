@@ -255,3 +255,5 @@ export {
   type PurchaseQuoteTerms,
   type PurchaseQuoteResponse,
 } from "./artwork-purchase-api.js";
+
+export * from "./collector-api.js";

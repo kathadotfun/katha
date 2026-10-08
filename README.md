@@ -227,6 +227,7 @@ outside the current scope.
 - [Devnet payment provider](docs/development/devnet-payment-provider.md)
 - [Artwork listing API](docs/development/artwork-listings-api.md)
 - [Buyer purchase quotes and preparation](docs/development/artwork-purchases-api.md)
+- [Authenticated collector account and holdings](docs/development/collector-api.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)
@@ -254,3 +255,7 @@ Finalized Marketplace settlements now preserve primary/secondary sale amounts,
 fees and immutable listing cycles across resale and indexer replay. Core transfer
 evidence remains the single public ownership timeline entry for each purchase;
 physical custody stays separate. See the [indexer guide](docs/development/chain-activity-ingestion.md).
+
+Authenticated account and collection APIs now expose published indexed holdings,
+Core reconciliation status, and separate finalized physical custody. Collector
+pages remain subsequent frontend work. See the [collector API guide](docs/development/collector-api.md).

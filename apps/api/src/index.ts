@@ -1,3 +1,5 @@
+import { createCollectorStore } from "@katha/db";
+import { createCollector } from "./collector.js";
 import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "@katha/solana/marketplace";
 import { createArtworkPurchases } from "./artwork-purchases.js";
 import { createDevnetPaymentProvider } from "./payment.js";
@@ -329,6 +331,19 @@ function startApi() {
             { cluster: config.KATHA_CLUSTER, paymentMint },
           ),
         ),
+      config.KATHA_CLUSTER,
+    ),
+    createCollector(
+      createCollectorStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+        {
+          registry: KATHA_REGISTRY_PROGRAM_ADDRESS,
+          core: CORE_PROGRAM_ADDRESS,
+          marketplace: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+        },
+      ),
+      sessions,
       config.KATHA_CLUSTER,
     ),
   );

@@ -1,3 +1,5 @@
+import type { CollectorBoundary } from "./collector.js";
+import { collectorCollectionQuerySchema } from "@katha/shared";
 import type { ArtworkPurchasesBoundary } from "./artwork-purchases.js";
 import {
   purchaseQuoteRequestSchema,
@@ -124,6 +126,7 @@ export function createApi(
   nfcResolution?: NfcResolutionBoundary,
   listings?: ArtworkListingsBoundary,
   purchases?: ArtworkPurchasesBoundary,
+  collector?: CollectorBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -171,6 +174,13 @@ export function createApi(
     c.header("Cache-Control", "no-store");
     await next();
   });
+  for (const path of ["/account", "/account/*"]) {
+    app.use(path, async (c, next) => {
+      c.header("Cache-Control", "no-store");
+      c.header("Vary", "Authorization, Origin");
+      await next();
+    });
+  }
   app.use("*", restrictedCors(origins));
   app.use("*", requestBodyLimit());
   // Reserve both namespaces before any future write handlers are registered.
@@ -224,6 +234,19 @@ export function createApi(
       ),
     );
   });
+  if (collector) {
+    app.get("/account", async (c) =>
+      c.json(await collector.account(c.req.header("Authorization"))),
+    );
+    app.get("/account/collection", async (c) =>
+      c.json(
+        await collector.collection(
+          c.req.header("Authorization"),
+          parseQuery(c, collectorCollectionQuerySchema),
+        ),
+      ),
+    );
+  }
   if (artists) {
     app.get("/verifier/artists/:artistId", async (c) => {
       const params = parseParams(c, artistIdParamsSchema);

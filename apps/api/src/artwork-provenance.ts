@@ -252,7 +252,19 @@ async function project(
   }
   return publicProvenanceEventSchema.parse(projected);
 }
-function indexing(record: Snapshot) {
+export function projectProvenanceIndexing(
+  record: Pick<
+    Snapshot,
+    | "network"
+    | "reconciliation"
+    | "owner"
+    | "checkpoints"
+    | "evaluatedAt"
+    | "registration"
+    | "mint"
+    | "programs"
+  >,
+) {
   const network = record.network;
   const rec = record.reconciliation;
   const staleSource =
@@ -398,7 +410,7 @@ export function createArtworkProvenance(store: PublicProvenanceStore) {
           offset: query.offset,
           hasMore: record.events.length > query.limit,
         },
-        indexing: indexing(record),
+        indexing: projectProvenanceIndexing(record),
       });
     },
   };
