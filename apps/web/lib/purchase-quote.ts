@@ -6,6 +6,7 @@ import {
   canonicalDocumentBytes,
   sha256Hex,
   purchasePrepareRequestSchema,
+  artworkProvenanceResponseSchema,
   type PurchaseQuoteResponse,
   type PublicArtworkDetail,
 } from "@katha/shared";
@@ -55,10 +56,30 @@ export async function validatePurchaseQuote(
     throw new Error("Quote binding or distribution mismatch");
   return { quote, artwork };
 }
+export async function purchaseCollection(input: unknown, artwork: PublicArtworkDetail) {
+  const history = artworkProvenanceResponseSchema.parse(input);
+  const [registry] = await findArtworkPda({ kathaId: artwork.kathaId });
+  const collection = history.chain.collectionAddress;
+  if (
+    !collection ||
+    history.kathaId !== artwork.kathaId ||
+    history.chain.cluster !== artwork.chain.cluster ||
+    history.chain.registryRecordAddress !== registry ||
+    history.chain.coreAssetAddress !== artwork.chain.coreAssetAddress ||
+    history.attribution.artist.id !== artwork.artist.id ||
+    history.attribution.creatorWallet !== artwork.creatorWallet ||
+    (history.indexing.network &&
+      (history.indexing.network.blocked ||
+        history.indexing.network.collectionAddress !== collection))
+  )
+    throw new Error("Purchase provenance binding mismatch.");
+  return collection;
+}
 export type PurchaseQuoteSnapshot = Readonly<{
   status: "locked" | "loading" | "ready" | "unavailable";
   quote: PurchaseQuoteResponse | null;
   artwork: PublicArtworkDetail | null;
+  collection: string | null;
   preparing: boolean;
   preparationError: string | null;
 }>;
@@ -66,6 +87,7 @@ export const emptyPurchaseQuote: PurchaseQuoteSnapshot = {
   status: "locked",
   quote: null,
   artwork: null,
+  collection: null,
   preparing: false,
   preparationError: null,
 };
@@ -75,7 +97,7 @@ export function createPurchaseQuote(
     "getSnapshot" | "subscribe" | "readPurchaseQuote" | "preparePurchase"
   >,
   connection: Pick<WalletConnection, "getSnapshot" | "subscribe" | "cluster">,
-  api: Pick<ReturnType<typeof createPublicApi>, "artwork">,
+  api: Pick<ReturnType<typeof createPublicApi>, "artwork" | "provenance">,
   kathaId: string,
   transactions?: Pick<TransactionLifecycle, "load" | "getSnapshot">,
 ) {
@@ -117,7 +139,7 @@ export function createPurchaseQuote(
       !!current &&
       state.status === "ready" &&
       !!state.quote &&
-      !!state.artwork?.chain.collectionAddress &&
+      !!state.collection &&
       !state.preparing &&
       !!tx &&
       ["idle", "not-completed", "expired", "failed"].includes(tx.phase) &&
@@ -129,7 +151,7 @@ export function createPurchaseQuote(
     async prepare() {
       if (disposed || !canPrepare()) return;
       const quote = state.quote!,
-        collection = state.artwork!.chain.collectionAddress!,
+        collection = state.collection!,
         version = ++generation;
       abort?.abort();
       abort = new AbortController();
@@ -195,8 +217,16 @@ export function createPurchaseQuote(
           wallet: auth.walletAddress,
           cluster: auth.cluster,
         });
+        // Detail intentionally omits unpersisted bindings. Provenance validates
+        // the Registry identity and its collection instead of guessing a default.
+        const collection =
+          checked.artwork.chain.collectionAddress ??
+          (await purchaseCollection(
+            await api.provenance(kathaId, { limit: "1" }, { signal }),
+            checked.artwork,
+          ));
         if (disposed || signal.aborted || version !== generation) return;
-        publish({ ...emptyPurchaseQuote, status: "ready", ...checked });
+        publish({ ...emptyPurchaseQuote, status: "ready", ...checked, collection });
       } catch {
         if (!disposed && !signal.aborted && version === generation)
           publish({ ...emptyPurchaseQuote, status: "unavailable" });

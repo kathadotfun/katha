@@ -41,6 +41,7 @@
     "db:test": "node scripts/test-database.mjs",
     "db:seed": "pnpm --filter @katha/db db:seed",
     "indexer:run": "pnpm --filter @katha/api indexer:run",
-    "admin:test": "pnpm exec turbo run build --filter=@katha/api... && node scripts/test-database.mjs --admin-lifecycle"
+    "admin:test": "pnpm exec turbo run build --filter=@katha/api... && node scripts/test-database.mjs --admin-lifecycle",
+    "test:e2e": "pnpm build && node scripts/test-database.mjs --primary-journey"
   }
 }

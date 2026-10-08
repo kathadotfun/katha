@@ -3,8 +3,13 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { setTimeout } from "node:timers/promises";
 
-const adminLifecycle = process.argv[2] === "--admin-lifecycle";
-if (process.argv.slice(2).some((arg) => arg !== "--admin-lifecycle"))
+const primaryJourney = process.argv[2] === "--primary-journey";
+const adminLifecycle = primaryJourney || process.argv[2] === "--admin-lifecycle";
+if (
+  process.argv
+    .slice(2)
+    .some((arg) => !["--admin-lifecycle", "--primary-journey"].includes(arg))
+)
   throw new Error("Unknown database test option");
 const container = `katha-db-test-${randomUUID()}`;
 let started = false;
@@ -78,11 +83,18 @@ try {
       timeout: 30_000,
       env: { ...process.env, DATABASE_URL: url },
     });
-    execFileSync(process.execPath, ["scripts/test-core-cpi.mjs", "--admin-lifecycle"], {
-      stdio: "inherit",
-      timeout: 240_000,
-      env: { ...process.env, KATHA_TEST_DATABASE_URL: url },
-    });
+    execFileSync(
+      process.execPath,
+      [
+        "scripts/test-core-cpi.mjs",
+        primaryJourney ? "--primary-journey" : "--admin-lifecycle",
+      ],
+      {
+        stdio: "inherit",
+        timeout: primaryJourney ? 600_000 : 360_000,
+        env: { ...process.env, KATHA_TEST_DATABASE_URL: url },
+      },
+    );
   } else {
     execFileSync("pnpm", ["--filter", "@katha/db", "test:integration"], {
       stdio: "inherit",

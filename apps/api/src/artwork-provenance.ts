@@ -86,7 +86,8 @@ async function saleEvidence(event: Event, record: Snapshot, asset: string) {
     listing.listingAddress !== listingAddress ||
     listing.listingAddress !== event.payload.authority ||
     listing.listingAddress !== p.listingAddress ||
-    listing.listingRevision.toString() !== p.revision ||
+    // Settlement closes the immutable creation revision with its next revision.
+    (listing.listingRevision + 1n).toString() !== p.revision ||
     sale.buyerWallet !== event.payload.newOwner ||
     sale.buyerWallet !== p.buyerWallet ||
     sale.sellerWallet !== listing.sellerWallet ||

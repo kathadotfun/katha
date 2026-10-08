@@ -1,3 +1,4 @@
+import { provenanceFixture } from "./fixtures/provenance.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { purchaseQuoteFixture } from "./fixtures/purchase-quote.ts";
@@ -5,6 +6,7 @@ import {
   testTokenAmount,
   validatePurchaseQuote,
   createPurchaseQuote,
+  purchaseCollection,
 } from "../lib/purchase-quote.ts";
 import { createWalletSessionApi } from "../lib/wallet-session-api.ts";
 import type { WalletSessionSnapshot } from "../lib/wallet-session.ts";
@@ -162,7 +164,12 @@ test("quote controller clears old terms on outage, coalesces requests and discar
         },
       }),
     },
-    { artwork: async () => artwork },
+    {
+      artwork: async () => artwork,
+      provenance: async () => {
+        throw new Error("Unexpected provenance read for a bound detail");
+      },
+    },
     quote.kathaId,
   );
   await controller.refresh();
@@ -186,4 +193,70 @@ test("quote controller clears old terms on outage, coalesces requests and discar
   assert.equal(controller.getSnapshot().quote, null);
   controller.dispose();
   assert.equal(listeners.size, 0);
+});
+
+test("missing detail collection resolves from matching provenance and rejects mismatched bindings", async () => {
+  const { artwork } = await purchaseQuoteFixture();
+  const history = {
+    ...provenanceFixture,
+    kathaId: artwork.kathaId,
+    attribution: { artist: artwork.artist, creatorWallet: artwork.creatorWallet },
+    chain: artwork.chain,
+    items: [],
+  };
+  assert.equal(
+    await purchaseCollection(history, artwork),
+    artwork.chain.collectionAddress,
+  );
+  for (const alter of [
+    (h: typeof history) => {
+      h.kathaId = "KATHA-THANGKA-000001";
+    },
+    (h: typeof history) => {
+      h.chain = { ...h.chain, cluster: "DEVNET" };
+    },
+    (h: typeof history) => {
+      h.chain = { ...h.chain, collectionAddress: null };
+    },
+    (h: typeof history) => {
+      h.chain = {
+        ...h.chain,
+        registryRecordAddress: "11111111111111111111111111111111",
+      };
+    },
+    (h: typeof history) => {
+      h.chain = { ...h.chain, coreAssetAddress: "11111111111111111111111111111111" };
+    },
+    (h: typeof history) => {
+      h.attribution.artist.id = "aaaaaaaa-1111-4111-8111-111111111112";
+    },
+  ]) {
+    const corrupt = structuredClone(history);
+    alter(corrupt);
+    await assert.rejects(purchaseCollection(corrupt, artwork));
+  }
+  const network = {
+    genesisHash: "11111111111111111111111111111111",
+    collectionAddress: artwork.chain.collectionAddress!,
+    observedFinalizedSlot: "20",
+    observedAt: new Date().toISOString(),
+    blocked: false,
+  };
+  assert.equal(
+    await purchaseCollection(
+      { ...history, indexing: { ...history.indexing, network } },
+      artwork,
+    ),
+    network.collectionAddress,
+  );
+  for (const changed of [
+    { ...network, blocked: true },
+    { ...network, collectionAddress: "11111111111111111111111111111111" },
+  ])
+    await assert.rejects(
+      purchaseCollection(
+        { ...history, indexing: { ...history.indexing, network: changed } },
+        artwork,
+      ),
+    );
 });

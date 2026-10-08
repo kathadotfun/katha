@@ -8,8 +8,13 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
-const adminLifecycle = process.argv[2] === "--admin-lifecycle";
-if (process.argv.slice(2).some((arg) => arg !== "--admin-lifecycle"))
+const primaryJourney = process.argv[2] === "--primary-journey";
+const adminLifecycle = primaryJourney || process.argv[2] === "--admin-lifecycle";
+if (
+  process.argv
+    .slice(2)
+    .some((arg) => !["--admin-lifecycle", "--primary-journey"].includes(arg))
+)
   throw new Error("Unknown program test option");
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const coreProgram = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d";
@@ -111,7 +116,7 @@ async function main() {
     ],
     join(root, "programs/katha_registry"),
   );
-  if (!adminLifecycle) {
+  if (!adminLifecycle || primaryJourney) {
     await run(
       "cargo",
       [
@@ -180,6 +185,12 @@ async function main() {
     if (!ready) throw new Error(`Surfpool did not become ready: ${surfpoolOutput}`);
     await loadProgram(url, coreProgram, coreBytes);
     await loadProgram(url, registryProgram, registryBytes);
+    if (primaryJourney)
+      await loadProgram(
+        url,
+        "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq",
+        await readFile(marketplaceBinary),
+      );
     await run(
       "pnpm",
       [
@@ -209,6 +220,7 @@ async function main() {
         KATHA_TEST_CORE_SO: coreBinary,
         KATHA_TEST_REGISTRY_SO: registryBinary,
         ...(!adminLifecycle ? { KATHA_TEST_MARKETPLACE_SO: marketplaceBinary } : {}),
+        ...(primaryJourney ? { KATHA_TEST_PRIMARY_BROWSER: "1" } : {}),
         KATHA_TEST_SURFPOOL_RPC: url,
         KATHA_TEST_SURFPOOL_WS: wsUrl,
       },

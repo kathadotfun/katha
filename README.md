@@ -195,6 +195,7 @@ outside the current scope.
 - [Minting and public publication](docs/development/minting-administration-web.md)
 - [Metadata revision review and submission](docs/development/metadata-administration-web.md)
 - [Authorized artwork onboarding integration](docs/development/admin-lifecycle-tests.md)
+- [Local primary collecting browser journey](docs/development/primary-journey-tests.md)
 - [Artwork media administration](docs/development/artwork-media-administration.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)

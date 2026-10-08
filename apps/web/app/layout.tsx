@@ -5,6 +5,7 @@ import { walletClusterSchema } from "@katha/shared";
 import { SiteHeader } from "../components/site-header";
 import { SiteFooter } from "../components/site-footer";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,11 +14,14 @@ export const metadata: Metadata = {
     "Nepali cultural art as Real World Assets, preserving artist authorship, cultural stories and verifiable provenance.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Wallet endpoints and cluster settings are selected when the server starts.
+  // Prerendering would freeze build-machine defaults into administration pages.
+  await connection();
   return (
     <html lang="en">
       <body className="site-frame">

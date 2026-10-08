@@ -4,6 +4,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
+import { runPrimaryJourney } from "../../../scripts/test-primary-journey.mjs";
+import {
+  tokenProgram,
+  fetchToken,
+  findAssociatedTokenPda,
+  TOKEN_PROGRAM_ADDRESS,
+} from "@solana-program/token";
+import * as marketplace from "../src/generated/marketplace/index.js";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import {
@@ -56,6 +65,7 @@ function wallet() {
   const bytes = Buffer.from(publicKey.export({ format: "jwk" }).x!, "base64url");
   return {
     address: getAddressDecoder().decode(bytes),
+    publicKey: [...bytes],
     sign: (message: Uint8Array) => new Uint8Array(sign(null, message, privateKey)),
   };
 }
@@ -83,7 +93,7 @@ async function stop(child: ChildProcess) {
   await new Promise<void>((resolve) => child.once("exit", () => resolve()));
 }
 
-it("onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer", async () => {
+async function lifecycleJourney() {
   // Supplied only by the owned-container runner. Never load developer .env or keys.
   const databaseUrl = process.env.KATHA_TEST_DATABASE_URL;
   const rpcUrl = process.env.KATHA_TEST_SURFPOOL_RPC;
@@ -100,6 +110,8 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
     outsider = wallet();
   const bootstrap = await generateKeyPairSigner(),
     collection = await generateKeyPairSigner();
+  const primaryBrowser = process.env.KATHA_TEST_PRIMARY_BROWSER === "1";
+  const payout = wallet();
   const client = createClient()
     .use(signer(bootstrap))
     .use(
@@ -108,7 +120,8 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
         rpcSubscriptionsUrl: wsUrl,
         transactionConfig: { version: 0 },
       }),
-    );
+    )
+    .use(tokenProgram());
   async function rpc(method: string, params: unknown[]) {
     const response = await fetch(rpcUrl!, {
       method: "POST",
@@ -166,6 +179,8 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
   await client.sendTransaction([initialization.instruction]);
   const indexerRpc = await surfpoolIndexerRpc(rpcUrl);
   const startSlot = String(await rpc("getFirstAvailableBlock", []));
+  const webPort = await freePort();
+  const webOrigin = `http://127.0.0.1:${webPort}`;
   const port = await freePort(),
     origin = `http://127.0.0.1:${port}`;
   const storage = await mkdtemp(join(tmpdir(), "katha-admin-test-"));
@@ -184,9 +199,10 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
     KATHA_STORAGE_ROOT: join(storage, ".storage"),
     KATHA_ADMIN_WALLETS: admin.address,
     KATHA_VERIFIER_WALLETS: verifier.address,
-    KATHA_PUBLIC_APP_ORIGIN: "http://localhost:3000",
+    KATHA_PUBLIC_APP_ORIGIN: primaryBrowser ? webOrigin : "http://localhost:3000",
     KATHA_PUBLIC_API_ORIGIN: origin,
   };
+  let web: ChildProcess | undefined;
   const api = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
     cwd: join(root, "apps/api"),
     env: environment,
@@ -254,6 +270,19 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
     return session.token;
   }
   async function index() {
+    // A fresh local ledger can expose its first block before a finalized root.
+    let ready = false;
+    const throughSlot = BigInt(await rpc("getSlot", [{ commitment: "processed" }]));
+    for (let attempt = 0; attempt < 300; attempt++) {
+      const first = BigInt(await rpc("getFirstAvailableBlock", []));
+      const finalized = BigInt(await rpc("getSlot", [{ commitment: "finalized" }]));
+      if (first <= finalized && throughSlot <= finalized) {
+        ready = true;
+        break;
+      }
+      await delay(100);
+    }
+    expect(ready, "Local ledger has a finalized history window").toBe(true);
     const child = spawn(
       process.execPath,
       ["--import", "tsx", "src/indexer.ts", collection.address, startSlot, "--once"],
@@ -379,6 +408,171 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
       await delay(100);
     }
     expect(ready, "Production API readiness").toBe(true);
+    if (primaryBrowser) {
+      const mint = await generateKeyPairSigner();
+      await rpc("surfnet_setProgramAuthority", [
+        marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+        bootstrap.address,
+      ]);
+      await client.token.instructions
+        .createMint({
+          newMint: mint,
+          decimals: 6,
+          mintAuthority: bootstrap.address,
+          freezeAuthority: null,
+        })
+        .sendTransaction();
+      for (const actor of [admin, outsider, payout, bootstrap])
+        await client.token.instructions
+          .mintToATA({
+            owner: actor.address,
+            mint: mint.address,
+            mintAuthority: bootstrap,
+            amount: actor === outsider ? 10000000n : 0n,
+            decimals: 6,
+          })
+          .sendTransaction();
+      const marketProgram = await fetchEncodedAccount(
+        client.rpc,
+        marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+      );
+      if (!marketProgram.exists) throw new Error("Missing Marketplace program");
+      const marketData = getAddressDecoder().decode(marketProgram.data.subarray(4, 36));
+      await client.sendTransaction([
+        await marketplace.getInitializeMarketplaceInstructionAsync({
+          bootstrapAuthority: bootstrap,
+          programData: marketData,
+          authority: bootstrap,
+          paymentMint: mint.address,
+          commissionBps: 250,
+          secondaryRoyaltyBps: 500,
+          inspectionValiditySeconds: 2592000n,
+        }),
+      ]);
+      const require = createRequire(join(root, "apps/web/package.json"));
+      web = spawn(
+        process.execPath,
+        [
+          require.resolve("next/dist/bin/next"),
+          "start",
+          "--hostname",
+          "127.0.0.1",
+          "--port",
+          String(webPort),
+        ],
+        {
+          cwd: join(root, "apps/web"),
+          env: {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME,
+            NODE_ENV: "production",
+            KATHA_CLUSTER: "localnet",
+            KATHA_PUBLIC_API_ORIGIN: origin,
+            KATHA_PUBLIC_APP_ORIGIN: webOrigin,
+            KATHA_PUBLIC_SOLANA_RPC_URL: rpcUrl,
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      for (const stream of [web.stdout, web.stderr])
+        stream!.on("data", (chunk: Buffer) => {
+          logs += chunk.toString();
+        });
+      await runPrimaryJourney({
+        origin: webOrigin,
+        apiOrigin: origin,
+        actors: [admin, verifier, outsider, payout],
+        index,
+        signTransaction(actor, bytes) {
+          const identity = [admin, verifier, outsider][actor];
+          if (!identity) throw new Error("Unexpected synthetic signer");
+          const tx = getTransactionDecoder().decode(Uint8Array.from(bytes));
+          if (Object.keys(tx.signatures).some((a) => a !== identity.address))
+            throw new Error("Unexpected signers");
+          return [
+            ...getTransactionEncoder().encode({
+              ...tx,
+              signatures: {
+                [identity.address]: signatureBytes(
+                  identity.sign(new Uint8Array(tx.messageBytes)),
+                ),
+              },
+            }),
+          ];
+        },
+        async initializeSaleTerms(kathaId) {
+          const [artwork] = await findArtworkPda({ kathaId });
+          await client.sendTransaction([
+            await marketplace.getInitializeSaleTermsInstructionAsync({
+              artwork,
+              authority: bootstrap,
+              artistPayout: payout.address,
+            }),
+          ]);
+          await index();
+        },
+        async assertPurchase(kathaId, artistId) {
+          const detail = publicArtworkDetailSchema.parse(
+            await json(`/artworks/${kathaId}`),
+          );
+          expect(detail.artist.id).toBe(artistId);
+          expect(detail.creatorWallet).toBeNull();
+          const [recordAddress] = await findArtworkPda({ kathaId });
+          const registryRecord = await fetchEncodedAccount(client.rpc, recordAddress);
+          if (!registryRecord.exists) throw new Error("Registry artwork missing");
+          expect(getArtworkRecordDecoder().decode(registryRecord.data).artistId).toBe(
+            artistId,
+          );
+          expect(detail.ownership.ownerWallet).toBe(outsider.address);
+          expect(detail.custody.state).toBe("KATHA_HELD");
+          const asset = await fetchEncodedAccount(
+            client.rpc,
+            address(detail.chain.coreAssetAddress),
+          );
+          if (!asset.exists) throw new Error("Core asset missing");
+          expect(readCoreAsset(asset, asset.address, collection.address).owner).toBe(
+            outsider.address,
+          );
+          const balance = async (owner: typeof outsider.address) =>
+            (
+              await fetchToken(
+                client.rpc,
+                (
+                  await findAssociatedTokenPda({
+                    owner,
+                    mint: mint.address,
+                    tokenProgram: TOKEN_PROGRAM_ADDRESS,
+                  })
+                )[0],
+              )
+            ).data.amount;
+          expect(await balance(outsider.address)).toBe(9000000n);
+          expect(await balance(payout.address)).toBe(975000n);
+          expect(await balance(bootstrap.address)).toBe(25000n);
+          const history = artworkProvenanceResponseSchema.parse(
+            await json(`/artworks/${kathaId}/provenance`),
+          );
+          expect(history.items.filter((e) => e.type === "MINT")).toHaveLength(1);
+          expect(history.items.find((e) => e.type === "REGISTRATION")).toMatchObject({
+            data: { artistId },
+          });
+          expect(history.items.filter((e) => e.type === "TRANSFER")).toHaveLength(1);
+          expect(history.items.find((e) => e.type === "TRANSFER")).toMatchObject({
+            data: { sale: { isPrimary: true, price: "1000000" } },
+          });
+          expect(JSON.stringify(history)).not.toContain(
+            "Synthetic private inspection notes",
+          );
+          await index();
+          expect(
+            artworkProvenanceResponseSchema.parse(
+              await json(`/artworks/${kathaId}/provenance`),
+            ).items,
+          ).toEqual(history.items);
+        },
+      });
+      return;
+    }
     const adminToken = await login(admin),
       verifierToken = await login(verifier),
       outsiderToken = await login(outsider);
@@ -636,7 +830,11 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
       supportedTransactionVersions: [0],
       movementConfirmed: true,
       collectorWallet: null,
-      transition: { action: "ATTEST_KATHA_CUSTODY", from: "UNKNOWN", to: "KATHA_HELD" },
+      transition: {
+        action: "ATTEST_KATHA_CUSTODY",
+        from: "UNKNOWN",
+        to: "KATHA_HELD",
+      },
     };
     expect(
       (await request(`${adminPath}/operations/custody`, verifierToken, custodyInput))
@@ -826,8 +1024,17 @@ it("onboards one artwork through the production API, PostgreSQL, Registry, Core 
     ])
       expect(logs).not.toContain(secret);
   } finally {
+    if (web) await stop(web);
     await stop(api);
     await indexerRpc.close();
     await rm(storage, { recursive: true, force: true });
   }
-}, 180_000);
+}
+
+it(
+  process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
+    ? "collects an artwork through the production browser, API, local programs and finalized indexer"
+    : "onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer",
+  lifecycleJourney,
+  process.env.KATHA_TEST_PRIMARY_BROWSER === "1" ? 480_000 : 300_000,
+);

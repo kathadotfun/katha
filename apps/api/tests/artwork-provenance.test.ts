@@ -485,7 +485,7 @@ async function withSale(isPrimary = true) {
     payload: {
       name: "ArtworkPurchased",
       listingAddress,
-      revision: "1",
+      revision: "2",
       buyerWallet: wallet,
       isPrimary,
       proceedsWallet: wallet,
@@ -525,6 +525,7 @@ it.each([true, false])(
       data: {
         sale: {
           isPrimary: primary,
+          listingRevision: "1",
           price: "1000000",
           royaltyAmount: primary ? "0" : "50000",
         },
@@ -543,7 +544,7 @@ it.each(["buyer", "authority", "revision", "amount", "source", "duplicate"])(
       row.sale.buyerWallet = "Vote111111111111111111111111111111111111111";
     if (fault === "authority")
       row.listing.listingAddress = "Vote111111111111111111111111111111111111111";
-    if (fault === "revision") row.event.payload.revision = "2";
+    if (fault === "revision") row.event.payload.revision = "3";
     if (fault === "amount") row.sale.platformFee = 3n;
     if (fault === "source") row.event.programAddress = CORE_PROGRAM_ADDRESS;
     if (fault === "duplicate") f.record.sales.push(row);
@@ -649,5 +650,16 @@ it.each(["hash", "scope", "receipt", "media", "version"])(
       return;
     }
     await expect(f.boundary.history(kathaId, query)).rejects.toThrow();
+  },
+);
+
+it.each(["1", "3"])(
+  "rejects settlement revision %s for creation revision 1",
+  async (revision) => {
+    const f = await withSale();
+    f.record.sales[0]!.event.payload.revision = revision;
+    await expect(f.boundary.history(kathaId, query)).rejects.toThrow(
+      "Invalid settlement binding",
+    );
   },
 );

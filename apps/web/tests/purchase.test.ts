@@ -140,7 +140,19 @@ test("purchase controller coalesces, clears stale quotes and prevents replacing 
         },
       }),
     },
-    { artwork: async () => artwork },
+    {
+      artwork: async () => ({
+        ...artwork,
+        chain: { ...artwork.chain, collectionAddress: null },
+      }),
+      provenance: async () => ({
+        ...provenanceFixture,
+        kathaId: artwork.kathaId,
+        attribution: { artist: artwork.artist, creatorWallet: artwork.creatorWallet },
+        chain: artwork.chain,
+        items: [],
+      }),
+    },
     quote.kathaId,
     {
       getSnapshot: () => phase,
@@ -150,6 +162,7 @@ test("purchase controller coalesces, clears stale quotes and prevents replacing 
     },
   );
   await controller.refresh();
+  assert.equal(controller.getSnapshot().collection, artwork.chain.collectionAddress);
   await Promise.all([controller.prepare(), controller.prepare()]);
   assert.equal(prepares, 1);
   assert.equal(controller.getSnapshot().quote, null);
