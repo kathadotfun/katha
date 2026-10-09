@@ -111,14 +111,19 @@ export async function runPrimaryJourney(context) {
             "solana:signTransaction": {
               version: "1.0.0",
               supportedTransactionVersions: [0],
-              signTransaction: async (...inputs) =>
-                Promise.all(
+              signTransaction: async (...inputs) => {
+                if (globalThis.kathaTestRejectNext) {
+                  globalThis.kathaTestRejectNext = false;
+                  throw new Error("Synthetic wallet rejection");
+                }
+                return Promise.all(
                   inputs.map(async (input) => ({
                     signedTransaction: Uint8Array.from(
                       await globalThis.kathaTestSignTransaction([...input.transaction]),
                     ),
                   })),
-                ),
+                );
+              },
             },
           },
         };
@@ -339,7 +344,7 @@ export async function runPrimaryJourney(context) {
       .getByLabel("Actual inspection date and time (your local timezone)", {
         exact: true,
       })
-      .fill(new Date(Date.now() - 60000).toISOString().slice(0, 19));
+      .fill(new Date(Date.now() - 60000).toISOString().slice(0, 16));
     await verifier
       .getByLabel("Private condition notes", { exact: true })
       .fill("Synthetic private inspection notes");
@@ -429,6 +434,35 @@ export async function runPrimaryJourney(context) {
     await buyer
       .getByRole("button", { name: "Refresh purchase quote", exact: true })
       .click();
+    if (context.trust) {
+      await buyer
+        .getByRole("button", { name: "Prepare reviewed purchase", exact: true })
+        .click();
+      const approve = buyer.getByRole("button", {
+        name: "Approve in wallet and submit",
+        exact: true,
+      });
+      await expect(approve).toBeEnabled();
+      await buyer.evaluate(() => {
+        globalThis.kathaTestRejectNext = true;
+      });
+      await approve.click();
+      await expect(
+        buyer.getByText(
+          "Wallet approval or preflight was not completed. No transaction was submitted.",
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await context.trust.assertRejected(id);
+      await buyer
+        .getByRole("button", { name: "Cancel transaction review", exact: true })
+        .click();
+      await postResult(buyer, `/artworks/${id}/purchase-quote`, () =>
+        buyer
+          .getByRole("button", { name: "Refresh purchase quote", exact: true })
+          .click(),
+      );
+    }
     await transact(
       buyer,
       "Prepare reviewed purchase",
@@ -473,7 +507,7 @@ export async function runPrimaryJourney(context) {
         .getByLabel("Actual inspection date and time (your local timezone)", {
           exact: true,
         })
-        .fill(new Date(Date.now() - 60000).toISOString().slice(0, 19));
+        .fill(new Date(Date.now() - 60000).toISOString().slice(0, 16));
       await verifier
         .getByLabel("Private condition notes", { exact: true })
         .fill(`Synthetic private ${reason} inspection`);
@@ -613,6 +647,7 @@ export async function runPrimaryJourney(context) {
       await expect(verifier.getByText(/Owner .*Custody revision 3/)).toBeVisible();
       await inspect("PRE_RESALE");
       await context.collectorDelivery.assertState(id, "APPROVED_A");
+      await context.trust?.verify(id, tokens[0], tokens[2]);
       await visit(buyer, `/collection/${id}/resale`);
       await buyer
         .getByRole("button", { name: "Refresh inspection status", exact: true })
@@ -690,6 +725,7 @@ export async function runPrimaryJourney(context) {
       await secondBuyer
         .getByRole("link", { name: "Review purchase quote", exact: true })
         .click();
+      await context.trust?.verifyExpiredPurchase(id, tokens[4]);
       const quote = await postResult(
         secondBuyer,
         `/artworks/${id}/purchase-quote`,

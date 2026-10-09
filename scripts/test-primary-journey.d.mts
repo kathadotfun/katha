@@ -20,6 +20,11 @@ export function runPrimaryJourney(context: {
   index: () => Promise<void>;
   initializeSaleTerms: (kathaId: string) => Promise<void>;
   assertPurchase: (kathaId: string, artistId: string) => Promise<void>;
+  trust?: {
+    assertRejected: (kathaId: string) => Promise<void>;
+    verify: (kathaId: string, adminToken: string, ownerToken: string) => Promise<void>;
+    verifyExpiredPurchase: (kathaId: string, buyerToken: string) => Promise<void>;
+  };
   collectorDelivery?: {
     waitForClock: () => Promise<void>;
     assertState: (kathaId: string, stage: CollectorJourneyStage) => Promise<void>;

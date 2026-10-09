@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import process from "node:process";
 import { setTimeout } from "node:timers/promises";
 
-const collectorResale = process.argv[2] === "--collector-resale";
+const trustBoundaries = process.argv[2] === "--trust-boundaries";
+const collectorResale = trustBoundaries || process.argv[2] === "--collector-resale";
 const custodyResale = process.argv[2] === "--custody-resale";
 const primaryJourney =
   collectorResale || custodyResale || process.argv[2] === "--primary-journey";
@@ -18,6 +19,7 @@ if (
           "--primary-journey",
           "--custody-resale",
           "--collector-resale",
+          "--trust-boundaries",
         ].includes(arg),
     )
 )
@@ -98,13 +100,15 @@ try {
       process.execPath,
       [
         "scripts/test-core-cpi.mjs",
-        collectorResale
-          ? "--collector-resale"
-          : custodyResale
-            ? "--custody-resale"
-            : primaryJourney
-              ? "--primary-journey"
-              : "--admin-lifecycle",
+        trustBoundaries
+          ? "--trust-boundaries"
+          : collectorResale
+            ? "--collector-resale"
+            : custodyResale
+              ? "--custody-resale"
+              : primaryJourney
+                ? "--primary-journey"
+                : "--admin-lifecycle",
       ],
       {
         stdio: "inherit",

@@ -198,6 +198,7 @@ outside the current scope.
 - [Local primary collecting browser journey](docs/development/primary-journey-tests.md)
 - [Katha-custody resale browser journey](docs/development/custody-resale-tests.md)
 - [Collector-held resale and delivery browser journey](docs/development/collector-resale-tests.md)
+- [Cross-system trust and recovery tests](docs/development/trust-boundary-tests.md)
 - [Artwork media administration](docs/development/artwork-media-administration.md)
 - [NFC tag administration](docs/development/nfc-administration.md)
 - [NFC writing and local/LAN demonstration](docs/development/nfc-tag-writing.md)

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { generateKeyPairSync, sign, randomUUID, createHash } from "node:crypto";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, chmod, stat } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -128,6 +128,7 @@ async function lifecycleJourney() {
     buyerB = wallet();
   const custodyResale = process.env.KATHA_TEST_CUSTODY_RESALE === "1";
   const collectorResale = process.env.KATHA_TEST_COLLECTOR_RESALE === "1";
+  const trustBoundaries = process.env.KATHA_TEST_TRUST_BOUNDARIES === "1";
   const resaleBrowser = custodyResale || collectorResale;
   const client = createClient()
     .use(signer(bootstrap))
@@ -150,7 +151,8 @@ async function lifecycleJourney() {
     if (result.error) throw new Error(`${method}: ${JSON.stringify(result.error)}`);
     return result.result;
   }
-  // Cheatcodes are limited to bootstrap authority and synthetic SOL balances.
+  // Cheatcodes bootstrap synthetic authorities and balances. Inspection expiry
+  // temporarily shortens the disposable config; other faults use the RPC bridge.
   await rpc("surfnet_setProgramAuthority", [REGISTRY, bootstrap.address]);
   for (const actor of [
     bootstrap,
@@ -292,7 +294,7 @@ async function lifecycleJourney() {
     expect((await request("/auth/verify", undefined, input)).status).toBe(401);
     return session.token;
   }
-  async function index() {
+  async function index(expectFailure = false) {
     // A fresh local ledger can expose its first block before a finalized root.
     let ready = false;
     const throughSlot = BigInt(await rpc("getSlot", [{ commitment: "processed" }]));
@@ -334,7 +336,7 @@ async function lifecycleJourney() {
         });
         child.once("exit", (code) => {
           clearTimeout(timeout);
-          if (code === 0) resolve();
+          if (code === (expectFailure ? 1 : 0)) resolve();
           else reject(new Error(`Indexer failed: ${output}`));
         });
       });
@@ -550,11 +552,201 @@ async function lifecycleJourney() {
         }
         return detail;
       }
+      if (trustBoundaries) await login(outsider); // Real one-use challenge replay rejection.
+      async function assertUnchanged(kathaId: string) {
+        await unchanged(kathaId);
+        expect(await balance(outsider.address)).toBe(9000000n);
+        expect(await balance(buyerB.address)).toBe(10000000n);
+      }
+      async function expired(kathaId: string, token: string, purchase: boolean) {
+        const [configAddress] = await marketplace.findConfigPda();
+        const account = await fetchEncodedAccount(client.rpc, configAddress);
+        if (!account.exists) throw new Error("Marketplace config missing");
+        const config = marketplace.getMarketplaceConfigDecoder().decode(account.data);
+        const data = marketplace.getMarketplaceConfigEncoder().encode({
+          ...config,
+          inspectionValiditySeconds: 1n,
+        });
+        try {
+          await rpc("surfnet_setAccount", [
+            configAddress,
+            { data: Buffer.from(data).toString("hex") },
+          ]);
+          const shortened = await fetchEncodedAccount(client.rpc, configAddress);
+          if (!shortened.exists) throw new Error("Marketplace config missing");
+          expect(new Uint8Array(shortened.data)).toEqual(new Uint8Array(data));
+          if (!purchase) {
+            const review = await json(`/resale/artworks/${kathaId}`, token);
+            expect(review).toMatchObject({
+              canList: false,
+              inspection: { status: "EXPIRED" },
+            });
+          }
+          const response = purchase
+            ? await request(`/artworks/${kathaId}/purchase-quote`, token, {
+                supportedTransactionVersions: [0],
+              })
+            : await request(`/artworks/${kathaId}/operations/listing`, token, {
+                idempotencyKey: randomUUID(),
+                expectedRevision: "2",
+                price: "2000000",
+                expiresAt: String(Math.floor(Date.now() / 1000) + 3600),
+                supportedTransactionVersions: [0],
+              });
+          expect(response.status).toBe(409);
+        } finally {
+          await rpc("surfnet_setAccount", [
+            configAddress,
+            { data: Buffer.from(account.data).toString("hex") },
+          ]);
+          const restored = await fetchEncodedAccount(client.rpc, configAddress);
+          expect(restored.exists, "Restored Marketplace config").toBe(true);
+          if (restored.exists)
+            expect(new Uint8Array(restored.data)).toEqual(new Uint8Array(account.data));
+        }
+        await assertUnchanged(kathaId);
+      }
       await runPrimaryJourney({
         origin: webOrigin,
         apiOrigin: origin,
         actors: [admin, verifier, outsider, payout, buyerB],
         index,
+        ...(trustBoundaries
+          ? {
+              trust: {
+                async assertRejected(kathaId: string) {
+                  const detail = publicArtworkDetailSchema.parse(
+                    await json(`/artworks/${kathaId}`),
+                  );
+                  expect(detail.ownership.ownerWallet).toBe(admin.address);
+                  const core = await fetchEncodedAccount(
+                    client.rpc,
+                    address(detail.chain.coreAssetAddress),
+                  );
+                  if (!core.exists) throw new Error("Core missing after rejection");
+                  expect(
+                    readCoreAsset(core, core.address, collection.address).owner,
+                  ).toBe(admin.address);
+                  expect(await balance(outsider.address)).toBe(10000000n);
+                  const history = artworkProvenanceResponseSchema.parse(
+                    await json(`/artworks/${kathaId}/provenance`),
+                  );
+                  expect(
+                    history.items.filter((e) => e.type === "TRANSFER"),
+                  ).toHaveLength(0);
+                },
+                async verify(kathaId: string, adminToken: string, ownerToken: string) {
+                  if (!resaleDetail || !resaleHistory)
+                    throw new Error("Approved resale snapshot missing");
+                  const path = join(
+                    storage,
+                    ".storage",
+                    "public",
+                    `${resaleDetail.metadata.documentHash}.json`,
+                  );
+                  const original = await readFile(path);
+                  const mode = (await stat(path)).mode & 0o777;
+                  // Only this owned synthetic fixture is made writable for corruption.
+                  await chmod(path, mode | 0o200);
+                  try {
+                    const corrupted = Buffer.from(original);
+                    corrupted[corrupted.length - 2] =
+                      corrupted[corrupted.length - 2]! ^ 1;
+                    await writeFile(path, corrupted);
+                    expect(
+                      (await request(`/admin/artworks/${kathaId}/metadata`, adminToken))
+                        .status,
+                    ).toBe(409);
+                    expect(
+                      (await request(new URL(resaleDetail.metadata.uri).pathname))
+                        .status,
+                    ).not.toBe(200);
+                  } finally {
+                    try {
+                      await writeFile(path, original);
+                    } finally {
+                      await chmod(path, mode);
+                    }
+                  }
+                  const restored = await request(
+                    new URL(resaleDetail.metadata.uri).pathname,
+                  );
+                  expect(restored.status).toBe(200);
+                  expect(
+                    createHash("sha256")
+                      .update(new Uint8Array(await restored.arrayBuffer()))
+                      .digest("hex"),
+                  ).toBe(resaleDetail.metadata.documentHash);
+                  const [artwork] = await findArtworkPda({ kathaId });
+                  indexerRpc.setFault({ kind: "ACCOUNT_OWNER", address: artwork });
+                  try {
+                    const response = await request(
+                      `/resale/artworks/${kathaId}`,
+                      ownerToken,
+                    );
+                    expect(response.status).toBe(500);
+                    const error = await response.json();
+                    expect(error).toMatchObject({ error: { code: "INTERNAL_ERROR" } });
+                    for (const text of [
+                      ownerToken,
+                      databaseUrl,
+                      "TypeError",
+                      "program owner",
+                    ])
+                      expect(JSON.stringify(error)).not.toContain(text);
+                  } finally {
+                    indexerRpc.setFault(null);
+                  }
+                  await expired(kathaId, ownerToken, false);
+                  indexerRpc.setFault({ kind: "UNAVAILABLE" });
+                  try {
+                    const response = await request(
+                      `/resale/artworks/${kathaId}`,
+                      ownerToken,
+                    );
+                    expect(response.status).toBe(500);
+                    const error = await response.text();
+                    for (const privateText of [
+                      ownerToken,
+                      adminToken,
+                      databaseUrl,
+                      "Synthetic RPC outage",
+                    ])
+                      expect(error).not.toContain(privateText);
+                    await index(true); // A separate real worker must fail rather than advance.
+                    const afterFailure = artworkProvenanceResponseSchema.parse(
+                      await json(`/artworks/${kathaId}/provenance`),
+                    );
+                    expect(afterFailure.items).toEqual(resaleHistory.items);
+                    expect(afterFailure.indexing.streams).toEqual(
+                      resaleHistory.indexing.streams,
+                    );
+                  } finally {
+                    indexerRpc.setFault(null);
+                  }
+                  await index(); // Restart the real worker on its persisted checkpoints.
+                  await index(); // Replay remains idempotent after recovery.
+                  expect(
+                    artworkProvenanceResponseSchema.parse(
+                      await json(`/artworks/${kathaId}/provenance`),
+                    ).items,
+                  ).toEqual(resaleHistory.items);
+                  await assertUnchanged(kathaId);
+                  for (const privateText of [
+                    ownerToken,
+                    adminToken,
+                    databaseUrl,
+                    dbTarget.password,
+                    "Synthetic RPC outage",
+                  ])
+                    expect(logs).not.toContain(privateText);
+                },
+                async verifyExpiredPurchase(kathaId: string, buyerToken: string) {
+                  await expired(kathaId, buyerToken, true);
+                },
+              },
+            }
+          : {}),
         signTransaction(actor, bytes) {
           const identity = [admin, verifier, outsider, undefined, buyerB][actor];
           if (!identity) throw new Error("Unexpected synthetic signer");
@@ -1461,13 +1653,15 @@ async function lifecycleJourney() {
 }
 
 it(
-  process.env.KATHA_TEST_COLLECTOR_RESALE === "1"
-    ? "inspects and resells collector-held artwork through actual browser delivery coordination"
-    : process.env.KATHA_TEST_CUSTODY_RESALE === "1"
-      ? "resells through two browser wallets while preserving Katha custody and history"
-      : process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
-        ? "collects an artwork through the production browser, API, local programs and finalized indexer"
-        : "onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer",
+  process.env.KATHA_TEST_TRUST_BOUNDARIES === "1"
+    ? "recovers the complete browser lifecycle after authorization, integrity and RPC failures"
+    : process.env.KATHA_TEST_COLLECTOR_RESALE === "1"
+      ? "inspects and resells collector-held artwork through actual browser delivery coordination"
+      : process.env.KATHA_TEST_CUSTODY_RESALE === "1"
+        ? "resells through two browser wallets while preserving Katha custody and history"
+        : process.env.KATHA_TEST_PRIMARY_BROWSER === "1"
+          ? "collects an artwork through the production browser, API, local programs and finalized indexer"
+          : "onboards one artwork through the production API, PostgreSQL, Registry, Core and finalized indexer",
   lifecycleJourney,
   process.env.KATHA_TEST_COLLECTOR_RESALE === "1"
     ? 720_000

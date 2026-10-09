@@ -1,9 +1,15 @@
 import { createServer } from "node:http";
 
+export type LocalRpcFault =
+  | { kind: "UNAVAILABLE" }
+  | { kind: "ACCOUNT_OWNER"; address: string }
+  | { kind: "ACCOUNT_DATA"; address: string; data: string };
+
 /** Surfpool 1.6 reports discovery entries as confirmed even below its finalized slot. */
 export async function surfpoolIndexerRpc(upstream: string) {
   if (new URL(upstream).hostname !== "127.0.0.1")
     throw new Error("Local test RPC only");
+  let fault: LocalRpcFault | null = null;
   async function forward(body: string): Promise<Record<string, unknown>> {
     const response = await fetch(upstream, {
       method: "POST",
@@ -27,7 +33,26 @@ export async function surfpoolIndexerRpc(upstream: string) {
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       const body = Buffer.concat(chunks).toString("utf8");
       const input: Record<string, unknown> = JSON.parse(body);
+      if (fault?.kind === "UNAVAILABLE") throw new Error("Synthetic RPC outage");
       const result = await forward(body);
+      if (fault && !result.error) {
+        const params = input.params as unknown[];
+        const payload = result.result as { value?: unknown };
+        const keys =
+          input.method === "getMultipleAccounts"
+            ? (params[0] as string[])
+            : input.method === "getAccountInfo"
+              ? [String(params[0])]
+              : [];
+        const rows = Array.isArray(payload?.value) ? payload.value : [payload?.value];
+        const position = keys.indexOf(fault.address);
+        const row = rows[position] as Record<string, unknown> | undefined;
+        if (row && typeof row === "object") {
+          if (fault.kind === "ACCOUNT_OWNER")
+            row.owner = "11111111111111111111111111111111";
+          else row.data = [fault.data, "base64"];
+        }
+      }
       if (input.method === "getSignaturesForAddress" && !result.error) {
         const snapshot = await forward(
           JSON.stringify({
@@ -71,6 +96,10 @@ export async function surfpoolIndexerRpc(upstream: string) {
   if (!binding || typeof binding === "string") throw new Error("Missing test RPC port");
   return {
     url: `http://127.0.0.1:${binding.port}`,
+    // Test-only faults are reversible and never alter the upstream ledger.
+    setFault: (value: LocalRpcFault | null) => {
+      fault = value;
+    },
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

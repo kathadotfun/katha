@@ -8,7 +8,8 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
-const collectorResale = process.argv[2] === "--collector-resale";
+const trustBoundaries = process.argv[2] === "--trust-boundaries";
+const collectorResale = trustBoundaries || process.argv[2] === "--collector-resale";
 const custodyResale = process.argv[2] === "--custody-resale";
 const primaryJourney =
   collectorResale || custodyResale || process.argv[2] === "--primary-journey";
@@ -23,6 +24,7 @@ if (
           "--primary-journey",
           "--custody-resale",
           "--collector-resale",
+          "--trust-boundaries",
         ].includes(arg),
     )
 )
@@ -234,6 +236,7 @@ async function main() {
         ...(primaryJourney ? { KATHA_TEST_PRIMARY_BROWSER: "1" } : {}),
         ...(custodyResale ? { KATHA_TEST_CUSTODY_RESALE: "1" } : {}),
         ...(collectorResale ? { KATHA_TEST_COLLECTOR_RESALE: "1" } : {}),
+        ...(trustBoundaries ? { KATHA_TEST_TRUST_BOUNDARIES: "1" } : {}),
         KATHA_TEST_SURFPOOL_RPC: url,
         KATHA_TEST_SURFPOOL_WS: wsUrl,
       },
