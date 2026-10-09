@@ -463,6 +463,10 @@ try {
       },
     });
   }
+  if (process.argv.includes("--shell")) {
+    const { runResponsiveShellChecks } = await import("./test-responsive-shell.mjs");
+    await runResponsiveShellChecks({ origin, apiOrigin });
+  }
   globalThis.console.log(
     "Artwork route: success, canonical metadata, one artwork read, indexed transfer, matching metadata, paged/ unavailable history, unsupported metadata, sparse content, invalid/missing IDs, outage and identity mismatch; exploration filters, paging, images, empty/unavailable states, invalid query rejection and navigation; artist profile, scoped works, paging, empty/unavailable works, slug validation, missing/unverified profiles, outage, identity mismatch and artist links; homepage cultural content, canonical URL, featured artwork/artist links, empty/unavailable catalogue states and safe upstream errors passed.",
   );

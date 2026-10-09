@@ -41,6 +41,13 @@ export async function runPublicBrowsingJourneys({
       });
       const page = await context.newPage();
       page.setDefaultTimeout(10000);
+      async function openNavigation() {
+        const toggle = page.locator(".site-menu-toggle");
+        if (await toggle.isVisible()) {
+          if ((await toggle.getAttribute("aria-expanded")) === "false")
+            await toggle.click();
+        }
+      }
       // The suite must stay local, including browser images and Next prefetches.
       await context.route("**/*", (route) => {
         const url = new URL(route.request().url());
@@ -77,6 +84,7 @@ export async function runPublicBrowsingJourneys({
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(
         "Real World Assets, rooted in Nepali culture.",
       );
+      await openNavigation();
       await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
       const walletPanel = page.locator("#wallet-connection-panel");
       await expect(walletPanel).toContainText("No compatible Solana wallet found");
@@ -1939,7 +1947,11 @@ export async function runPublicBrowsingJourneys({
       await expect(walletPanel.getByRole("status")).toHaveText("Signed in to Katha");
       await expect(adminMain).toContainText("no applicable administration permission");
       await audit("admin permission denied");
-      await page.getByRole("link", { name: "Katha home", exact: true }).click();
+      await page
+        .getByRole("banner")
+        .getByRole("link", { name: "Katha home", exact: true })
+        .click();
+      await openNavigation();
       await walletPanel
         .getByLabel("Wallet account")
         .selectOption("11111111111111111111111111111111");
@@ -1968,9 +1980,7 @@ export async function runPublicBrowsingJourneys({
       await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
       // Restart keyboard traversal from a fresh document after wallet controls.
       await page.reload();
-      await expect(
-        page.getByRole("button", { name: "Connect wallet", exact: true }),
-      ).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await audit("home");
       await page.screenshot({ path: `${artifacts}/home-${width}.png`, fullPage: true });
 
@@ -1993,12 +2003,14 @@ export async function runPublicBrowsingJourneys({
         ["Our purpose", "purpose"],
         ["Traditions", "traditions"],
       ]) {
+        await openNavigation();
         const link = nav.getByRole("link", { name, exact: true });
         await link.focus();
         await page.keyboard.press("Enter");
         await expect(page).toHaveURL(new RegExp(`#${id}$`));
         await expect(page.locator(`#${id}`)).toBeFocused();
       }
+      await openNavigation();
       const explore = nav.getByRole("link", { name: "Explore", exact: true });
       assert.ok((await explore.boundingBox()).height >= 44);
       await explore.click();
@@ -2066,6 +2078,7 @@ export async function runPublicBrowsingJourneys({
       await page.locator('main a[href="/artists/synthetic-artist"]').first().click();
       await expect(page.locator("#artist-name")).toBeVisible();
       await audit("artist");
+      await openNavigation();
       await nav.getByRole("link", { name: "Traditions", exact: true }).click();
       await expect(page.locator("#traditions")).toBeFocused();
       await expect(page).toHaveURL(`${origin}/#traditions`);
@@ -2135,6 +2148,7 @@ export async function runPublicBrowsingJourneys({
       await page.getByRole("button", { name: "Try again" }).click();
       await expect(page.locator("#artwork-title")).toBeVisible();
       await audit("recovered artwork API");
+      await openNavigation();
       await nav.getByRole("link", { name: "Home", exact: true }).click();
       await expect(page.locator("#purpose")).toBeVisible();
 

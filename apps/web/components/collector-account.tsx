@@ -176,7 +176,7 @@ export function CollectorAccountPanel() {
             )}
             {result && (
               <div className="mt-6">
-                <p className="text-5xl font-serif">{result.indexedArtworkCount}</p>
+                <p className="text-5xl font-display">{result.indexedArtworkCount}</p>
                 <p className="mt-2">Published indexed artworks</p>
                 <p className="mt-3 text-sm text-muted">
                   {result.indexedArtworkCount === 0

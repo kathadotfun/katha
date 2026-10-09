@@ -12,7 +12,8 @@
     "test:collection": "node ../../scripts/test-artwork-page.mjs --account",
     "test:account": "node ../../scripts/test-artwork-page.mjs --account",
     "test:artwork-page": "node ../../scripts/test-artwork-page.mjs",
-    "test:public-journeys": "node ../../scripts/test-artwork-page.mjs --browser"
+    "test:public-journeys": "node ../../scripts/test-artwork-page.mjs --browser",
+    "test:responsive-shell": "node ../../scripts/test-artwork-page.mjs --shell"
   },
   "dependencies": {
     "@katha/shared": "workspace:*",

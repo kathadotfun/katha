@@ -1,6 +1,6 @@
 # Katha visual system
 
-Katha presents Nepal's cultural art with the pacing of an exhibition catalogue:
+Katha presents Nepal's cultural art with the pacing of a contemporary exhibition catalogue:
 artwork photography, an artist's name and a readable story lead; verification,
 condition, custody and provenance follow with clearly labelled sources. English
 is the MVP interface language. Use the owned domain `katha.fun` and official X
@@ -82,39 +82,39 @@ constitute a complete application accessibility audit.
 
 ## Typography and rhythm
 
-Use the `font-serif` stack for editorial headings (Iowan Old Style, Palatino,
-Book Antiqua, Georgia, then the platform serif). Use `font-sans` for reading text,
-labels and controls (Helvetica Neue, Arial, then the platform sans). Use
-`font-mono` for hashes, transaction references and exact amounts when needed.
-All stacks are local: there is no font download, hosted font service, new package
-or font asset licence dependency. Exact glyphs and line wrapping vary by platform.
+Use one straight sans-serif family for headings, body text, labels and controls.
+`font-sans` uses the local platform UI stack (`ui-sans-serif`, `system-ui`, Apple
+system fonts and Segoe UI). `font-display` shares that family with stronger weight,
+tighter tracking and fluid display sizes. There are no external font requests or
+new font assets; exact glyphs vary by platform. Use `font-mono` only for hashes,
+transaction references and exact amounts when needed.
 
 | Token          | Size / leading              | Use                       |
 | -------------- | --------------------------- | ------------------------- |
-| `text-caption` | 0.75rem / 1.5               | Short labels and metadata |
+| `text-caption` | 0.875rem / 1.5              | Short labels and metadata |
 | `text-body`    | 1rem / 1.7                  | Ordinary reading text     |
 | `text-lead`    | Fluid 1.125–1.375rem / 1.65 | Introductions             |
-| `text-section` | Fluid 1.875–3.25rem / 1.15  | Section headings          |
-| `text-display` | Fluid 2.75–5.5rem / 1.08    | Main editorial title      |
+| `text-section` | Fluid 1.875–3.5rem / 1.15   | Section headings          |
+| `text-display` | Fluid 2.5–6rem / 1.06       | Main editorial title      |
 
-Heading weight is 400; display tracking is -0.035em, section tracking -0.025em.
+Heading weight is 500; display tracking is -0.035em, section tracking -0.025em.
 Use balanced headings and natural paragraph wrapping. The `eyebrow` class is a
-short uppercase sans label at 0.75rem with 0.12em tracking. Do not use uppercase
+short uppercase sans label at 0.875rem with 0.12em tracking. Do not use uppercase
 for paragraphs. Limit ordinary prose to about 65 characters per line; short
 introductions may use 42ch. Preserve real heading hierarchy and descriptive labels.
 
 Use the existing 0.25rem spacing unit and its multiples. Section spacing is fluid
-3.5–7rem, page gutters 1.25–4rem, and maximum page width 76rem. `page-container`
+3.5–7rem, page gutters 1.25–4rem, and maximum page width 86rem. `page-container`
 implements width and centred gutters. Keep related items close and separate
 chapters with generous whitespace and thin rules. Avoid making every section a
-rounded card; controls use a modest 0.25rem radius and no shadow.
+rounded card; controls use a modest 0.375rem radius and no shadow.
 
 ## Responsive and interaction rules
 
 Design from 320 CSS pixels upward. Use a single column on narrow screens;
 introduce secondary columns only when the content fits. Named breakpoints are
 `sm` 40rem, `md` 48rem and `lg` 64rem. Use fluid typography and container gutters,
-not fixed desktop coordinates. Keep photographs proportional, allow labels and
+not fixed desktop coordinates. The header collapses at 64rem into an in-flow menu; see the [application shell](application-shell.md). Keep photographs proportional, allow labels and
 long wallet references to wrap, and never truncate provenance meaning to fit a card.
 
 `button-primary` provides a 44px-equivalent minimum height, a textual label,

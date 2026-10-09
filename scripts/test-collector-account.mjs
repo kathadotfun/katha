@@ -199,6 +199,8 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       ).toBeVisible();
       assert.equal(accountCalls, 0);
       await expect(main).toContainText("Test-token payments");
+      const menu = page.locator(".site-menu-toggle");
+      if (await menu.isVisible()) await menu.click();
       await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
       await page.evaluate(() => {
         const listeners = new Set();
