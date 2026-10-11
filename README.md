@@ -244,6 +244,7 @@ outside the current scope.
 - [Purchase quotes and sale distributions](docs/development/purchase-quotes-web.md)
 - [Buyer purchase signing and confirmation](docs/development/purchase-web.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
+- [Devnet deployment and operator bootstrap](docs/development/devnet-deployment.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)
 - [Registry artwork authentication](docs/development/registry-verification.md)

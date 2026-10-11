@@ -10,6 +10,10 @@ skip-lint = false
 katha_marketplace = "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
 katha_registry = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
 
+[programs.devnet]
+katha_marketplace = "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
+katha_registry = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"

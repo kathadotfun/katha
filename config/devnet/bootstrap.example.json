@@ -1,0 +1,11 @@
+{
+  "cluster": "devnet",
+  "operator": "REPLACE_WITH_PUBLIC_BOOTSTRAP_OPERATOR",
+  "collection": "REPLACE_WITH_GENERATED_PUBLIC_COLLECTION",
+  "collectionUri": "https://example.invalid/katha-devnet-collection.json",
+  "registrationAuthority": "REPLACE_WITH_PUBLIC_REGISTRATION_AUTHORITY",
+  "verifierAuthority": "REPLACE_WITH_PUBLIC_VERIFIER_AUTHORITY",
+  "custodyAuthority": "REPLACE_WITH_PUBLIC_CUSTODY_AUTHORITY",
+  "treasury": "REPLACE_WITH_PUBLIC_TEST_TREASURY",
+  "paymentMint": "REPLACE_WITH_PUBLIC_SIX_DECIMAL_TEST_MINT"
+}

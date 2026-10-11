@@ -30,6 +30,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
+      - run: pnpm devnet:test
       - name: Install pinned Chromium and browser system dependencies
         run: pnpm --filter @katha/web exec playwright install --with-deps chromium
       - name: Verify responsive public browsing and accessibility

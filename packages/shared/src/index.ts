@@ -263,3 +263,4 @@ export {
 export * from "./collector-api.js";
 
 export * from "./resale-inspection.js";
+export * from "./devnet-bootstrap.js";
