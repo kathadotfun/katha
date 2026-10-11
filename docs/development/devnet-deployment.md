@@ -232,7 +232,7 @@ pnpm db:start
 pnpm db:migrate
 pnpm --filter @katha/api dev
 # Separate terminal, same ignored root .env:
-pnpm indexer:run
+pnpm indexer:run D2zNLnTqoFZPSCqVLiQAPMXbeoNoLABkh3t6jjoMBUUi 509937161
 # Separate terminal, explicit public web configuration:
 KATHA_CLUSTER=devnet KATHA_PUBLIC_SOLANA_RPC_URL=https://api.devnet.solana.com \
   pnpm --filter @katha/web dev
@@ -243,6 +243,13 @@ private fulfillment details stay in configured local storage/database; they do
 not become public merely because the programs use Devnet. Public metadata URIs
 must be reachable by intended demonstration viewers. See
 [storage](local-storage.md) and [indexer operation](chain-activity-ingestion.md).
+
+The worker start above includes the verified Registry initialization. Confirm RPC
+history is retained through the first artwork registration; follow the indexer
+guide for gaps/backfill rather than advancing the start to hide missing activity.
+For the complete operator/collector/phone sequence, use the
+[two-wallet and NFC demonstration guide](devnet-demo.md). Its manual checkpoints
+remain pending until performed.
 
 ## Per-artwork payout binding and collector balances
 

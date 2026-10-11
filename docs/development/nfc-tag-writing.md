@@ -51,8 +51,8 @@ in environment configuration does not deploy it. Hosted setup is outside this gu
 3. Authenticate the configured admin wallet through the existing
    [wallet authentication](wallet-authentication.md) and
    [authorization](api-authorization.md) boundaries. The collector wallet alone
-   does not grant tag administration. Wallet connection/admin UI arrives later;
-   this guide uses existing authenticated API operations.
+   does not grant tag administration. Wallet sign-in is available at `/account`;
+   NFC administration still uses authenticated API operations.
 4. Generate a new lowercase UUID once, retain it for retries, and use
    `POST /admin/artworks/<kathaId>/nfc-tags` with JSON `{ "tagId": "<uuid>" }`.
    Inspect `GET /admin/nfc-tags/<uuid>` and confirm the intended permanent Katha ID
@@ -84,10 +84,15 @@ KATHA_PUBLIC_API_ORIGIN=http://192.168.1.87:3001
 ```
 
 Restart the API with `pnpm --filter @katha/api dev`. Next.js does not load the root
-`.env` through the API's startup command; explicitly supply its API origin:
+`.env` through the API's startup command; explicitly supply matching public
+origins and cluster. For the configured Devnet demonstration:
 
 ```bash
-KATHA_PUBLIC_API_ORIGIN=http://192.168.1.87:3001 pnpm --filter @katha/web dev --hostname 0.0.0.0
+KATHA_CLUSTER=devnet \
+KATHA_PUBLIC_APP_ORIGIN=http://192.168.1.87:3000 \
+KATHA_PUBLIC_API_ORIGIN=http://192.168.1.87:3001 \
+KATHA_PUBLIC_SOLANA_RPC_URL=https://api.devnet.solana.com \
+pnpm --filter @katha/web exec next dev --hostname 0.0.0.0 --port 3000
 ```
 
 Use a trusted local network. Both ports must be reachable from the phone; check
@@ -95,6 +100,10 @@ Wi-Fi client isolation and local firewall settings if the browser cannot connect
 Keep PostgreSQL and Solana RPC private; they do not need exposure to the phone.
 Open the web page and resolver URL directly on the phone before testing a tap.
 These HTTP demo URLs are not production hosting or wallet-security settings.
+Verify the operator's browser/wallet cryptography and sign-in support before
+creating immutable documents for these origins. A phone's successful public HTTP
+page load is not proof that wallet signing works in that browser context. See the
+[complete Devnet demonstration](devnet-demo.md) for the pending manual checkpoints.
 
 Inspect the redirect without following it, using an actually assigned UUID:
 

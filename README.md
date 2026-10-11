@@ -251,6 +251,7 @@ outside the current scope.
 - [Buyer purchase signing and confirmation](docs/development/purchase-web.md)
 - [Complete local Registry lifecycle](docs/development/registry-lifecycle.md)
 - [Devnet deployment and operator bootstrap](docs/development/devnet-deployment.md)
+- [Two-wallet and NFC Devnet demonstration guide (manual verification pending)](docs/development/devnet-demo.md)
 - [Registry platform bootstrap](docs/development/registry-bootstrap.md)
 - [Registry artwork identities](docs/development/registry-artwork.md)
 - [Registry artwork authentication](docs/development/registry-verification.md)
