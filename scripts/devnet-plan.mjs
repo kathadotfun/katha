@@ -63,7 +63,8 @@ export async function createDevnetDeploymentPlan(input) {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const supplied = process.argv.slice(2);
+  const args = supplied[0] === "--" ? supplied.slice(1) : supplied;
   if (args.length !== 1 || args[0] === "--help") {
     process.stdout.write(
       "Usage: pnpm devnet:plan -- helper/devnet/bootstrap.json\nRead-only plan using public JSON inputs. Run pnpm build first.\n",

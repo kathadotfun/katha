@@ -26,8 +26,16 @@ Both `Anchor.toml` cluster sections and the generated clients use these IDs:
 
 | Program     | Public address                                 | Built binary                         |
 | ----------- | ---------------------------------------------- | ------------------------------------ |
-| Registry    | `5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC` | `target/deploy/katha_registry.so`    |
+| Registry    | `Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr` | `target/deploy/katha_registry.so`    |
 | Marketplace | `B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq` | `target/deploy/katha_marketplace.so` |
+
+The Registry ID was aligned with the operator's available identity signer before
+its first Devnet deployment. Registry PDA addresses and Marketplace references
+therefore changed. Existing localnet read models, pending operations and assets
+belong to the earlier program identity; use a fresh demonstration database and
+network setup rather than mixing those records with this deployment. This does
+not migrate existing artworks or rewrite their provenance. The Marketplace ID
+remains unchanged.
 
 Building uses `--ignore-keys`; it must not change those public identities. Before
 an initial deployment, the operator checks that each existing program identity
@@ -50,7 +58,7 @@ following paths are placeholders for the existing identity signers:
 ```bash
 solana --url devnet address
 solana --url devnet balance
-solana --url devnet program show 5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC
+solana --url devnet program show Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr
 solana --url devnet program show B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq
 ```
 
@@ -80,7 +88,7 @@ below permits a public new authority without requesting its CLI signer:
 
 ```bash
 solana --url devnet program set-upgrade-authority \
-  5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC \
+  Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr \
   --new-upgrade-authority OPERATOR_PUBLIC_ADDRESS \
   --skip-new-upgrade-authority-signer-check
 solana --url devnet program set-upgrade-authority \
@@ -179,6 +187,18 @@ program authority relationships and existing configuration. It rejects duplicate
 initialization. Before approval it refetches prerequisites, checks blockhash
 expiry and simulates again. It verifies all returned signatures over the exact
 reviewed message before broadcast, with preflight enabled.
+
+Preparation estimates compute use through Kit, adds a 10% margin (capped at the
+network limit), and simulates the final message again. Version 0 includes an
+explicit zero compute-unit price for this Devnet utility; version 1 uses its
+resource configuration and zero priority fee. These settings appear in the review.
+This avoids leaving fee instructions for the wallet to insert. Wallet changes to
+the reviewed message, including fee changes, remain rejected before submission.
+
+Wallet approval and each RPC request have separate 20-second timeouts. Signing errors show a fixed application diagnostic without
+exposing arbitrary wallet or RPC error details. An expired unsigned review must
+be discarded and prepared again. A retained signature must be reconciled before
+any retry, even if approval or submission reports an error.
 
 Both program configurations are singletons with no update/close instruction in
 this MVP. Review authorities, collection, treasury and mint carefully before

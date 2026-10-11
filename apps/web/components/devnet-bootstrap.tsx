@@ -10,6 +10,7 @@ import { walletSigner } from "@solana/kit-plugin-wallet";
 import { devnetBootstrapSteps, type DevnetBootstrapStep } from "@katha/shared";
 import {
   createDevnetBootstrapClient,
+  publicBootstrapFailure,
   type DevnetBootstrapPrepared,
 } from "../lib/devnet-bootstrap";
 
@@ -82,12 +83,12 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
     setError(null);
     try {
       await work();
-    } catch {
+    } catch (failure) {
       if (active.current)
         setError(
           signed.current
             ? "Outcome uncertain. Keep the retained signature and check it again; do not submit a replacement."
-            : "Action could not complete. Check public input, operator authority, network and simulation prerequisites. No replacement was sent.",
+            : publicBootstrapFailure(failure),
         );
     } finally {
       if (active.current) setBusy(false);
@@ -105,6 +106,7 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
         Every write requires separate review and approval.
       </p>
       <p className="mt-4 break-all">RPC: {rpcUrl}</p>
+      <p className="mt-2 text-sm">Approval diagnostics v2 · 20-second timeout</p>
       <div className="mt-6 flex flex-wrap gap-4">
         {state?.connected ? (
           <>

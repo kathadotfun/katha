@@ -59,7 +59,7 @@ export type InitializeSaleTermsInstruction<
   TProgram extends string = typeof KATHA_MARKETPLACE_PROGRAM_ADDRESS,
   TAccountConfig extends string | AccountMeta<string> = string,
   TAccountRegistryProgram extends string | AccountMeta<string> =
-    "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+    "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
   TAccountArtwork extends string | AccountMeta<string> = string,
   TAccountSaleTerms extends string | AccountMeta<string> = string,
   TAccountAuthority extends string | AccountMeta<string> = string,
@@ -226,7 +226,7 @@ export async function getInitializeSaleTermsInstructionAsync<
   }
   if (!accounts.registryProgram.value) {
     accounts.registryProgram.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.saleTerms.value) {
     accounts.saleTerms.value = await findSaleTermsPda(
@@ -382,7 +382,7 @@ export function getInitializeSaleTermsInstruction<
   // Resolve default values.
   if (!accounts.registryProgram.value) {
     accounts.registryProgram.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =

@@ -18,6 +18,7 @@ import {
   createSolanaRpc,
   createTransactionMessage,
   fetchEncodedAccount,
+  estimateResourceLimitsFactory,
   getBase64Decoder,
   getBase64EncodedWireTransaction,
   getSignatureFromTransaction,
@@ -25,6 +26,10 @@ import {
   partiallySignTransactionWithSigners,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
+  setTransactionMessageComputeUnitLimit,
+  setTransactionMessageComputeUnitPrice,
+  setTransactionMessagePriorityFeeLamports,
+  setTransactionMessageLoadedAccountsDataSizeLimit,
   signature,
   type Instruction,
   type TransactionPartialSigner,
@@ -33,6 +38,46 @@ import {
 } from "@solana/kit";
 import type { WalletNamespace } from "@solana/kit-plugin-wallet";
 import { publicTransactionRpcUrl } from "./transaction-rpc.ts";
+
+const publicApprovalErrors = new Set([
+  "Wallet changed; prepare again",
+  "Unsigned review expired; prepare again",
+  "Bootstrap intent changed",
+  "Bootstrap simulation failed; no wallet approval requested",
+  "Wallet cannot sign separately",
+  "Wallet signing did not complete. Check the selected wallet and approve within 20 seconds; no transaction was submitted.",
+  "Wallet did not return a transaction",
+  "Wallet changed the reviewed transaction message",
+  "Wallet changed during approval",
+  "Wallet changed required signers",
+  "Bootstrap signature did not match the approved message",
+]);
+
+type ApprovalStage =
+  | "wallet connection"
+  | "network and expiry checks"
+  | "account prerequisites"
+  | "repeat simulation"
+  | "wallet signing"
+  | "signed message validation"
+  | "signature validation"
+  | "signature retention"
+  | "submission";
+class BootstrapApprovalError extends Error {
+  constructor(stage: ApprovalStage) {
+    super(
+      `Registry/bootstrap approval stopped during ${stage}. No replacement was sent.`,
+    );
+  }
+}
+
+/** Never expose arbitrary wallet/RPC errors, which can contain sensitive context. */
+export function publicBootstrapFailure(error: unknown): string {
+  if (error instanceof BootstrapApprovalError) return error.message;
+  if (error instanceof Error && publicApprovalErrors.has(error.message))
+    return error.message;
+  return "Action could not complete. Check public input, operator authority, network and simulation prerequisites. No replacement was sent.";
+}
 
 function instructionKey(instruction: Instruction) {
   return JSON.stringify({
@@ -142,7 +187,7 @@ export function createDevnetBootstrapClient(
       const lifetime = await rpc
         .getLatestBlockhash({ commitment: "confirmed" })
         .send({ abortSignal: signal() });
-      const message = appendTransactionMessageInstruction(
+      const baseMessage = appendTransactionMessageInstruction(
         instruction,
         setTransactionMessageLifetimeUsingBlockhash(
           lifetime.value,
@@ -157,6 +202,42 @@ export function createDevnetBootstrapClient(
           ),
         ),
       );
+      // Specify v0 fees before wallet review so wallets need not insert their
+      // own priority-fee instructions. Mutation after approval remains forbidden.
+      const feeMessage =
+        baseMessage.version === 0
+          ? setTransactionMessageComputeUnitPrice(0n, { ...baseMessage, version: 0 })
+          : setTransactionMessagePriorityFeeLamports(0n, {
+              ...baseMessage,
+              version: 1,
+            });
+      const estimate = await estimateResourceLimitsFactory({ rpc })(feeMessage, {
+        commitment: "confirmed",
+        abortSignal: signal(),
+      });
+      if (
+        !Number.isSafeInteger(estimate.computeUnitLimit) ||
+        estimate.computeUnitLimit <= 0 ||
+        estimate.computeUnitLimit > 1_400_000
+      )
+        throw new Error("Bootstrap compute estimate unavailable");
+      const computeUnitLimit = Math.min(
+        1_400_000,
+        Math.ceil((estimate.computeUnitLimit * 11) / 10),
+      );
+      const limitedMessage = setTransactionMessageComputeUnitLimit(
+        computeUnitLimit,
+        feeMessage,
+      );
+      const message =
+        limitedMessage.version === 1
+          ? setTransactionMessageLoadedAccountsDataSizeLimit(
+              "loadedAccountsDataSizeLimit" in estimate
+                ? estimate.loadedAccountsDataSizeLimit
+                : undefined,
+              limitedMessage,
+            )
+          : limitedMessage;
       const transaction = compileTransaction(message);
       const simulation = await simulate(transaction);
       const fee = await rpc
@@ -182,6 +263,8 @@ export function createDevnetBootstrapClient(
             step,
             cluster: "devnet",
             transactionVersion: message.version,
+            computeUnitLimit,
+            computeUnitPriceMicroLamports: "0",
             requiredSigners: Object.keys(transaction.signatures),
             feePayer: config.operator,
             collection: config.collection,
@@ -211,90 +294,112 @@ export function createDevnetBootstrapClient(
       prepared: DevnetBootstrapPrepared,
       onSigned: (value: string) => void,
     ) {
-      const actor = connected();
-      if (
-        actor.wallet !== prepared.wallet ||
-        actor.account.address !== prepared.config.operator
-      )
-        throw new Error("Wallet changed; prepare again");
-      await checkNetwork();
-      if (
-        (await rpc
-          .getBlockHeight({ commitment: "confirmed" })
-          .send({ abortSignal: signal() })) > prepared.lastValidBlockHeight
-      )
-        throw new Error("Unsigned review expired; prepare again");
-      const current = await prepareDevnetBootstrapInstruction(
-        prepared.step,
-        prepared.config,
-        read,
-        prepared.sale,
-      );
-      if (instructionKey(current) !== prepared.instructionKey)
-        throw new Error("Bootstrap intent changed");
-      await simulate(prepared.transaction);
-      const partial = prepared.collectionSigner
-        ? await partiallySignTransactionWithSigners(
-            [prepared.collectionSigner],
-            prepared.transaction,
-          )
-        : prepared.transaction;
-      // The wallet is the sole operator/fee payer; collection creation additionally
-      // uses a fresh temporary Devnet account signer retained only in this tab.
-      const signer = actor.signer;
-      if (!signer || !isTransactionModifyingSigner(signer))
-        throw new Error("Wallet cannot sign separately");
-      const [signed] = await signer.modifyAndSignTransactions([partial], {
-        abortSignal: signal(),
-      });
-      if (!signed) throw new Error("Wallet did not return a transaction");
-      assertUnmodifiedBootstrapMessage(
-        prepared.transaction.messageBytes,
-        signed.messageBytes,
-      );
-      const after = connected();
-      if (
-        after.wallet !== actor.wallet ||
-        after.account.address !== actor.account.address
-      )
-        throw new Error("Wallet changed during approval");
-      const required = Object.keys(prepared.transaction.signatures);
-      if (Object.keys(signed.signatures).length !== required.length)
-        throw new Error("Wallet changed required signers");
-      for (const key of required) {
-        const bytes = signed.signatures[address(key)];
+      let stage: ApprovalStage = "wallet connection";
+      try {
+        const actor = connected();
         if (
-          !bytes ||
-          !(await verifyWalletSignature(
-            key,
-            Uint8Array.from(signed.messageBytes),
-            Uint8Array.from(bytes),
-          ))
+          actor.wallet !== prepared.wallet ||
+          actor.account.address !== prepared.config.operator
         )
-          throw new Error("Bootstrap signature did not match the approved message");
-      }
-      const retained = getSignatureFromTransaction(signed);
-      onSigned(retained); // Retain before broadcast; unknown results cannot initiate replacement sends.
-      await checkNetwork();
-      if (
-        (await rpc
-          .getBlockHeight({ commitment: "confirmed" })
-          .send({ abortSignal: signal() })) > prepared.lastValidBlockHeight
-      )
-        throw new Error(
-          "Signed transaction expired; reconcile its retained signature before retrying",
+          throw new Error("Wallet changed; prepare again");
+        stage = "network and expiry checks";
+        await checkNetwork();
+        if (
+          (await rpc
+            .getBlockHeight({ commitment: "confirmed" })
+            .send({ abortSignal: signal() })) > prepared.lastValidBlockHeight
+        )
+          throw new Error("Unsigned review expired; prepare again");
+        stage = "account prerequisites";
+        const current = await prepareDevnetBootstrapInstruction(
+          prepared.step,
+          prepared.config,
+          read,
+          prepared.sale,
         );
-      const sent = await rpc
-        .sendTransaction(getBase64EncodedWireTransaction(signed), {
-          encoding: "base64",
-          skipPreflight: false,
-          preflightCommitment: "confirmed",
-          maxRetries: 3n,
-        })
-        .send({ abortSignal: signal() });
-      if (sent !== retained)
-        throw new Error("Submission returned a different signature");
-      return retained;
+        if (instructionKey(current) !== prepared.instructionKey)
+          throw new Error("Bootstrap intent changed");
+        stage = "repeat simulation";
+        await simulate(prepared.transaction);
+        const partial = prepared.collectionSigner
+          ? await partiallySignTransactionWithSigners(
+              [prepared.collectionSigner],
+              prepared.transaction,
+            )
+          : prepared.transaction;
+        // The wallet is the sole operator/fee payer; collection creation additionally
+        // uses a fresh temporary Devnet account signer retained only in this tab.
+        const signer = actor.signer;
+        if (!signer || !isTransactionModifyingSigner(signer))
+          throw new Error("Wallet cannot sign separately");
+        // Block height is still checked after signing and before broadcast.
+        stage = "wallet signing";
+        const [signed] = await signer
+          .modifyAndSignTransactions([partial], {
+            abortSignal: signal(),
+          })
+          .catch(() => {
+            throw new Error(
+              "Wallet signing did not complete. Check the selected wallet and approve within 20 seconds; no transaction was submitted.",
+            );
+          });
+        if (!signed) throw new Error("Wallet did not return a transaction");
+        stage = "signed message validation";
+        assertUnmodifiedBootstrapMessage(
+          prepared.transaction.messageBytes,
+          signed.messageBytes,
+        );
+        const after = connected();
+        if (
+          after.wallet !== actor.wallet ||
+          after.account.address !== actor.account.address
+        )
+          throw new Error("Wallet changed during approval");
+        stage = "signature validation";
+        const required = Object.keys(prepared.transaction.signatures);
+        if (Object.keys(signed.signatures).length !== required.length)
+          throw new Error("Wallet changed required signers");
+        for (const key of required) {
+          const bytes = signed.signatures[address(key)];
+          if (
+            !bytes ||
+            !(await verifyWalletSignature(
+              key,
+              Uint8Array.from(signed.messageBytes),
+              Uint8Array.from(bytes),
+            ))
+          )
+            throw new Error("Bootstrap signature did not match the approved message");
+        }
+        stage = "signature retention";
+        const retained = getSignatureFromTransaction(signed);
+        onSigned(retained); // Retain before broadcast; unknown results cannot initiate replacement sends.
+        stage = "submission";
+        await checkNetwork();
+        if (
+          (await rpc
+            .getBlockHeight({ commitment: "confirmed" })
+            .send({ abortSignal: signal() })) > prepared.lastValidBlockHeight
+        )
+          throw new Error(
+            "Signed transaction expired; reconcile its retained signature before retrying",
+          );
+        const sent = await rpc
+          .sendTransaction(getBase64EncodedWireTransaction(signed), {
+            encoding: "base64",
+            skipPreflight: false,
+            preflightCommitment: "confirmed",
+            maxRetries: 3n,
+          })
+          .send({ abortSignal: signal() });
+        if (sent !== retained)
+          throw new Error("Submission returned a different signature");
+        return retained;
+      } catch (error) {
+        if (error instanceof Error && publicApprovalErrors.has(error.message))
+          throw error;
+        throw new BootstrapApprovalError(stage);
+      }
     },
     async check(retained: string) {
       await checkNetwork();

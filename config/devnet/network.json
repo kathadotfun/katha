@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "cluster": "devnet",
+  "genesisHash": "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  "status": "bootstrap-verified",
+  "verifiedAtFinalizedSlot": 509938589,
+  "verification": {
+    "programBinariesMatch": true,
+    "bootstrapReceiptsFinalized": true,
+    "realArtworkTwoWalletNfcDemoVerified": false
+  },
+  "rpc": {
+    "http": "https://api.devnet.solana.com",
+    "subscriptions": "wss://api.devnet.solana.com"
+  },
+  "bootstrapInputs": {
+    "cluster": "devnet",
+    "operator": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+    "collection": "D2zNLnTqoFZPSCqVLiQAPMXbeoNoLABkh3t6jjoMBUUi",
+    "collectionUri": "https://raw.githubusercontent.com/kathadotfun/katha/bb897dbb47b0ce728cb52c4014a5a35ff7627445/config/devnet/collection.json",
+    "registrationAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+    "verifierAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+    "custodyAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+    "treasury": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+    "paymentMint": "21f6RVabPpfoLipUf75tNjpdfRQupKXKgkPGdST8ZGam"
+  },
+  "programs": {
+    "registry": {
+      "programId": "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
+      "programData": "B3TypFKbk67jGmpGFua26SPWRibdv3VykYPC3FVmqR2g",
+      "upgradeAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+      "deploymentSignature": "g9BoGnE2v7s6PkTRwCCXmVeUv9ygjJbmv664nBPAcrwFGxiXuiVG6RndJjt6NYRGCcdXwmMk2kJWfTijSK4dMuc",
+      "deploymentSlot": 509919326,
+      "binary": {
+        "byteLength": 665416,
+        "sha256": "fbc9e231327996a72f1c14501e82d80fdacba8fa1c8caa30a6e326cb6548c8b3"
+      },
+      "configuration": {
+        "address": "Dvyw1uy7pF6hXv3beBKYq7RLeeJkbRRpuZcNnmALoQHs",
+        "initializationSignature": "3YVBq6YggYvket8pSBRGiwCD2G31h1upb6AaskZRgWu31CKqNuU4gF1ckS5mspmMv1KHpCGtCeXkAzfYL3tGKF2z",
+        "initializationSlot": 509937161,
+        "finalized": true,
+        "authority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+        "registrationAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+        "verifierAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+        "custodyAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+        "treasury": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+        "collection": "D2zNLnTqoFZPSCqVLiQAPMXbeoNoLABkh3t6jjoMBUUi",
+        "collectionAuthority": "AkCfnp44oqqgdoHU65kYAfCD8Gj4KXu3aKwHHKRvZnWW",
+        "bump": 255,
+        "collectionAuthorityBump": 255
+      }
+    },
+    "marketplace": {
+      "programId": "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq",
+      "programData": "4oMuvyPdTJ4DYqLDJUjvFKhT6RrdCzT9dy6yYYSXsUv8",
+      "upgradeAuthority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+      "deploymentSignature": "5bbhqYkU2yQGGcwn6RGjN5Gn13tnXT5jaJQS7PdPgU4V2Tw8mpNGTcawqy8RqXPAmqRioab19gUSuu1WbXZosHt7",
+      "deploymentSlot": 509920193,
+      "binary": {
+        "byteLength": 579552,
+        "sha256": "c1040afda976035afdec38f77901b838586ba2cd90930bb0183e1af2672bf676"
+      },
+      "configuration": {
+        "address": "55UWqsPB5Rr4KhQSGT25i7xS2eiFo2RpjiUgJz3Frint",
+        "initializationSignature": "2yS2stBQCQh5EgbQVUB5oDWBZao3hAumJ7bjhuJxWTXYWtbQ953UU3ho1A9HXiEv9xq5tBsU28k4kBzRsSoaYgtU",
+        "initializationSlot": 509938040,
+        "finalized": true,
+        "version": 1,
+        "authority": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+        "registryProgram": "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
+        "registryConfig": "Dvyw1uy7pF6hXv3beBKYq7RLeeJkbRRpuZcNnmALoQHs",
+        "collection": "D2zNLnTqoFZPSCqVLiQAPMXbeoNoLABkh3t6jjoMBUUi",
+        "treasury": "DKiWVyP2QHs16f5mncnG3QHJLXev8qPnYKzqP6qmfFHR",
+        "paymentMint": "21f6RVabPpfoLipUf75tNjpdfRQupKXKgkPGdST8ZGam",
+        "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "paymentDecimals": 6,
+        "commissionBps": 250,
+        "secondaryRoyaltyBps": 500,
+        "inspectionValiditySeconds": "2592000",
+        "bump": 254
+      }
+    }
+  },
+  "collection": {
+    "address": "D2zNLnTqoFZPSCqVLiQAPMXbeoNoLABkh3t6jjoMBUUi",
+    "updateAuthority": "AkCfnp44oqqgdoHU65kYAfCD8Gj4KXu3aKwHHKRvZnWW",
+    "name": "Katha Devnet Test Collection",
+    "uri": "https://raw.githubusercontent.com/kathadotfun/katha/bb897dbb47b0ce728cb52c4014a5a35ff7627445/config/devnet/collection.json",
+    "owner": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d",
+    "creationSignature": "3YXfBMivA3H2cwMpsp44SSbBLCBZ98EmhLzPVM2G8hhjHWvguCoyRTNL7XbnKxmM92SaXvkgyY4WBGfL7QgFcLbh",
+    "creationSlot": 509927032,
+    "finalized": true,
+    "finalizedReadSlot": 509927535
+  },
+  "collectionMetadata": {
+    "uri": "https://raw.githubusercontent.com/kathadotfun/katha/bb897dbb47b0ce728cb52c4014a5a35ff7627445/config/devnet/collection.json",
+    "sha256": "f947211c211d00e08c3d21838cfb1ee93ab69112568f60a5be26b1cf59533450",
+    "exactPublicBytesVerified": true
+  },
+  "paymentMint": {
+    "address": "21f6RVabPpfoLipUf75tNjpdfRQupKXKgkPGdST8ZGam",
+    "tokenProgram": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+    "decimals": 6,
+    "label": "Katha Devnet test token",
+    "mintAuthority": "J8a1REuSLoviz2iyfmM8hL51ouXtG88PnUNJBFF3sPgt",
+    "freezeAuthority": null,
+    "creationSignature": "Y8z3W3D8obtfYuJ9M1jL8Hw3MmPcvi7mbuB7d6YpLFgrYhGPuichF4qqcSBXjgnaMQWSQFUMmLQ3V8urApRDb4J",
+    "creationSlot": 509921012
+  },
+  "testSettings": {
+    "commissionBps": 250,
+    "secondaryRoyaltyBps": 500,
+    "inspectionValiditySeconds": "2592000"
+  }
+}

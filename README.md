@@ -31,6 +31,12 @@ bridge to the artwork record, not proof by itself.
 
 ## Project status
 
+Both programs and their singleton configurations are initialized on Solana Devnet,
+with a Core collection and a six-decimal test payment mint. Public addresses,
+finalized receipts and deployed binary hashes are recorded in the
+[verified Devnet configuration](docs/development/devnet-network.md).
+The real-artwork, two-wallet and NFC demonstration remains to be verified.
+
 Katha is under active development. This repository currently contains the public
 product specification, architecture decisions, repository safeguards, a pinned
 pnpm workspace, shared strict TypeScript presets, lint/format checks, task

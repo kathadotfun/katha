@@ -8,11 +8,11 @@ skip-lint = false
 
 [programs.localnet]
 katha_marketplace = "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
-katha_registry = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+katha_registry = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr"
 
 [programs.devnet]
 katha_marketplace = "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
-katha_registry = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+katha_registry = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr"
 
 [provider]
 cluster = "localnet"

@@ -9,6 +9,10 @@ import {
   getTransactionDecoder,
   getBase64Encoder,
   getSignatureFromTransaction,
+  getCompiledTransactionMessageDecoder,
+  decompileTransactionMessage,
+  getTransactionMessageComputeUnitLimit,
+  getTransactionMessageComputeUnitPrice,
   type Transaction,
   type Address,
   type createSolanaRpc,
@@ -16,7 +20,10 @@ import {
 import type { WalletState } from "@solana/kit-plugin-wallet";
 import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "@katha/solana/registry";
 import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
-import { createDevnetBootstrapClient } from "../lib/devnet-bootstrap.ts";
+import {
+  createDevnetBootstrapClient,
+  publicBootstrapFailure,
+} from "../lib/devnet-bootstrap.ts";
 
 async function fixture() {
   const operator = await generateKeyPairSigner(),
@@ -50,6 +57,8 @@ async function fixture() {
     simulationError: false,
     mutate: false,
     invalidSignature: false,
+    walletError: false,
+    rpcError: false,
     sendError: false,
     finalized: false,
     executionError: false,
@@ -58,6 +67,7 @@ async function fixture() {
     signs: 0,
     sends: 0,
     retained: "",
+    supportedVersions: new Set<number>([0]),
   };
   const account = (data: Uint8Array, executable: boolean) => ({
     data: [Buffer.from(data).toString("base64"), "base64"],
@@ -68,7 +78,12 @@ async function fixture() {
     space: BigInt(data.length),
   });
   const rpc = {
-    getGenesisHash: () => ({ send: async () => controls.genesis }),
+    getGenesisHash: () => ({
+      send: async () => {
+        if (controls.rpcError) throw new Error("private RPC error context");
+        return controls.genesis;
+      },
+    }),
     getAccountInfo: (key: Address) => ({
       send: async () => ({
         context: { slot: 1n },
@@ -102,6 +117,7 @@ async function fixture() {
             ? { InstructionError: [0, "InvalidArgument"] }
             : null,
           unitsConsumed: 100n,
+          loadedAccountsDataSize: 1000,
         },
       }),
     }),
@@ -139,11 +155,12 @@ async function fixture() {
     connected: {
       account: { address: operator.address },
       wallet: { name: "Synthetic wallet" },
-      supportedTransactionVersions: new Set([0]),
+      supportedTransactionVersions: controls.supportedVersions,
       signer: {
         address: operator.address,
         modifyAndSignTransactions: async (transactions: Transaction[]) => {
           controls.signs++;
+          if (controls.walletError) throw new Error("private wallet error context");
           if (controls.expireDuringApproval) controls.height = 101n;
           const signed = await partiallySignTransactionWithSigners(
             [operator],
@@ -194,6 +211,15 @@ test("preparation does not sign or send; explicit approval verifies both signatu
   assert.equal(f.controls.signs, 0);
   assert.equal(f.controls.sends, 0);
   assert.equal(Object.keys(prepared.transaction.signatures).length, 2);
+  const message = decompileTransactionMessage(
+    getCompiledTransactionMessageDecoder().decode(prepared.transaction.messageBytes),
+  );
+  if (message.version !== 0) throw new Error("Expected reviewed v0 transaction");
+  assert.equal(getTransactionMessageComputeUnitLimit(message), 110);
+  assert.equal(getTransactionMessageComputeUnitPrice(message), 0n);
+  const summary = JSON.parse(prepared.summary);
+  assert.equal(summary.computeUnitLimit, 110);
+  assert.equal(summary.computeUnitPriceMicroLamports, "0");
   const signature = await f.client.approve(prepared, f.retain);
   assert.equal(signature, f.controls.retained);
   assert.equal(f.controls.signs, 1);
@@ -259,4 +285,62 @@ test("confirmed errors stay unknown until finalized; approval-time expiry retain
   assert.equal(await f.client.check(f.controls.retained), "UNKNOWN");
   f.controls.finalized = true;
   assert.equal(await f.client.check(f.controls.retained), "FAILED");
+});
+
+test("wallet signing errors identify the approval stage without exposing wallet details or sending", async () => {
+  const f = await fixture(),
+    prepared = await f.prepare();
+  f.controls.walletError = true;
+  await assert.rejects(f.client.approve(prepared, f.retain), (error: unknown) => {
+    assert.match(publicBootstrapFailure(error), /Wallet signing did not complete/);
+    assert.doesNotMatch(publicBootstrapFailure(error), /private wallet error context/);
+    return true;
+  });
+  assert.equal(f.controls.sends, 0);
+  assert.equal(f.controls.retained, "");
+});
+
+test("approval diagnostics expose only fixed application messages", () => {
+  assert.equal(
+    publicBootstrapFailure(
+      new Error("Wallet changed the reviewed transaction message"),
+    ),
+    "Wallet changed the reviewed transaction message",
+  );
+  assert.equal(
+    publicBootstrapFailure(new Error("Unsigned review expired; prepare again")),
+    "Unsigned review expired; prepare again",
+  );
+  assert.doesNotMatch(
+    publicBootstrapFailure(new Error("secret RPC credential")),
+    /secret RPC credential/,
+  );
+});
+
+test("unclassified RPC failure reports its stage and cannot sign or send", async () => {
+  const f = await fixture(),
+    prepared = await f.prepare();
+  f.controls.rpcError = true;
+  await assert.rejects(f.client.approve(prepared, f.retain), (error: unknown) => {
+    assert.match(publicBootstrapFailure(error), /network and expiry checks/);
+    assert.doesNotMatch(publicBootstrapFailure(error), /private RPC error context/);
+    return true;
+  });
+  assert.equal(f.controls.signs, 0);
+  assert.equal(f.controls.sends, 0);
+});
+
+test("v1 review contains explicit compute, loaded data and priority fee configuration", async () => {
+  const f = await fixture();
+  f.controls.supportedVersions.add(1);
+  const prepared = await f.prepare();
+  const message = decompileTransactionMessage(
+    getCompiledTransactionMessageDecoder().decode(prepared.transaction.messageBytes),
+  );
+  if (message.version !== 1) throw new Error("Expected reviewed v1 transaction");
+  assert.equal(message.config?.computeUnitLimit, 110);
+  assert.equal(message.config?.loadedAccountsDataSizeLimit, 1000);
+  assert.equal(message.config?.priorityFeeLamports, 0n);
+  await f.client.approve(prepared, f.retain);
+  assert.equal(f.controls.sends, 1);
 });

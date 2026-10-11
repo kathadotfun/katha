@@ -68,7 +68,7 @@ export type CreateListingInstruction<
   TProgram extends string = typeof KATHA_MARKETPLACE_PROGRAM_ADDRESS,
   TAccountConfig extends string | AccountMeta<string> = string,
   TAccountRegistryProgram extends string | AccountMeta<string> =
-    "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+    "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
   TAccountRegistryConfig extends string | AccountMeta<string> = string,
   TAccountArtwork extends string | AccountMeta<string> = string,
   TAccountVerification extends string | AccountMeta<string> = string,
@@ -386,7 +386,7 @@ export async function getCreateListingInstructionAsync<
   }
   if (!accounts.registryProgram.value) {
     accounts.registryProgram.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.registryConfig.value) {
     accounts.registryConfig.value = await findRegistryConfigPda({
@@ -778,7 +778,7 @@ export function getCreateListingInstruction<
   // Resolve default values.
   if (!accounts.registryProgram.value) {
     accounts.registryProgram.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.coreProgram.value) {
     accounts.coreProgram.value =

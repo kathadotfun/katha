@@ -36,7 +36,7 @@ export function renderTransactionReviewPhase(phase) {
         phase,
         accounts: [{ address: "11111111111111111111111111111111", role: 3 }],
         feeLamports: "5000",
-        program: "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+        program: "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
         signature: ["review", "signing"].includes(phase) ? null : "1".repeat(88),
         error: null,
         operation: {

@@ -5519,7 +5519,7 @@ it("appends metadata revisions under parent locks and blocks unresolved signed c
     operationPreparations,
   } = await import("../src/index.js");
   const address = "11111111111111111111111111111112",
-    program = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC";
+    program = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr";
   const signature = (
     "Z" + randomUUID().replaceAll("-", "").replaceAll("0", "1")
   ).padEnd(88, "Z");

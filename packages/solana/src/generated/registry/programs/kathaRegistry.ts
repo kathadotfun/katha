@@ -129,7 +129,7 @@ import {
 } from "../pdas/index.js";
 
 export const KATHA_REGISTRY_PROGRAM_ADDRESS =
-  "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+  "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
 
 export enum KathaRegistryAccount {
   ArtworkRecord,
@@ -506,7 +506,7 @@ export function identifyKathaRegistryInstruction(
 }
 
 export type ParsedKathaRegistryInstruction<
-  TProgram extends string = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+  TProgram extends string = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
 > =
   | ({
       instructionType: KathaRegistryInstruction.InitializeCondition;

@@ -23,7 +23,7 @@ export async function findVerificationPda(
   config: { programAddress?: Address | undefined } = {},
 ): Promise<ProgramDerivedAddress> {
   const {
-    programAddress = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">,
+    programAddress = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">,
   } = config;
   return await getProgramDerivedAddress({
     programAddress,

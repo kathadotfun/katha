@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
+declare_id!("Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr");
 
 pub const CONFIG_SEED: &[u8] = b"katha-config";
 pub const COLLECTION_AUTHORITY_SEED: &[u8] = b"collection-authority";

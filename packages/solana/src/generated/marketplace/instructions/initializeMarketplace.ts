@@ -66,7 +66,7 @@ export type InitializeMarketplaceInstruction<
     "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq",
   TAccountProgramData extends string | AccountMeta<string> = string,
   TAccountRegistryProgram extends string | AccountMeta<string> =
-    "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+    "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
   TAccountRegistryConfig extends string | AccountMeta<string> = string,
   TAccountAuthority extends string | AccountMeta<string> = string,
   TAccountPaymentMint extends string | AccountMeta<string> = string,
@@ -320,7 +320,7 @@ export async function getInitializeMarketplaceInstructionAsync<
   }
   if (!accounts.registryProgram.value) {
     accounts.registryProgram.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.registryConfig.value) {
     accounts.registryConfig.value = await findRegistryConfigPda({
@@ -559,7 +559,7 @@ export function getInitializeMarketplaceInstruction<
   }
   if (!accounts.registryProgram.value) {
     accounts.registryProgram.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =

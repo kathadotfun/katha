@@ -1,5 +1,5 @@
 {
-  "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+  "address": "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
   "metadata": {
     "name": "katha_registry",
     "version": "0.1.0",
@@ -574,7 +574,7 @@
         },
         {
           "name": "program",
-          "address": "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC"
+          "address": "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr"
         },
         {
           "name": "program_data"

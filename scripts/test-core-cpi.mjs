@@ -31,7 +31,7 @@ if (
   throw new Error("Unknown program test option");
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const coreProgram = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d";
-const registryProgram = "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC";
+const registryProgram = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr";
 const coreSha256 = "5680d2371204033f55cdcf0c08d393ed737d99cfe35d83f65befe80f7537484a";
 const coreBinary = join(root, "target/test-fixtures/core-devnet.so");
 const registryBinary = join(root, "target/core-cpi-test/katha_registry.so");

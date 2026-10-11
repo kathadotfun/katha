@@ -57,7 +57,7 @@ export type InitializePlatformInstruction<
   TAccountConfig extends string | AccountMeta<string> = string,
   TAccountBootstrapAuthority extends string | AccountMeta<string> = string,
   TAccountProgram extends string | AccountMeta<string> =
-    "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+    "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
   TAccountProgramData extends string | AccountMeta<string> = string,
   TAccountCollection extends string | AccountMeta<string> = string,
   TAccountCollectionAuthority extends string | AccountMeta<string> = string,
@@ -261,7 +261,7 @@ export async function getInitializePlatformInstructionAsync<
   }
   if (!accounts.program.value) {
     accounts.program.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.collectionAuthority.value) {
     accounts.collectionAuthority.value = await findCollectionAuthorityPda({
@@ -436,7 +436,7 @@ export function getInitializePlatformInstruction<
   // Resolve default values.
   if (!accounts.program.value) {
     accounts.program.value =
-      "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC" as Address<"5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC">;
+      "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr" as Address<"Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr">;
   }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =

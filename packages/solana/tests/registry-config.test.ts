@@ -53,7 +53,7 @@ import {
   simulateRegistryTransaction,
 } from "../src/lifecycle.js";
 
-const REGISTRY = address("5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC");
+const REGISTRY = address("Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr");
 const SYSTEM = address("11111111111111111111111111111111");
 const UPGRADEABLE_LOADER = address("BPFLoaderUpgradeab1e11111111111111111111111");
 const coreBinary = process.env.KATHA_TEST_CORE_SO;

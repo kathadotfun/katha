@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { CORE_PROGRAM_ADDRESS } from "../src/core.js";
 
 const REGISTRY_PROGRAM_ADDRESS = address(
-  "5829CUnLsucsi3Tj7573LYV5gNQo35ztGhdY4yhNoAkC",
+  "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
 );
 const SYSTEM_PROGRAM_ADDRESS = address("11111111111111111111111111111111");
 const coreBinary = process.env.KATHA_TEST_CORE_SO;
