@@ -1,6 +1,8 @@
 # Katha Devnet MVP specification
 
-Status: planned and under implementation.
+Status: software workflows implemented; real-artwork Devnet acceptance pending.
+See the [verification record](../development/mvp-verification.md) for checks and
+remaining manual acceptance.
 
 The [architecture overview](../architecture/overview.md) and
 [artwork lifecycle](../architecture/artwork-lifecycle.md) define system boundaries

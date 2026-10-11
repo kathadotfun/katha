@@ -764,6 +764,25 @@ async function lifecycleJourney() {
             }),
           ];
         },
+        async waitForClock() {
+          // A newly saved report uses wall time. Wait for the real chain
+          // clock rather than weakening the no-future-report validation.
+          const target = BigInt(Math.floor(Date.now() / 1000));
+          for (let attempt = 0; attempt < 40; attempt++) {
+            const clock = await fetchEncodedAccount(
+              client.rpc,
+              address("SysvarC1ock11111111111111111111111111111111"),
+            );
+            if (!clock.exists) throw new Error("Chain clock missing");
+            const time = new DataView(Uint8Array.from(clock.data).buffer).getBigInt64(
+              32,
+              true,
+            );
+            if (time >= target) return;
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+          throw new Error("Chain clock did not reach the saved report time");
+        },
         async initializeSaleTerms(kathaId) {
           const [artwork] = await findArtworkPda({ kathaId });
           await client.sendTransaction([
@@ -778,24 +797,6 @@ async function lifecycleJourney() {
         ...(collectorResale
           ? {
               collectorDelivery: {
-                async waitForClock() {
-                  // A newly saved report uses wall time. Wait for the real chain
-                  // clock rather than weakening the no-future-report validation.
-                  const target = BigInt(Math.floor(Date.now() / 1000));
-                  for (let attempt = 0; attempt < 40; attempt++) {
-                    const clock = await fetchEncodedAccount(
-                      client.rpc,
-                      address("SysvarC1ock11111111111111111111111111111111"),
-                    );
-                    if (!clock.exists) throw new Error("Chain clock missing");
-                    const time = new DataView(
-                      Uint8Array.from(clock.data).buffer,
-                    ).getBigInt64(32, true);
-                    if (time >= target) return;
-                    await new Promise((resolve) => setTimeout(resolve, 500));
-                  }
-                  throw new Error("Chain clock did not reach the saved report time");
-                },
                 async assertState(kathaId: string, stage: CollectorJourneyStage) {
                   if (!primaryDetail || !primaryHistory)
                     throw new Error("Primary snapshot missing");

@@ -11,7 +11,10 @@ The command verifies a pinned SHA-256 of the public Devnet Metaplex Core program
 binary, downloading it with the read-only `solana program dump` command on the
 first run. It caches the binary under ignored `target/test-fixtures/`. If Core is
 upgraded and the hash changes, the test stops so the new program version can be
-reviewed and pinned deliberately. No Core binary enters Git.
+reviewed and pinned deliberately. See the [fixture review and verification record](mvp-verification.md#reviewed-core-fixture-refresh)
+for the current hash and compatibility evidence. An old cached fixture must be
+moved aside before the refreshed pin can download its matching bytes. No Core
+binary enters Git.
 
 The command builds Registry with `core-cpi-test` into ignored
 `target/core-cpi-test/`, typechecks the harness, starts an isolated offline
@@ -59,7 +62,8 @@ IDL contains platform initialization, artwork registration, authentication,
 pre-mint metadata commitments, initial condition attestations, and
 physical custody transitions, Core asset minting, and atomic post-mint metadata
 revisions. The test binary lives in a separate ignored directory; do not deploy
-it. Owner-scoped post-mint inspection rules come in later steps. The
+it. Owner-scoped post-mint inspection and both custody scenarios are covered by the
+[resale suite](marketplace-resale.md). The
 [generated client guide](program-clients.md) documents regeneration and CI
 freshness checks.
 

@@ -18,6 +18,7 @@ export function runPrimaryJourney(context: {
   apiOrigin: string;
   actors: SyntheticActor[];
   index: () => Promise<void>;
+  waitForClock: () => Promise<void>;
   initializeSaleTerms: (kathaId: string) => Promise<void>;
   assertPurchase: (kathaId: string, artistId: string) => Promise<void>;
   trust?: {
@@ -26,7 +27,6 @@ export function runPrimaryJourney(context: {
     verifyExpiredPurchase: (kathaId: string, buyerToken: string) => Promise<void>;
   };
   collectorDelivery?: {
-    waitForClock: () => Promise<void>;
     assertState: (kathaId: string, stage: CollectorJourneyStage) => Promise<void>;
   };
   custodyResale?: {

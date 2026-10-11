@@ -6,7 +6,8 @@ not require secrets or local helper files.
 
 The workspace job installs the pinned Node and pnpm versions from the repository,
 requires the committed lockfile, then checks formatting, linting, types, builds,
-unit tests, disposable PostgreSQL migration/constraint tests, and the safe Docker
+unit tests, Devnet plan/configuration tests, responsive public Chromium/accessibility
+checks, disposable PostgreSQL migration/constraint tests, and the safe Docker
 Compose configuration. It pulls the pinned `postgres:18.6` image; the test runner
 creates and removes its own container and fresh fixture databases with synthetic
 credentials and no persistent volume. The Rust job
@@ -22,6 +23,9 @@ pnpm lint
 pnpm typecheck
 pnpm build
 pnpm test
+pnpm devnet:test
+pnpm --filter @katha/web exec playwright install chromium
+pnpm --filter @katha/web test:public-journeys
 docker pull postgres:18.6
 pnpm db:test
 docker compose --env-file .env.example config --quiet
@@ -30,11 +34,13 @@ cargo check --workspace --locked
 ```
 
 CI currently checks Rust host compilation, not the Solana program binary build,
-IDL regeneration or application journeys. Generated-client freshness is checked
+IDL regeneration or full local-chain application journeys. Public browsing uses
+synthetic API responses in Chromium; it is separate from those chain journeys. Generated-client freshness is checked
 against committed reviewed IDLs. Database behavior is covered by the disposable
 constraint and [fictional fixture suites](database-fixtures.md). The pinned Anchor
-build can be checked locally with `NO_DNA=1 anchor build --ignore-keys`; later
-steps add program and application behavior tests as those features are built.
+build can be checked locally with `NO_DNA=1 anchor build --ignore-keys`; the [program harness](program-testing.md) and [full browser suites](getting-started.md#6-verify-the-setup)
+run separately. Current fresh-setup results and pending manual acceptance are in the
+[verification record](mvp-verification.md).
 
 The disposable `pnpm db:test` runner also checks API PostgreSQL readiness and
 shutdown with an opened pool. These tests use the same isolated synthetic target

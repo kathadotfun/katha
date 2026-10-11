@@ -1,8 +1,9 @@
 # JavaScript workspace setup
 
-Status: the workspace includes `apps/web`, `apps/api`, `packages/shared`,
-`packages/db`, `packages/solana`, two empty Anchor programs, and a local
-PostgreSQL service. Product behavior is added in later steps.
+The workspace contains `apps/web`, `apps/api`, `packages/shared`, `packages/db`
+and `packages/solana`, plus the Registry and Marketplace Anchor programs.
+See [fresh setup](getting-started.md) for service startup and
+[verification status](mvp-verification.md) for acceptance boundaries.
 
 ## Pinned tools
 
@@ -55,7 +56,7 @@ lockfile with manifest changes.
 - `package.json` marks the workspace private and pins both tools. The root package
   is not intended for npm publication.
 - `.nvmrc` selects the project Node version through nvm.
-- `pnpm-workspace.yaml` selects future packages under `apps/*` and `packages/*`.
+- `pnpm-workspace.yaml` selects packages under `apps/*` and `packages/*`.
   The root package is also included. Rust programs are outside these globs.
 - `engineStrict: true` checks Node compatibility during installation.
 - `pmOnFail: error` rejects a mismatched pnpm version instead of automatically

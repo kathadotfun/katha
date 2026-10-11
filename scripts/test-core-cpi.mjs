@@ -32,7 +32,7 @@ if (
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const coreProgram = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d";
 const registryProgram = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr";
-const coreSha256 = "5680d2371204033f55cdcf0c08d393ed737d99cfe35d83f65befe80f7537484a";
+const coreSha256 = "7e033fd24ce189d9e7dc2600152c6c88ce80d662deeeb7ecc64f0c8437867cf7";
 const coreBinary = join(root, "target/test-fixtures/core-devnet.so");
 const registryBinary = join(root, "target/core-cpi-test/katha_registry.so");
 const marketplaceBinary = join(root, "target/marketplace-test/katha_marketplace.so");

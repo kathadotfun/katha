@@ -359,6 +359,7 @@ export async function runPrimaryJourney(context) {
     await verifier
       .getByRole("checkbox", { name: /I reviewed the exact saved report/ })
       .check();
+    await context.waitForClock();
     await transact(verifier, "Prepare and simulate condition attestation");
     await visit(admin, `/admin/artworks/${id}/custody`);
     await admin
@@ -522,7 +523,7 @@ export async function runPrimaryJourney(context) {
       await verifier
         .getByRole("checkbox", { name: /I reviewed the exact saved report/ })
         .check();
-      await context.collectorDelivery.waitForClock();
+      await context.waitForClock();
       await transact(verifier, "Prepare and simulate condition attestation");
     }
     let delivery;
