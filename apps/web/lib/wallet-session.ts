@@ -524,6 +524,18 @@ export function createWalletSession(
         signal,
       );
     },
+    assignNfcTag(kathaId: string, tagId: string, signal: AbortSignal) {
+      return authorized(
+        (value) => api.assignNfcTag(kathaId, tagId, value, signal),
+        signal,
+      );
+    },
+    readNfcTag(tagId: string, signal: AbortSignal) {
+      return authorized((value) => api.readNfcTag(tagId, value, signal), signal);
+    },
+    retireNfcTag(tagId: string, signal: AbortSignal) {
+      return authorized((value) => api.retireNfcTag(tagId, value, signal), signal);
+    },
     readArtworkDraft(kathaId: string, signal: AbortSignal) {
       return authorized(
         (value) => api.readArtworkDraft(kathaId, value, signal),

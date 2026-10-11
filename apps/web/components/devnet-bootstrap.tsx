@@ -95,27 +95,32 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
     }
   }
   return (
-    <section className="admin-panel mt-10" aria-labelledby="bootstrap-controls">
-      <h2 id="bootstrap-controls" className="text-section">
+    <section
+      className="panel cut panel-lg mt-8 flex flex-col gap-4"
+      aria-labelledby="bootstrap-controls"
+    >
+      <h2 id="bootstrap-controls" className="h2 h2-ops">
         Devnet operator controls
       </h2>
-      <p className="mt-4 max-w-reading">
+      <p className="p max-w-reading">
         This utility connects its own operator wallet. It does not use the header
         sign-in session. Use the same bootstrap operator as both program upgrade
         authorities and Registry platform authority. Role wallets may be different.
         Every write requires separate review and approval.
       </p>
-      <p className="mt-4 break-all">RPC: {rpcUrl}</p>
-      <p className="mt-2 text-sm">Approval diagnostics v2 · 20-second timeout</p>
-      <div className="mt-6 flex flex-wrap gap-4">
+      <p className="sm m-0">
+        RPC <span className="id">{rpcUrl}</span>
+      </p>
+      <p className="xs mut m-0">Approval diagnostics v2 · 20-second timeout</p>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         {state?.connected ? (
           <>
-            <p className="break-all">
+            <p className="id m-0">
               {state.connected.wallet.name}: {state.connected.account.address}
             </p>
             <button
               type="button"
-              className="text-link"
+              className="lnk"
               disabled={locked}
               onClick={() => void action(() => wallet!.wallet.disconnect())}
             >
@@ -127,7 +132,7 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
             <button
               key={`${available.name}:${index}`}
               type="button"
-              className="text-link"
+              className="lnk"
               disabled={locked}
               onClick={() =>
                 void action(async () => {
@@ -140,8 +145,8 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
           ))
         )}
       </div>
-      <div className="admin-form mt-8">
-        <label htmlFor="bootstrap-public-input">
+      <div className="flex flex-col gap-4">
+        <label className="lbl" htmlFor="bootstrap-public-input">
           Public bootstrap JSON (addresses only; no keys, tokens or RPC credentials)
         </label>
         <textarea
@@ -150,11 +155,11 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
           value={text}
           disabled={locked}
           onChange={(event) => setText(event.target.value)}
-          className="mt-3 w-full font-mono text-sm"
+          className="inp xs font-mono"
         />
         <button
           type="button"
-          className="text-link mt-4"
+          className="lnk self-start"
           disabled={locked || !state?.connected}
           onClick={() =>
             void action(async () => {
@@ -178,16 +183,17 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
         >
           Generate temporary Devnet collection address
         </button>
-        <p className="mt-3 text-sm text-muted">
+        <p className="help">
           The fresh collection signer exists only in this tab. Save its public address
           and successful receipt. After finalized collection creation, no collection
           private key is needed for Registry initialization.
         </p>
-        <label htmlFor="bootstrap-step" className="mt-6 block">
+        <label htmlFor="bootstrap-step" className="lbl">
           Operation
         </label>
         <select
           id="bootstrap-step"
+          className="inp"
           value={step}
           disabled={locked}
           onChange={(event) => setStep(event.target.value as DevnetBootstrapStep)}
@@ -200,20 +206,22 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
         </select>
         {step === "sale-terms" && (
           <>
-            <label htmlFor="bootstrap-artwork" className="mt-5 block">
+            <label htmlFor="bootstrap-artwork" className="lbl">
               Registered permanent Katha ID
             </label>
             <input
               id="bootstrap-artwork"
+              className="inp"
               value={kathaId}
               disabled={locked}
               onChange={(event) => setKathaId(event.target.value)}
             />
-            <label htmlFor="bootstrap-payout" className="mt-5 block">
+            <label htmlFor="bootstrap-payout" className="lbl">
               Artist-approved public payout wallet (immutable once initialized)
             </label>
             <input
               id="bootstrap-payout"
+              className="inp id"
               value={payout}
               disabled={locked}
               onChange={(event) => setPayout(event.target.value)}
@@ -222,7 +230,7 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
         )}
         <button
           type="button"
-          className="button-primary mt-6"
+          className="btn btn-p cut-s self-start"
           disabled={locked || !state?.connected}
           onClick={() =>
             void action(async () => {
@@ -247,12 +255,12 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
         </button>
       </div>
       {prepared && (
-        <div className="mt-8 min-w-0">
-          <h3 className="text-xl">Exact public operation review</h3>
-          <pre className="mt-4 max-h-128 overflow-auto whitespace-pre-wrap break-all text-xs">
+        <div className="inset flex min-w-0 flex-col gap-3">
+          <h3 className="h3">Exact public operation review</h3>
+          <pre className="xs max-h-128 overflow-auto whitespace-pre-wrap wrap-anywhere">
             {prepared.summary}
           </pre>
-          <label className="mt-5 flex items-start gap-3">
+          <label className="chk">
             <input
               type="checkbox"
               checked={confirmed}
@@ -267,7 +275,7 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
           </label>
           <button
             type="button"
-            className="button-primary mt-5"
+            className="btn btn-p cut-s self-start"
             disabled={busy || Boolean(retained) || !confirmed}
             onClick={() =>
               void action(async () => {
@@ -296,7 +304,7 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
           {!retained && (
             <button
               type="button"
-              className="text-link ml-5 mt-5"
+              className="lnk self-start"
               disabled={busy}
               onClick={() => {
                 setPrepared(null);
@@ -309,15 +317,17 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
         </div>
       )}
       {retained && (
-        <div className="mt-8">
-          <p className="break-all">Retained transaction signature: {retained}</p>
-          <p className="mt-3" role="status">
+        <div className="inset flex flex-col gap-2">
+          <p className="sm m-0">
+            Saved transaction <span className="id">{retained}</span>
+          </p>
+          <p className="p sm" role="status">
             Receipt: {status ?? "UNKNOWN"}. Save this public signature before leaving
             the page.
           </p>
           <button
             type="button"
-            className="text-link mt-4"
+            className="lnk self-start"
             disabled={busy}
             onClick={() =>
               void action(async () => {
@@ -334,7 +344,7 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
           {terminal && (
             <button
               type="button"
-              className="text-link ml-5 mt-4"
+              className="lnk self-start"
               disabled={busy}
               onClick={() => {
                 signed.current = null;
@@ -350,14 +360,14 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
         </div>
       )}
       {error && (
-        <p className="mt-6" role="alert">
+        <p className="ferr" role="alert">
           {error}
         </p>
       )}
       {receipts.length > 0 && (
-        <details className="mt-6">
+        <details className="more">
           <summary>Public receipt record for this tab</summary>
-          <pre className="mt-3 whitespace-pre-wrap break-all text-xs">
+          <pre className="xs inset mt-2 whitespace-pre-wrap wrap-anywhere">
             {receipts.join("\n")}
           </pre>
         </details>

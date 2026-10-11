@@ -1,11 +1,11 @@
 # Buyer purchase signing and confirmation
 
-From `/art/{kathaId}`, select **Review purchase quote**, connect and sign in with
-the buyer wallet, then **Refresh purchase quote**. The quote displays the exact
+From `/art/{kathaId}`, select **Review purchase**, connect and sign in with
+the buyer wallet, then **Refresh terms**. The quote displays the exact
 six-decimal test-token payment, role amounts, merged recipient wallets, expected
 listing revision and independently recorded custody.
 
-Select **Prepare reviewed purchase**. This authenticates the buyer and posts only
+Select **Prepare transaction**. This authenticates the buyer and posts only
 the reviewed quote hash, wallet-supported transaction versions and a generated
 idempotency key to the existing [purchase API](artwork-purchases-api.md). The API
 rereads finalized eligibility and rejects stale terms before preparing a purchase.
@@ -46,7 +46,7 @@ complete this operation. Physical custody and artist authorship stay separate.
    signature, artwork/asset/collection and transfer destination. Indexer outages or
    catch-up delays do not turn a finalized purchase into a failure.
 
-Use **Check this transaction again** for pending ownership/indexing or unknown
+Use **Check status** for pending ownership/indexing or unknown
 confirmation. The same signed attempt is reconciled; it is not broadcast again.
 An unknown signature blocks another preparation. Refresh/replacement is also blocked
 once purchase success is awaiting ownership or indexer checks. A fresh read after

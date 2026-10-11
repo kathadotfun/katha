@@ -1,107 +1,223 @@
 "use client";
 
-import { WalletControl } from "./wallet-control";
-import { useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { signedOutSnapshot } from "../lib/wallet-session";
+import { useWalletSession } from "./wallet-provider";
+import { KathaMark } from "./ui/katha-mark";
+import { shortAddress } from "../lib/format";
+import { headerVariant } from "../lib/site-routes";
+
+const emptySubscribe = () => () => {};
+const serverSessionSnapshot = () => signedOutSnapshot;
+
+type Role = "Admin" | "Verifier" | "No role" | null;
+
+function useSignedInAddress() {
+  const session = useWalletSession();
+  const auth = useSyncExternalStore(
+    session?.subscribe ?? emptySubscribe,
+    session?.getSnapshot ?? serverSessionSnapshot,
+    serverSessionSnapshot,
+  );
+  return { session, address: auth.session?.walletAddress ?? null, auth };
+}
+
+// Roles come from the API for the current session; nothing is shown until known.
+function useRole(enabled: boolean): Role {
+  const { session, auth } = useSignedInAddress();
+  const [role, setRole] = useState<{ key: string; value: Role } | null>(null);
+  const key =
+    enabled && auth.session
+      ? `${auth.session.walletId}:${auth.session.expiresAt}`
+      : null;
+  useEffect(() => {
+    if (!key || !session) return;
+    const abort = new AbortController();
+    session
+      .permissions(abort.signal)
+      .then((value) => {
+        if (!abort.signal.aborted)
+          setRole({
+            key,
+            value: value.admin ? "Admin" : value.verifier ? "Verifier" : "No role",
+          });
+      })
+      .catch(() => undefined);
+    return () => abort.abort();
+  }, [key, session]);
+  return role && role.key === key ? role.value : null;
+}
 
 export function SiteHeader() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuButton = useRef<HTMLButtonElement>(null);
+  const pathname = usePathname() ?? "/";
+  const variant = headerVariant(pathname);
+  const [menu, setMenu] = useState<{ open: boolean; path: string }>({
+    open: false,
+    path: pathname,
+  });
+  // Navigating closes the in-flow menu.
+  const open = menu.open && menu.path === pathname;
+  const button = useRef<HTMLButtonElement>(null);
+  const { address } = useSignedInAddress();
+  const role = useRole(variant === "ops");
+  const close = () => setMenu({ open: false, path: pathname });
+  const chip = address ? shortAddress(address) : "Sign in";
+  // On the home page, section links stay native fragments so the browser moves
+  // focus to the section; elsewhere the router keeps the wallet session alive.
+  const samePage = (href: string) => pathname === "/" && href.startsWith("/#");
+
+  const artworksCurrent =
+    pathname === "/explore" ||
+    (pathname.startsWith("/art/") && variant !== "collector");
+  const links =
+    variant === "ops"
+      ? [
+          { href: "/admin", label: "Administration", current: pathname === "/admin" },
+          {
+            href: "/admin/artworks",
+            label: "Artworks",
+            current: pathname.startsWith("/admin/artworks"),
+          },
+        ]
+      : variant === "collector"
+        ? [
+            { href: "/explore", label: "Artworks", current: false },
+            {
+              href: "/collection",
+              label: "My collection",
+              current: pathname.startsWith("/collection"),
+            },
+          ]
+        : [
+            { href: "/explore", label: "Artworks", current: artworksCurrent },
+            { href: "/#traditions", label: "Traditions", current: false },
+            { href: "/#collecting", label: "How collecting works", current: false },
+          ];
+  const mobileAccount =
+    variant === "ops"
+      ? address
+        ? `Signed in as ${shortAddress(address)}`
+        : "Sign in"
+      : variant === "collector"
+        ? address
+          ? "Account"
+          : "Sign in"
+        : address
+          ? "Account"
+          : "Sign in";
+
   return (
     <header
-      className="site-header"
+      className={`hdr weave dk${variant === "ops" ? " hdr-ops" : ""}${variant === "home" ? " hdr-home" : ""}`}
       onKeyDown={(event) => {
-        // This is an in-flow mobile disclosure, not a modal or focus trap.
-        if (event.key === "Escape" && menuOpen && menuButton.current?.offsetParent) {
-          setMenuOpen(false);
-          menuButton.current.focus();
+        // An in-flow disclosure, not a modal: Escape returns focus to its button.
+        if (event.key === "Escape" && open && button.current?.offsetParent) {
+          close();
+          button.current.focus();
         }
       }}
     >
       <noscript>
-        <style>{`.site-menu-panel { display: flex !important; } .site-menu-toggle { display: none !important; }`}</style>
+        <style>{`@media (max-width:860px){.hdr:not(.hdr-ops) .mnav{display:block!important}.hdr:not(.hdr-ops) .menubtn{display:none!important}}@media (max-width:900px){.hdr-ops .mnav{display:block!important}.hdr-ops .menubtn{display:none!important}}`}</style>
       </noscript>
-      <div className="page-container site-header-inner">
-        <Link
-          href="/"
-          aria-label="Katha home"
-          className="site-brand"
-          onClick={() => setMenuOpen(false)}
-        >
-          <Image src="/brand/katha-profile.svg" alt="" width={40} height={40} />
-          <span className="site-brand-name">Katha</span>
-        </Link>
-        <button
-          ref={menuButton}
-          type="button"
-          className="site-menu-toggle"
-          aria-expanded={menuOpen}
-          aria-controls="site-navigation"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          <span>{menuOpen ? "Close menu" : "Menu"}</span>
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-            <path
-              d={menuOpen ? "M6 6l12 12M6 18L18 6" : "M4 8h16M4 16h16"}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-        <div id="site-navigation" className="site-menu-panel" data-open={menuOpen}>
-          <nav aria-label="Primary">
-            <ul className="site-nav">
-              <li>
-                <Link
-                  href="/"
-                  className="site-nav-link"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/explore"
-                  className="site-nav-link"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Explore
-                </Link>
-              </li>
-              <li>
-                <a
-                  href="/#purpose"
-                  className="site-nav-link"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Our purpose
-                </a>
-              </li>
-              <li>
-                <a
-                  href="/#traditions"
-                  className="site-nav-link"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  Traditions
-                </a>
-              </li>
-            </ul>
-          </nav>
-          <Link
-            href="/account"
-            className="site-nav-link"
-            onClick={() => setMenuOpen(false)}
-          >
-            My account
+      <div className="wrap hdr-in">
+        {variant === "ops" ? (
+          <div className="flex items-center gap-3.5">
+            <Link
+              className="brand"
+              href="/admin"
+              aria-label="Katha operations home"
+              onClick={close}
+            >
+              <KathaMark size={32} variant="ops" />
+              <span className="brand-w">KATHA</span>
+            </Link>
+            <span className="ctx">Operations</span>
+          </div>
+        ) : (
+          <Link className="brand" href="/" aria-label="Katha home" onClick={close}>
+            <KathaMark size={variant === "home" ? 34 : 32} />
+            <span className="brand-w">KATHA</span>
           </Link>
-          <WalletControl />
-        </div>
+        )}
+        <nav className="nav" aria-label={variant === "ops" ? "Operations" : "Main"}>
+          {links.map((link) =>
+            samePage(link.href) ? (
+              <a key={link.href} href={link.href.slice(1)}>
+                {link.label}
+              </a>
+            ) : (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={link.current ? "page" : undefined}
+              >
+                {link.label}
+              </Link>
+            ),
+          )}
+          {variant === "ops" ? (
+            <Link
+              className="who cut-s"
+              href="/account"
+              aria-current={pathname === "/account" ? "page" : undefined}
+            >
+              {role && <span className="role">{role}</span>}
+              <span className="id">{chip}</span>
+            </Link>
+          ) : (
+            <Link
+              className="hbtn cut-s"
+              href="/account"
+              aria-label={address ? `Account, signed in as ${chip}` : undefined}
+            >
+              {chip}
+            </Link>
+          )}
+        </nav>
+        <button
+          ref={button}
+          type="button"
+          className="hbtn menubtn cut-s"
+          aria-expanded={open}
+          aria-controls="mobile-navigation"
+          onClick={() => setMenu({ open: !open, path: pathname })}
+        >
+          {open ? "Close" : "Menu"}
+        </button>
       </div>
+      <nav
+        id="mobile-navigation"
+        className="mnav wrap"
+        data-open={open}
+        aria-label={variant === "ops" ? "Operations" : "Main"}
+      >
+        {links.map((link) =>
+          samePage(link.href) ? (
+            <a key={link.href} href={link.href.slice(1)} onClick={close}>
+              {link.label}
+            </a>
+          ) : (
+            <Link
+              key={link.href}
+              href={link.href}
+              aria-current={link.current ? "page" : undefined}
+              onClick={close}
+            >
+              {link.label}
+            </Link>
+          ),
+        )}
+        <Link
+          href="/account"
+          aria-current={pathname === "/account" ? "page" : undefined}
+          onClick={close}
+        >
+          {mobileAccount}
+        </Link>
+      </nav>
     </header>
   );
 }

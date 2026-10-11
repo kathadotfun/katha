@@ -1,96 +1,69 @@
 import type { PublicArtworkDetail } from "@katha/shared";
 import { artworkDimensionsLabel } from "../lib/artwork-page";
 
+// NFC is a discovery bridge to this record. A tap never authenticates the object.
 export function ArtworkPhysicalIdentity({ artwork }: { artwork: PublicArtworkDetail }) {
   return (
     <section
+      id="identify"
       aria-labelledby="artwork-physical-identity"
-      className="mt-[var(--section-space)]"
+      className="panel cut"
+      style={{ marginTop: "clamp(56px, 7vw, 96px)", padding: "clamp(24px, 4vw, 48px)" }}
     >
-      <h2 id="artwork-physical-identity" className="text-section">
-        Physical identity and NFC
-      </h2>
-      <p className="mt-6 max-w-reading text-lead">
-        A permanent record for this physical artwork, with its artist and cultural story
-        preserved when ownership changes.
-      </p>
-      <div className="mt-10 grid gap-10 lg:grid-cols-2">
-        <section
-          aria-labelledby="artwork-identification"
-          className="min-w-0 border-t border-line pt-6"
+      <div className="flex flex-wrap items-start gap-x-12 gap-y-4">
+        <div className="flex min-w-0 flex-col gap-2.5" style={{ flex: "1 1 280px" }}>
+          <h2 id="artwork-physical-identity" className="h2">
+            Identifying this painting
+          </h2>
+          <p className="p">
+            For anyone holding the work, or looking at it after tapping its tag.
+          </p>
+        </div>
+        <div
+          className="grid min-w-0"
+          style={{
+            flex: "2 1 520px",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))",
+            gap: "24px 32px",
+          }}
         >
-          <h3 id="artwork-identification" className="text-2xl">
-            Compare the work with its record
-          </h3>
-          <dl className="artwork-facts mt-6">
-            <div>
-              <dt>Permanent Katha ID</dt>
-              <dd>
-                <a
-                  className="text-link break-all font-mono text-sm"
-                  href={`/art/${artwork.kathaId}`}
-                >
-                  {artwork.kathaId}
-                </a>
-              </dd>
-            </div>
-            <div>
-              <dt>Artist</dt>
-              <dd>{artwork.artist.displayName}</dd>
-            </div>
-            <div>
-              <dt>Recorded dimensions</dt>
-              <dd>{artworkDimensionsLabel(artwork.dimensions)}</dd>
-            </div>
-          </dl>
-          <p className="mt-6 text-muted">
-            Compare the physical work with the public photographs, dimensions, materials
-            and technique in{" "}
-            <a className="text-link" href="#artwork-details">
-              About the work
-            </a>
-            . Missing details are not evidence of a match. A matching page alone cannot
-            confirm that the object in front of you is authentic.
-          </p>
-          <p className="mt-4 text-muted">
-            Review the{" "}
-            <a className="text-link" href="#artwork-authenticity">
-              recorded manual verification
-            </a>
-            ,{" "}
-            <a className="text-link" href="#artwork-condition">
-              latest available condition inspection
-            </a>{" "}
-            and{" "}
-            <a className="text-link" href="#artwork-provenance">
-              provenance and blockchain references
-            </a>
-            . Physical inspection remains a manual process.
-          </p>
-        </section>
-        <section
-          aria-labelledby="artwork-nfc"
-          className="min-w-0 border-t border-line pt-6"
-        >
-          <h3 id="artwork-nfc" className="text-2xl">
-            What an NFC tap tells you
-          </h3>
-          <p className="mt-6 text-muted">
-            An assigned NFC tag opens the artwork&apos;s permanent Katha page. It is a
-            discovery bridge to the record. A basic NFC tag can be cloned, and its link
-            can be copied or attached to another object.
-          </p>
-          <p className="mt-4 text-muted">
-            A successful tap does not independently prove authenticity, ownership,
-            physical custody or delivery. This page does not confirm that a tag is
-            attached, secure or currently active.
-          </p>
-          <p className="mt-4 text-muted">
-            An unknown or retired tag may not open a record. That result alone does not
-            establish whether the artwork is authentic. Check the permanent Katha ID and
-            the recorded inspections before relying on a tag.
-          </p>
-        </section>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="h3">Measure it</h3>
+            <p className="p sm">
+              {artwork.dimensions
+                ? `The work should measure ${artworkDimensionsLabel(artwork.dimensions)}.`
+                : "Dimensions aren't documented yet, so measuring can't confirm a match."}
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="h3">Compare the details</h3>
+            <p className="p sm">
+              Check distinctive details against the approved photos at full size, not
+              just the overall look. Missing details aren&apos;t evidence of a match.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 id="artwork-nfc" className="h3">
+              Check the tag
+            </h3>
+            <p className="p sm">
+              A Katha tag, if the work has one, should open this record and Katha ID{" "}
+              <span className="id">{artwork.kathaId}</span>. A basic tag can be copied
+              or moved, so a successful tap doesn&apos;t prove authenticity, ownership
+              or custody.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="h3">If something doesn&apos;t match</h3>
+            <p className="p sm">
+              Treat the painting as unverified. A tag can be moved; the record and the{" "}
+              <a className="lnk" href="#evidence">
+                evidence below
+              </a>{" "}
+              are what count. Physical inspection remains a manual process.
+            </p>
+          </div>
+        </div>
       </div>
     </section>
   );

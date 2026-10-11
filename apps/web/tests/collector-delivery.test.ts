@@ -197,3 +197,27 @@ test("private delivery transport uses bearer, no-store and validates response id
     api.readDelivery(kathaId, { limit: 20, offset: 0 }, "synthetic", signal),
   );
 });
+test("returns to Katha are offered only while the owner holds the work and none is open", async () => {
+  const f = fixture();
+  f.page = { ...initial, custodyState: "COLLECTOR_HELD", canRequest: false };
+  const c = createCollectorDelivery(f.methods, kathaId);
+  await c.read();
+  const id = c.getSnapshot().requestId!;
+  await c.create(input(id));
+  assert.equal(f.writes, 0, "delivery is refused while the collector holds the work");
+  await c.create({ ...input(id), kind: "RETURN_TO_KATHA" });
+  assert.equal(f.writes, 1);
+  f.page = {
+    ...f.page,
+    custodyState: "COLLECTOR_HELD",
+    requests: [{ ...f.page.requests[0]!, kind: "RETURN_TO_KATHA", status: "APPROVED" }],
+  };
+  await c.read();
+  await c.create({ ...input(c.getSnapshot().requestId!), kind: "RETURN_TO_KATHA" });
+  assert.equal(f.writes, 1, "an open return blocks another");
+  f.page = { ...initial, custodyState: "KATHA_HELD", canRequest: true };
+  await c.read();
+  await c.create({ ...input(c.getSnapshot().requestId!), kind: "RETURN_TO_KATHA" });
+  assert.equal(f.writes, 1, "a Katha-held work cannot be returned");
+  c.dispose();
+});

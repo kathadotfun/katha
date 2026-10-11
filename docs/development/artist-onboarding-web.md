@@ -47,7 +47,7 @@ API; an earlier permissions response cannot authorize later requests.
 3. Creator and payout wallets are optional, independently validated nonzero Solana
    public addresses. A profile can exist with neither; future sale eligibility
    requires an approved payout wallet. These fields do not prove wallet control.
-4. Choose **Create artist profile**. Shared Zod contracts validate the fields;
+4. Choose **Create artist**. Shared Zod contracts validate the fields;
    errors appear beside fields and focus moves to the first invalid field. The
    form keeps its inputs on failure and disables competing actions during writes.
 5. `POST /admin/artists` returns the saved `UNVERIFIED` profile and server UUID.
@@ -61,7 +61,7 @@ artist editing, listing, deletion or recovery queue in this step.
 
 ## Review and verify an artist
 
-1. A verifier enters the artist UUID and chooses **Load artist profile**.
+1. A verifier enters the artist record ID and chooses **Look up**.
    `GET /verifier/artists/:artistId` validates the UUID and returns an explicit
    `artistResponseSchema` projection, including unverified content. This read is
    protected by the same verifier middleware as manual approval; it is not a
@@ -70,7 +70,7 @@ artist editing, listing, deletion or recovery queue in this step.
 2. Review the saved name, biography, region, traditions, wallets and public URLs.
    A new lookup removes the previous target immediately, including on failure.
 3. Complete manual artist verification outside the software. Select the explicit
-   confirmation checkbox for this saved profile, then **Record artist verification**.
+   confirmation checkbox for this saved profile, then **Record verification**.
 4. `POST /verifier/artists/:artistId/verification` sends only `{ confirmed: true }`.
    The server attributes the claim to the authenticated verifier wallet and supplies
    the timestamp. Concurrent/repeated approvals cannot overwrite the first approval.

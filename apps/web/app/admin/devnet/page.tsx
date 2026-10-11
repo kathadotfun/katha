@@ -11,10 +11,10 @@ export const metadata: Metadata = {
 export default function DevnetOperatorPage() {
   const enabled = process.env.KATHA_CLUSTER === "devnet";
   return (
-    <div className="page-container py-(--section-space)">
-      <p className="eyebrow">Operator utility · Devnet test environment</p>
-      <h1 className="mt-5 text-display">Initialize the demonstration network.</h1>
-      <p className="mt-6 max-w-reading">
+    <div>
+      <p className="sm mut m-0">Operator utility, Devnet test environment</p>
+      <h1 className="h1 h1-ops mt-2">Initialize the demonstration network</h1>
+      <p className="p mt-4 max-w-reading">
         Deploy the pinned programs yourself before bootstrap. This tool prepares
         collection, Registry, Marketplace and per-artwork payout initialization; it does
         not deploy programs, mint payment tokens or approve physical claims.
@@ -27,7 +27,7 @@ export default function DevnetOperatorPage() {
           )}
         />
       ) : (
-        <p className="mt-8" role="status">
+        <p className="p mt-8" role="status">
           Operator controls are disabled. Start the web process with
           KATHA_CLUSTER=devnet and matching public origins to use this utility.
         </p>

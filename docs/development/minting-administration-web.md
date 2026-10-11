@@ -17,7 +17,7 @@ metadata commitments and held custody must match. An occupied asset or existing
 binding prevents another mint. Authorship and physical custody remain independent
 of digital ownership.
 
-Confirm the review and choose **Prepare Core mint**. Preparation reuses an existing
+Confirm the review and choose **Review and approve mint**. Preparation reuses an existing
 reservation for its original wallet; it never replaces an UNKNOWN signed attempt.
 The browser verifies the generated instruction, all fourteen accounts and their
 roles, permanent identity, collection, report and metadata revision before simulation.

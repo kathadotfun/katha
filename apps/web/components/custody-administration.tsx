@@ -4,6 +4,7 @@ import {
   custodyPreparationRequestSchema,
   fulfillmentUpdateRequestSchema,
   type CustodyAdministrationReview,
+  type PhysicalCustodyState,
 } from "@katha/shared";
 import {
   useWalletSession,
@@ -17,14 +18,43 @@ import {
   emptyCustodySnapshot,
   type CustodyAdministrationWorkflow,
 } from "../lib/custody-administration";
+import { localDateTime, shortAddress } from "../lib/format";
 import { TransactionReviewView } from "./transaction-review";
+import { OpsSignedOut, ReceiptLine } from "./ops-ui";
+import { Badge, FieldTag, Notice, type Tone } from "./ui/status";
+
 const noop = () => () => {},
   emptyAuth = () => signedOutSnapshot,
   emptyFlow = () => idleTransactionSnapshot,
   emptyPage = () => emptyCustodySnapshot;
-const inputClass =
-  "mt-2 block w-full min-w-0 min-h-12 border border-muted bg-surface px-3 py-2";
-const label = (value: string) => value.toLowerCase().replaceAll("_", " ");
+const custody: Record<PhysicalCustodyState, { tone: Tone; text: string }> = {
+  UNKNOWN: { tone: "neu", text: "Not recorded" },
+  KATHA_HELD: { tone: "neu", text: "Held by Katha" },
+  COLLECTOR_HELD: { tone: "ok", text: "With the owner" },
+  IN_TRANSIT: { tone: "info", text: "In transit" },
+};
+const actionLabels: Record<string, string> = {
+  ATTEST_KATHA_CUSTODY: "Record that Katha holds the work",
+  ATTEST_COLLECTOR_CUSTODY: "Record that a collector holds the work",
+  DISPATCH_FROM_KATHA: "Dispatched from Katha",
+  DISPATCH_FROM_COLLECTOR: "Dispatched by the collector",
+  RECEIVE_AT_KATHA: "Received at Katha",
+  RECEIVE_BY_COLLECTOR: "Received by the collector",
+};
+const statusActions: Record<string, string> = {
+  APPROVED: "Approve request",
+  DISPATCHED: "Mark dispatched",
+  RECEIVED: "Mark received",
+  CANCELLED: "Cancel request",
+};
+const flowSteps = ["REQUESTED", "APPROVED", "DISPATCHED", "RECEIVED"] as const;
+const flowLabels = {
+  REQUESTED: "Requested",
+  APPROVED: "Approved",
+  DISPATCHED: "Dispatched",
+  RECEIVED: "Received",
+};
+
 export function CustodyAdministrationPanel({ kathaId }: { kathaId: string }) {
   const session = useWalletSession(),
     connection = useWalletConnection(),
@@ -61,10 +91,7 @@ export function CustodyAdministrationPanel({ kathaId }: { kathaId: string }) {
   );
   if (!auth.session)
     return (
-      <p role="status" className="mt-10">
-        Connect and sign in with an administrator wallet in the header to coordinate
-        custody.
-      </p>
+      <OpsSignedOut path={`/admin/artworks/${kathaId}/custody`} role="administrator" />
     );
   const free =
     [
@@ -77,156 +104,203 @@ export function CustodyAdministrationPanel({ kathaId }: { kathaId: string }) {
     ].includes(flow.phase) &&
     (!flow.signature || ["failed", "indexing-delay", "indexed"].includes(flow.phase));
   const disabled = state.busy || state.reloadRequired || !free;
+  const page = state.page;
+  const held = page ? custody[page.chain.state] : null;
+  const tx =
+    flow.operation?.kind === "UPDATE_CUSTODY" && flow.operation.kathaId === kathaId;
   return (
-    <section
-      className="admin-workspace mt-10"
-      aria-labelledby="custody-controls"
-      aria-busy={state.busy}
-    >
-      <h2 id="custody-controls" className="text-2xl">
-        Physical custody and fulfillment
-      </h2>
-      <p className="mt-4 text-sm text-muted">
-        Confirm actual movement in person. Delivery requests and their contact details
-        stay private. A fulfillment status update and a Registry custody attestation are
-        separate actions; Core ownership and artist attribution stay unchanged.
-      </p>
-      {state.busy && (
-        <p role="status" className="mt-4">
+    <div className="flex flex-col gap-6" aria-busy={state.busy}>
+      <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+        <p className="p max-w-[46rem]">
+          Confirm actual movement in person. Delivery requests and their contact details
+          stay private. Updating a request and recording custody on chain are separate
+          actions; digital ownership and artist attribution don&apos;t change.
+        </p>
+        {held && (
+          <Badge tone={held.tone} role="status">
+            {held.text}
+          </Badge>
+        )}
+      </div>
+      {state.busy && !page && (
+        <p role="status" className="p">
           Checking saved custody state…
         </p>
       )}
       {state.error && (
-        <p role="alert" className="mt-4">
-          {state.error}
-        </p>
+        <Notice tone="err">
+          <p>{state.error}</p>
+          {!page && (
+            <button
+              className="btn btn-o btn-sm self-start"
+              type="button"
+              disabled={state.busy}
+              onClick={() => void workflow?.read()}
+            >
+              Reload custody state
+            </button>
+          )}
+        </Notice>
       )}
-      <button
-        className="text-link mt-5"
-        disabled={state.busy}
-        onClick={() => void workflow?.read()}
-      >
-        Reload custody state
-      </button>
-      {state.page && (
-        <>
-          <h3 className="mt-8 text-xl">{state.page.title}</h3>
-          <dl className="mt-4 grid gap-3 text-sm">
-            <div>
-              <dt>Permanent Katha ID</dt>
-              <dd>{state.page.kathaId}</dd>
-            </div>
-            <div>
-              <dt>Finalized physical custody</dt>
-              <dd>
-                {label(state.page.chain.state)} · revision {state.page.chain.revision}
-              </dd>
-            </div>
-            <div>
-              <dt>Physical custodian</dt>
-              <dd className="break-all">
-                {state.page.chain.subject ?? "No held custodian attested"}
-              </dd>
-            </div>
-            <div>
-              <dt>Digital owner</dt>
-              <dd className="break-all">
-                {state.page.chain.ownerWallet ?? "Core asset has not been minted"}
-              </dd>
-            </div>
-            <div>
-              <dt>Registry custody authority</dt>
-              <dd className="break-all">{state.page.chain.custodyAuthority}</dd>
-            </div>
-          </dl>
-          {state.page.custody.unresolved && (
-            <p role="status" className="mt-5">
-              A signed custody attempt is unresolved. Check its retained signature
-              before preparing another movement.
-            </p>
-          )}
-          {state.page.custody.receipt && (
-            <p className="mt-4 text-sm break-all">
-              Latest custody receipt: {label(state.page.custody.receipt.status)} ·{" "}
-              {state.page.custody.receipt.signature} ·{" "}
-              {state.page.custody.receipt.indexed
-                ? "Indexed"
-                : "Indexing not confirmed"}
-            </p>
-          )}
-          {!state.page.canAttest && (
-            <p className="mt-5">
-              This administrator can coordinate requests. The current Registry custody
-              authority must sign custody attestations.
-            </p>
-          )}
-          <MovementForm
-            key={`${auth.session.walletId}:${state.page.chain.revision}:${state.page.updatedAt}:${state.page.requests.map((r) => r.request.updatedAt).join(":")}`}
-            page={state.page}
-            workflow={workflow!}
-            disabled={
-              disabled || state.page.custody.unresolved || !state.page.canAttest
-            }
-            supportedVersions={[
-              ...(connection?.getSnapshot().connected?.supportsV0 ? [0 as const] : []),
-              ...(connection?.getSnapshot().connected?.supportsV1 ? [1 as const] : []),
-            ]}
-          />
-          <h3 className="mt-10 text-xl">Private fulfillment requests</h3>
-          <p className="mt-3 text-sm text-muted">
-            Review only for manual delivery coordination. Approval does not dispatch the
-            artwork or change on-chain custody. Record dispatch before saving
-            “dispatched”, and record receipt before saving “received”.
-          </p>
-          {!state.page.requests.length && (
-            <p className="mt-4">No requests on this page.</p>
-          )}
-          {state.page.requests.map((row) => (
-            <FulfillmentForm
-              key={`${row.request.id}:${row.request.updatedAt}`}
-              row={row}
+      {page && held && (
+        <div className="flex flex-wrap items-start gap-5">
+          <div className="flex min-w-0 flex-col gap-5" style={{ flex: "999 1 620px" }}>
+            {page.custody.unresolved && (
+              <Notice tone="warn" icon="warning">
+                <p>
+                  <strong>A signed custody transaction is unresolved.</strong> Check its
+                  saved reference before preparing another movement.
+                </p>
+              </Notice>
+            )}
+            {!page.requests.length && (
+              <div className="panel cut flex flex-col gap-2">
+                <h2 className="h3">No open delivery or return requests</h2>
+                <p className="p sm">
+                  When the owner asks for delivery or a return to Katha, it appears here
+                  for review.
+                </p>
+              </div>
+            )}
+            {page.requests.map((row) => (
+              <FulfillmentCard
+                key={`${row.request.id}:${row.request.updatedAt}`}
+                row={row}
+                workflow={workflow!}
+                disabled={disabled}
+              />
+            ))}
+            {(page.pagination.offset > 0 || page.pagination.hasMore) && (
+              <nav
+                aria-label="Fulfillment request pages"
+                className="flex flex-wrap gap-2"
+              >
+                <button
+                  className="btn btn-o btn-sm"
+                  type="button"
+                  disabled={state.busy || page.pagination.offset === 0}
+                  onClick={() =>
+                    void workflow?.read(Math.max(0, page.pagination.offset - 20))
+                  }
+                >
+                  Previous requests
+                </button>
+                <button
+                  className="btn btn-o btn-sm"
+                  type="button"
+                  disabled={
+                    state.busy ||
+                    !page.pagination.hasMore ||
+                    page.pagination.offset > 99980
+                  }
+                  onClick={() => void workflow?.read(page.pagination.offset + 20)}
+                >
+                  Next requests
+                </button>
+              </nav>
+            )}
+            <MovementForm
+              key={`${auth.session.walletId}:${page.chain.revision}:${page.updatedAt}:${page.requests.map((r) => r.request.updatedAt).join(":")}`}
+              page={page}
               workflow={workflow!}
-              disabled={disabled}
+              disabled={disabled || page.custody.unresolved || !page.canAttest}
+              supportedVersions={[
+                ...(connection?.getSnapshot().connected?.supportsV0
+                  ? [0 as const]
+                  : []),
+                ...(connection?.getSnapshot().connected?.supportsV1
+                  ? [1 as const]
+                  : []),
+              ]}
             />
-          ))}
-          <nav
-            aria-label="Fulfillment request pages"
-            className="mt-6 flex flex-wrap gap-6"
-          >
+            {tx && (
+              <TransactionReviewView
+                state={flow}
+                id="custody-transaction-title"
+                title="Custody transaction"
+                onApprove={() => void transactions?.approveAndSend()}
+                onCheck={() => void transactions?.checkConfirmation()}
+                onCancel={() => transactions?.cancel()}
+              />
+            )}
+          </div>
+          <aside className="flex min-w-0 flex-col gap-4" style={{ flex: "1 1 320px" }}>
+            <section className="panel cut-s" aria-labelledby="custody-current">
+              <h2 id="custody-current" className="h3">
+                Current record
+              </h2>
+              <dl className="mt-2.5 mb-0">
+                <div className="kv kv-ops">
+                  <dt>Custody</dt>
+                  <dd>{held.text}</dd>
+                </div>
+                <div className="kv kv-ops">
+                  <dt>Custodian</dt>
+                  <dd className="id">
+                    {page.chain.subject ?? "No held custodian recorded"}
+                  </dd>
+                </div>
+                <div className="kv kv-ops">
+                  <dt>Owner</dt>
+                  <dd className="id">{page.chain.ownerWallet ?? "Not minted yet"}</dd>
+                </div>
+                <div className="kv kv-ops">
+                  <dt>Revision</dt>
+                  <dd>{page.chain.revision}</dd>
+                </div>
+                <div className="kv kv-ops">
+                  <dt>Custody authority</dt>
+                  <dd className="id">{page.chain.custodyAuthority}</dd>
+                </div>
+              </dl>
+            </section>
+            <section className="panel cut-s" aria-labelledby="custody-transitions">
+              <h2 id="custody-transitions" className="h3">
+                Permitted transitions
+              </h2>
+              {page.transitions.length ? (
+                page.transitions.map((transition) => (
+                  <div key={transition.action} className="tr">
+                    <span className="sm">{actionLabels[transition.action]}</span>
+                    <Badge tone="info" marker={false}>
+                      Allowed
+                    </Badge>
+                  </div>
+                ))
+              ) : (
+                <p className="p sm mt-2">
+                  No movement is permitted from the current custody.
+                </p>
+              )}
+              {!page.canAttest && (
+                <p className="help mt-2.5">
+                  Your wallet can coordinate requests. The registry&apos;s custody
+                  authority signs custody records.
+                </p>
+              )}
+            </section>
+            {page.custody.receipt && (
+              <ReceiptLine
+                receipt={page.custody.receipt}
+                cluster={page.cluster}
+                label="Latest custody transaction"
+              />
+            )}
             <button
-              className="text-link"
-              disabled={state.busy || state.page.pagination.offset === 0}
-              onClick={() =>
-                void workflow?.read(Math.max(0, state.page!.pagination.offset - 20))
-              }
+              className="lnk self-start"
+              type="button"
+              disabled={state.busy}
+              onClick={() => void workflow?.read()}
             >
-              Previous requests
+              Reload custody state
             </button>
-            <button
-              className="text-link"
-              disabled={
-                state.busy ||
-                !state.page.pagination.hasMore ||
-                state.page.pagination.offset > 99980
-              }
-              onClick={() => void workflow?.read(state.page!.pagination.offset + 20)}
-            >
-              Next requests
-            </button>
-          </nav>
-        </>
+          </aside>
+        </div>
       )}
-      <TransactionReviewView
-        state={flow}
-        id="custody-transaction-title"
-        title="Custody transaction review"
-        onApprove={() => void transactions?.approveAndSend()}
-        onCheck={() => void transactions?.checkConfirmation()}
-        onCancel={() => transactions?.cancel()}
-      />
-    </section>
+    </div>
   );
 }
+
 function MovementForm({
   page,
   workflow,
@@ -249,7 +323,8 @@ function MovementForm({
   const transition = transitions.find((row) => row.action === action);
   return (
     <form
-      className="mt-8 grid gap-5 max-w-reading"
+      className="panel cut panel-lg flex flex-col gap-4"
+      aria-labelledby="custody-movement"
       onSubmit={(event) => {
         event.preventDefault();
         const result = custodyPreparationRequestSchema.safeParse({
@@ -271,94 +346,135 @@ function MovementForm({
         void workflow.prepare(result.data);
       }}
     >
-      <h3 className="text-xl">Record completed physical movement</h3>
-      <label>
-        Related fulfillment request
-        <select
-          aria-label="Related fulfillment request"
-          className={inputClass}
-          value={requestId}
-          disabled={disabled}
-          onChange={(e) => {
-            setRequestId(e.target.value);
-            setAction("");
-            setConfirmed(false);
-          }}
-        >
-          <option value="">Manual custody attestation</option>
-          {page.requests
-            .filter((row) => row.transitions.length)
-            .map((row) => (
-              <option key={row.request.id} value={row.request.id}>
-                {label(row.request.kind)} · {row.request.id}
-              </option>
-            ))}
-        </select>
-      </label>
-      <label>
-        Physical movement
-        <select
-          aria-label="Physical movement"
-          className={inputClass}
-          value={action}
-          disabled={disabled}
-          onChange={(e) => {
-            setAction(e.target.value);
-            setConfirmed(false);
-          }}
-        >
-          <option value="">Select a valid movement</option>
-          {transitions.map((row) => (
-            <option key={row.action} value={row.action}>
-              {label(row.action)} → {label(row.to)}
-            </option>
-          ))}
-        </select>
-      </label>
-      {transition?.to === "COLLECTOR_HELD" && (
-        <label>
-          Receiving collector wallet
+      <h2 id="custody-movement" className="h2 h2-ops">
+        Record custody change
+      </h2>
+      <p className="p sm -mt-1.5">
+        Updating a fulfillment request doesn&apos;t change the artwork&apos;s record.
+        Recording custody is a separate, reviewed transaction, available once the
+        painting has physically moved.
+      </p>
+      <fieldset className="flex flex-col gap-4" disabled={disabled}>
+        <legend className="sr-only">Record completed physical movement</legend>
+        <div className="g2">
+          <div className="fld">
+            <label className="lbl" htmlFor="custody-request">
+              Related request <FieldTag kind="opt" />
+            </label>
+            <select
+              id="custody-request"
+              aria-label="Related fulfillment request"
+              className="inp"
+              value={requestId}
+              onChange={(event) => {
+                setRequestId(event.target.value);
+                setAction("");
+                setConfirmed(false);
+              }}
+            >
+              <option value="">No request (manual record)</option>
+              {page.requests
+                .filter((row) => row.transitions.length)
+                .map((row) => (
+                  <option key={row.request.id} value={row.request.id}>
+                    {row.request.kind === "DELIVERY" ? "Delivery" : "Return"},{" "}
+                    {row.request.recipientName}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="fld">
+            <label className="lbl" htmlFor="custody-action">
+              Physical movement <FieldTag kind="req" />
+            </label>
+            <select
+              id="custody-action"
+              aria-label="Physical movement"
+              className="inp"
+              value={action}
+              onChange={(event) => {
+                setAction(event.target.value);
+                setConfirmed(false);
+              }}
+            >
+              <option value="">Choose a permitted movement</option>
+              {transitions.map((row) => (
+                <option key={row.action} value={row.action}>
+                  {actionLabels[row.action]}: {custody[row.from].text} →{" "}
+                  {custody[row.to].text}
+                </option>
+              ))}
+            </select>
+          </div>
+          {transition?.to === "COLLECTOR_HELD" && (
+            <div className="fld span-all">
+              <label className="lbl" htmlFor="custody-collector">
+                Receiving collector wallet <FieldTag kind="req" />
+              </label>
+              <input
+                id="custody-collector"
+                className="inp id font-medium"
+                value={collector}
+                disabled={page.chain.ownerWallet !== null}
+                maxLength={44}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => {
+                  setCollector(event.target.value);
+                  setConfirmed(false);
+                }}
+              />
+            </div>
+          )}
+        </div>
+        {transition && (
+          <dl className="m-0">
+            <div className="kv kv-ops">
+              <dt>From</dt>
+              <dd>
+                {custody[transition.from].text} (revision {page.chain.revision})
+              </dd>
+            </div>
+            <div className="kv kv-ops">
+              <dt>To</dt>
+              <dd>
+                {custody[transition.to].text}
+                {transition.to === "COLLECTOR_HELD" && collector
+                  ? `, ${shortAddress(collector)}`
+                  : ""}
+              </dd>
+            </div>
+          </dl>
+        )}
+        <label className="chk chk-box">
           <input
-            className={inputClass}
-            value={collector}
-            disabled={disabled || page.chain.ownerWallet !== null}
-            maxLength={44}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => {
-              setCollector(e.target.value);
-              setConfirmed(false);
-            }}
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
           />
+          <span>
+            I confirmed that this physical movement has already happened and the
+            receiving custodian is correct.
+          </span>
         </label>
-      )}
-      <label className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          className="mt-1 h-5 w-5 shrink-0"
-          checked={confirmed}
-          disabled={disabled}
-          onChange={(e) => setConfirmed(e.target.checked)}
-        />
-        I confirmed that this physical movement has already occurred and the receiving
-        custodian is correct.
-      </label>
-      {error && (
-        <p role="alert">
-          Select a valid movement, confirm actual custody and provide the receiving
-          collector wallet when required.
-        </p>
-      )}
-      <button
-        className="text-link justify-self-start"
-        disabled={disabled || !transition || !confirmed || !supportedVersions.length}
-      >
-        Prepare custody attestation
-      </button>
+        {error && (
+          <p role="alert" className="ferr">
+            Choose a permitted movement, confirm it happened and give the receiving
+            collector wallet when needed.
+          </p>
+        )}
+        <button
+          className="btn btn-p cut-s self-start"
+          disabled={!transition || !confirmed || !supportedVersions.length}
+        >
+          Review custody change
+        </button>
+      </fieldset>
     </form>
   );
 }
-function FulfillmentForm({
+
+function FulfillmentCard({
   row,
   workflow,
   disabled,
@@ -368,149 +484,213 @@ function FulfillmentForm({
   disabled: boolean;
 }) {
   const request = row.request;
-  const [status, setStatus] = useState(""),
-    [courier, setCourier] = useState(request.courier ?? ""),
+  const [courier, setCourier] = useState(request.courier ?? ""),
     [tracking, setTracking] = useState(request.trackingReference ?? ""),
     [confirmed, setConfirmed] = useState(false),
-    [error, setError] = useState(false);
+    [error, setError] = useState<string | null>(null);
+  const position = flowSteps.indexOf(request.status as (typeof flowSteps)[number]);
+  const editsCourier = request.status === "REQUESTED" || request.status === "APPROVED";
+  function save(status: string) {
+    if (status === "DISPATCHED" && !courier.trim()) {
+      setError("Enter the courier before marking the request dispatched.");
+      return;
+    }
+    const result = fulfillmentUpdateRequestSchema.safeParse({
+      expectedUpdatedAt: request.updatedAt,
+      status,
+      manualConfirmation: confirmed,
+      ...(editsCourier
+        ? {
+            courier: courier.trim() || null,
+            trackingReference: tracking.trim() || null,
+          }
+        : {}),
+    });
+    if (!result.success) {
+      setError("Confirm the manual update before saving.");
+      return;
+    }
+    setError(null);
+    setConfirmed(false);
+    void workflow.update(request.id, result.data);
+  }
   return (
-    <details className="mt-6 border-t border-muted pt-5">
-      <summary className="cursor-pointer break-all">
-        {label(request.kind)} · {label(request.status)} · {request.id}
-      </summary>
-      <div className="mt-4 grid gap-3 text-sm break-words">
-        <p>Recipient: {request.recipientName}</p>
-        <p>
-          Contact: {request.contactEmail ?? request.contactPhone}
-          {request.contactEmail && request.contactPhone
-            ? ` · ${request.contactPhone}`
-            : ""}
-        </p>
-        <p>
-          Address: {request.addressLines.join(", ")} · {request.city} ·{" "}
-          {[request.region, request.postalCode, request.countryCode]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-        {request.deliveryInstructions && (
-          <p>Delivery instructions: {request.deliveryInstructions}</p>
-        )}
-        <p>Request updated: {request.updatedAt}</p>
-        {request.ownerReportedReceivedAt && (
-          <p>
-            Collector reported receipt: {request.ownerReportedReceivedAt}. This private
-            claim still requires manual confirmation; custody and condition inspection
-            are separate.
-          </p>
-        )}
-        {!row.ownerMatches && (
-          <p>
-            The requester is no longer the current digital owner. Only an available
-            cancellation is allowed.
-          </p>
-        )}
-        {request.courier && <p>Courier: {request.courier}</p>}
-        {request.trackingReference && (
-          <p>Tracking reference: {request.trackingReference}</p>
-        )}
+    <section
+      className="panel cut panel-lg flex flex-col gap-3.5"
+      aria-labelledby={`request-${request.id}`}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <h2 id={`request-${request.id}`} className="h2 h2-ops">
+          {request.kind === "DELIVERY" ? "Delivery request" : "Return to Katha"}
+        </h2>
+        <FieldTag kind="priv">Private fulfillment record</FieldTag>
       </div>
-      {!!row.allowedStatuses.length && (
-        <form
-          className="mt-5 grid gap-5 max-w-reading"
-          onSubmit={(event) => {
-            event.preventDefault();
-            const result = fulfillmentUpdateRequestSchema.safeParse({
-              expectedUpdatedAt: request.updatedAt,
-              status,
-              manualConfirmation: confirmed,
-              ...(request.status === "REQUESTED" || request.status === "APPROVED"
-                ? {
-                    courier: courier.trim() || null,
-                    trackingReference: tracking.trim() || null,
-                  }
-                : {}),
-            });
-            if (!result.success) {
-              setError(true);
-              return;
-            }
-            setError(false);
-            setConfirmed(false);
-            void workflow.update(request.id, result.data);
-          }}
-        >
-          <label>
-            Fulfillment status
-            <select
-              aria-label="Fulfillment status"
-              className={inputClass}
-              value={status}
-              disabled={disabled}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setConfirmed(false);
-              }}
+      {request.status === "CANCELLED" ? (
+        <Badge tone="err" className="self-start">
+          Cancelled
+        </Badge>
+      ) : (
+        <ol className="flow" aria-label="Request status">
+          {flowSteps.map((step, index) => (
+            <li
+              key={step}
+              className={`cut-s${index < position ? " done" : index === position ? " now" : ""}`}
             >
-              <option value="">Select next status</option>
-              {row.allowedStatuses.map((value) => (
-                <option key={value} value={value}>
-                  {label(value)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {(request.status === "REQUESTED" || request.status === "APPROVED") && (
-            <>
-              <label>
-                Courier
+              {flowLabels[step]}
+              <span className="sr-only">
+                {index < position ? ", done" : index === position ? ", current" : ""}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      <dl className="m-0">
+        <div className="kv kv-ops">
+          <dt>Requested</dt>
+          <dd>
+            {localDateTime(request.createdAt)}, updated{" "}
+            {localDateTime(request.updatedAt)}
+          </dd>
+        </div>
+        <div className="kv kv-ops">
+          <dt>Recipient</dt>
+          <dd>{request.recipientName}</dd>
+        </div>
+        <div className="kv kv-ops">
+          <dt>Contact</dt>
+          <dd>
+            {[request.contactEmail, request.contactPhone].filter(Boolean).join(", ")}
+          </dd>
+        </div>
+        <div className="kv kv-ops">
+          <dt>Address</dt>
+          <dd>
+            {[
+              ...request.addressLines,
+              request.city,
+              request.region,
+              request.postalCode,
+              request.countryCode,
+            ]
+              .filter(Boolean)
+              .join(", ")}
+          </dd>
+        </div>
+        {request.deliveryInstructions && (
+          <div className="kv kv-ops">
+            <dt>Instructions</dt>
+            <dd>{request.deliveryInstructions}</dd>
+          </div>
+        )}
+        {request.courier && (
+          <div className="kv kv-ops">
+            <dt>Courier</dt>
+            <dd>{request.courier}</dd>
+          </div>
+        )}
+        {request.trackingReference && (
+          <div className="kv kv-ops">
+            <dt>Tracking</dt>
+            <dd className="id">{request.trackingReference}</dd>
+          </div>
+        )}
+        {request.ownerReportedReceivedAt && (
+          <div className="kv kv-ops">
+            <dt>Owner reported</dt>
+            <dd>
+              Received, {localDateTime(request.ownerReportedReceivedAt)}. This still
+              needs manual confirmation; custody is recorded separately.
+            </dd>
+          </div>
+        )}
+      </dl>
+      {!row.ownerMatches && (
+        <Notice tone="warn">
+          <p>
+            <strong>The requester is no longer the digital owner.</strong> Only
+            cancellation is available.
+          </p>
+        </Notice>
+      )}
+      {row.allowedStatuses.length > 0 && (
+        <fieldset className="inset flex flex-col gap-3.5" disabled={disabled}>
+          <legend className="sr-only">Update this request</legend>
+          {editsCourier && row.allowedStatuses.includes("DISPATCHED") && (
+            <div className="g2">
+              <div className="fld">
+                <label className="lbl" htmlFor={`courier-${request.id}`}>
+                  Courier <FieldTag kind="req">Required to dispatch</FieldTag>
+                </label>
                 <input
-                  className={inputClass}
+                  id={`courier-${request.id}`}
+                  className="inp"
                   maxLength={120}
                   value={courier}
-                  disabled={disabled}
-                  onChange={(e) => {
-                    setCourier(e.target.value);
-                    setConfirmed(false);
-                  }}
+                  onChange={(event) => setCourier(event.target.value)}
                 />
-              </label>
-              <label>
-                Tracking reference
+              </div>
+              <div className="fld">
+                <label className="lbl" htmlFor={`tracking-${request.id}`}>
+                  Tracking number <FieldTag kind="opt" />
+                </label>
                 <input
-                  className={inputClass}
+                  id={`tracking-${request.id}`}
+                  className="inp"
                   maxLength={200}
                   value={tracking}
-                  disabled={disabled}
-                  onChange={(e) => {
-                    setTracking(e.target.value);
-                    setConfirmed(false);
-                  }}
+                  onChange={(event) => setTracking(event.target.value)}
                 />
-              </label>
-            </>
+              </div>
+            </div>
           )}
-          <label className="flex items-start gap-3">
+          <label className="chk">
             <input
-              className="mt-1 h-5 w-5 shrink-0"
               type="checkbox"
               checked={confirmed}
-              disabled={disabled}
-              onChange={(e) => setConfirmed(e.target.checked)}
+              onChange={(event) => setConfirmed(event.target.checked)}
             />
-            I confirmed this fulfillment status manually. Saving it does not record
-            physical custody on chain.
+            <span>
+              I confirmed this update manually. Saving it doesn&apos;t record custody on
+              chain.
+            </span>
           </label>
           {error && (
-            <p role="alert">Select an allowed status and confirm the manual update.</p>
+            <p role="alert" className="ferr">
+              {error}
+            </p>
           )}
-          <button
-            className="text-link justify-self-start"
-            disabled={disabled || !status || !confirmed}
-          >
-            Save fulfillment status
-          </button>
-        </form>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+            {row.allowedStatuses
+              .filter((status) => status !== "CANCELLED")
+              .map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  className="btn btn-p cut-s"
+                  disabled={!confirmed}
+                  onClick={() => save(status)}
+                >
+                  {statusActions[status]}
+                </button>
+              ))}
+            {row.allowedStatuses.includes("CANCELLED") && (
+              <button
+                type="button"
+                className="lnk lnk-err"
+                disabled={!confirmed}
+                onClick={() => save("CANCELLED")}
+              >
+                Cancel request
+              </button>
+            )}
+          </div>
+          {editsCourier && (
+            <p className="help">
+              The owner sees the courier and tracking on their delivery page.
+            </p>
+          )}
+        </fieldset>
       )}
-    </details>
+    </section>
   );
 }

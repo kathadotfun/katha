@@ -192,16 +192,36 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           json: { token: "a".repeat(64), session: issuedSession },
         });
       });
+      // Header links stay client-side, so the in-memory wallet session survives.
+      async function openAccount() {
+        const menu = page.locator(".menubtn");
+        if (await menu.isVisible()) {
+          await menu.click();
+          await page
+            .locator("#mobile-navigation")
+            .getByRole("link", { name: "Account", exact: true })
+            .click();
+        } else
+          await page
+            .getByRole("navigation", { name: "Main", exact: true })
+            .getByRole("link", { name: /^Account, signed in as/ })
+            .click();
+        await expect(page).toHaveURL(`${origin}/account`);
+      }
+      async function audit() {
+        assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
+        assert.equal(
+          await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          true,
+        );
+      }
       await page.goto(`${origin}/account`);
       const main = page.getByRole("main");
       await expect(
-        main.getByRole("heading", { name: "A place for your collecting journey." }),
+        main.getByRole("heading", { name: "Account", exact: true }),
       ).toBeVisible();
       assert.equal(accountCalls, 0);
-      await expect(main).toContainText("Test-token payments");
-      const menu = page.locator(".site-menu-toggle");
-      if (await menu.isVisible()) await menu.click();
-      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      await expect(main).toContainText("Connecting shares your public address");
       await page.evaluate(() => {
         const listeners = new Set();
         const accounts = [
@@ -297,53 +317,48 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           transactionCalls: () => transactionCalls,
         };
       });
-      const walletPanel = page.locator("#wallet-connection-panel");
-      await walletPanel
+      await main.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      const chooser = page.getByRole("dialog", { name: "Choose a wallet" });
+      await chooser
         .getByRole("button", { name: "Connect Synthetic test wallet" })
         .click();
-      await walletPanel
-        .getByLabel("Wallet account")
-        .selectOption("11111111111111111111111111111112");
-      await main.getByRole("button", { name: "Sign in to Katha", exact: true }).click();
-      await expect(main).toContainText("No published artworks are indexed");
+      await expect(chooser).toBeHidden();
+      await main.getByRole("button", { name: "Change account", exact: true }).click();
+      await chooser.getByRole("button", { name: /^1111…1112/ }).click();
+      await expect(main).toContainText("1111…1112");
       mode = "READY";
-      await main.getByRole("button", { name: "Refresh account" }).click();
-      await expect(main).toContainText("This count reflects");
-      assert.equal(
-        (await main
-          .getByRole("button", { name: "Refresh account" })
-          .evaluate((element) => element.getBoundingClientRect().height)) >= 40,
-        true,
-      );
-      await page.getByRole("button", { name: "Wallet connected", exact: true }).click();
-      const audit = await new AxeBuilder({ page }).analyze();
-      assert.deepEqual(audit.violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
-      );
+      await main
+        .getByRole("button", { name: "Sign in with wallet", exact: true })
+        .click();
+      await expect(main).toContainText("Connected and signed in");
+      await expect(main).toContainText("2 artworks indexed");
+      await expect(main).toContainText("11111111111111111111111111111112");
+      await audit();
       await page.evaluate(() => document.activeElement?.blur());
       await page.screenshot({
         path: `/tmp/katha-121-account-${width}.png`,
         fullPage: true,
       });
       await main.getByRole("link", { name: "View my collection", exact: true }).click();
-      await expect(main).toContainText("Your collection, with its stories intact.");
-      await expect(main).toContainText("In Katha custody");
-      await expect(main).toContainText("Indexing is catching up");
-      await expect(main).toContainText("No listing recorded");
-      listingActive = true;
-      await main
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
-      await expect(main).toContainText("Active listing");
-      await expect(main).toContainText("In Katha custody");
-      const collectionAudit = await new AxeBuilder({ page }).analyze();
-      assert.deepEqual(collectionAudit.violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
+      await expect(
+        main.getByRole("heading", { name: "My collection", exact: true }),
+      ).toBeVisible();
+      await expect(main).toContainText("Held by Katha");
+      await expect(main).toContainText(
+        "Recent ownership changes are still being indexed",
       );
+      await expect(main).toContainText("Not listed");
+      listingActive = true;
+      const refreshCollection = main.getByRole("button", {
+        name: "Refresh",
+        exact: true,
+      });
+      await refreshCollection.click();
+      await expect(main).toContainText("Listed for sale");
+      await expect(
+        main.getByRole("link", { name: "Manage listing", exact: true }),
+      ).toBeVisible();
+      await audit();
       await page.evaluate(() => document.activeElement?.blur());
       await page.screenshot({
         path: `/tmp/katha-122-collection-${width}.png`,
@@ -352,7 +367,10 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await main.getByRole("button", { name: "Next page", exact: true }).click();
       await expect(main).toContainText("No artworks on this page");
       await main.getByRole("button", { name: "Previous page", exact: true }).click();
-      await expect(main).toContainText("In Katha custody");
+      await expect(main).toContainText("Held by Katha");
+      listingActive = false;
+      await refreshCollection.click();
+      await expect(main).toContainText("Not listed");
       // Private shipping and owner receipt are independent of wallet signing and custody.
       let deliveryRequests = [],
         deliveryFail = false,
@@ -370,6 +388,8 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           if (route.request().method() === "POST") {
             deliveryWrites++;
             const input = route.request().postDataJSON();
+            assert.equal(input.kind, "DELIVERY");
+            assert.deepEqual(input.addressLines, ["Synthetic address"]);
             const now = new Date().toISOString();
             const { requestId, ...fields } = input;
             const row = {
@@ -409,23 +429,25 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         ];
         return route.fulfill({ headers, json: deliveryRequests[0] });
       });
-      await main
-        .getByRole("link", { name: "Delivery and receipt", exact: true })
-        .click();
+      await main.getByRole("link", { name: "Request delivery", exact: true }).click();
       await expect(
-        main.getByRole("heading", { name: "Bring the artwork home." }),
+        main.getByRole("heading", { name: "Delivery and returns", exact: true }),
       ).toBeVisible();
-      await main.getByRole("button", { name: "Refresh delivery requests" }).click();
-      await main
-        .getByLabel("Recipient name", { exact: true })
-        .fill("Synthetic recipient");
-      await main.getByLabel("Address lines", { exact: true }).fill("Synthetic address");
-      await main.getByLabel("City", { exact: true }).fill("Synthetic city");
-      await main.getByRole("button", { name: "Send private delivery request" }).click();
-      await expect(main.getByRole("alert")).toContainText("provide an email or phone");
+      await expect(main).toContainText("You can request delivery");
+      await main.getByLabel("Full name").fill("Synthetic recipient");
+      await main.getByLabel("Address line 1").fill("Synthetic address");
+      await main.getByLabel("City").fill("Synthetic city");
+      const requestDelivery = main.getByRole("button", {
+        name: "Request delivery",
+        exact: true,
+      });
+      await requestDelivery.click();
+      await expect(main.getByRole("alert")).toContainText("field needs attention");
+      await expect(main).toContainText("Add an email address or a phone number");
+      await expect(main.getByLabel("Full name")).toHaveValue("Synthetic recipient");
       assert.equal(deliveryWrites, 0);
       await main
-        .getByLabel("Contact email", { exact: true })
+        .getByRole("textbox", { name: /^Email/ })
         .fill("synthetic@example.invalid");
       await page.evaluate(() => {
         document.activeElement?.blur();
@@ -435,60 +457,51 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         path: `/tmp/katha-127-delivery-${width}.png`,
         fullPage: true,
       });
-      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
-      );
-      await main.getByRole("button", { name: "Send private delivery request" }).click();
-      await expect(main).toContainText("Delivery · Requested");
+      await audit();
+      await requestDelivery.click();
+      await expect(main).toContainText("Katha is reviewing your request");
+      await expect(main).toContainText("Delivery to you");
       assert.equal(deliveryWrites, 1);
       deliveryRequests = [{ ...deliveryRequests[0], status: "DISPATCHED" }];
-      await main.getByRole("button", { name: "Refresh delivery requests" }).click();
-      await expect(
-        main.getByRole("button", { name: "Report physical receipt" }),
-      ).toBeDisabled();
+      await main.getByRole("button", { name: "Refresh requests", exact: true }).click();
+      const received = main.getByRole("button", { name: "I've received the painting" });
+      await expect(received).toBeDisabled();
       await main.getByLabel("I physically received this artwork.").check();
-      await main.getByRole("button", { name: "Report physical receipt" }).click();
-      await expect(main).toContainText("You reported receipt");
-      await expect(main).toContainText("Delivery · Dispatched");
-      await expect(main).toContainText("Finalized custody: In transit");
+      await received.click();
+      await expect(main).toContainText("Receipt reported");
+      await expect(main).toContainText(
+        "Katha will record the custody change separately",
+      );
+      await expect(main).toContainText("In transit");
       deliveryFail = true;
-      await main.getByRole("button", { name: "Refresh delivery requests" }).click();
+      await main.getByRole("button", { name: "Refresh requests", exact: true }).click();
       await expect(main.getByRole("alert")).toContainText("could not be confirmed");
       await expect(main).not.toContainText("Synthetic address");
       await main.getByRole("link", { name: "Back to my collection" }).click();
-      await main
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
+      collectionMode = "COLLECTOR";
+      await refreshCollection.click();
+      await expect(main).toContainText("With you");
       resaleMode = "REQUIRED";
-      await main
-        .getByRole("link", { name: "Inspection and resale", exact: true })
-        .click();
+      await main.getByRole("link", { name: "Request inspection", exact: true }).click();
       await expect(
-        main.getByRole("heading", { name: "Preserve the story through resale." }),
+        main.getByRole("heading", { name: "Inspection and resale", exact: true }),
       ).toBeVisible();
-      await main.getByRole("button", { name: "Refresh inspection status" }).click();
-      await expect(main).toContainText("Inspection approval: required");
+      await expect(main).toContainText(
+        "Katha needs to inspect this painting before you can list it",
+      );
       await expect(
-        main.getByRole("link", { name: "Review a listing", exact: true }),
+        main.getByRole("link", { name: "Continue to listing", exact: true }),
       ).toHaveCount(0);
       await main
-        .getByRole("button", { name: "Request Katha resale inspection" })
+        .getByRole("button", { name: "Request inspection", exact: true })
         .click();
-      await expect(main).toContainText(
-        "Manual inspection or renewed approval is required",
-      );
+      await expect(main).toContainText("Inspection requested");
       assert.equal(resaleWrites, 1);
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         0,
       );
-      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
-      );
+      await audit();
       await page.evaluate(() => {
         document.activeElement?.blur();
         window.scrollTo(0, 0);
@@ -497,45 +510,35 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         path: `/tmp/katha-128-resale-${width}.png`,
         fullPage: true,
       });
+      const refreshResale = main.getByRole("button", {
+        name: "Refresh inspection status",
+      });
       resaleMode = "APPROVED";
-      await main.getByRole("button", { name: "Refresh inspection status" }).click();
-      await expect(main).toContainText(
-        "Matching finalized inspection approval observed",
-      );
+      await refreshResale.click();
+      await expect(main).toContainText("Approved for resale");
       await expect(
-        main.getByRole("link", { name: "Review a listing", exact: true }),
+        main.getByRole("link", { name: "Continue to listing", exact: true }),
       ).toBeVisible();
       resaleMode = "EXPIRED";
-      await main.getByRole("button", { name: "Refresh inspection status" }).click();
-      await expect(main).toContainText("Inspection approval: expired");
+      await refreshResale.click();
+      await expect(main).toContainText("Your resale approval has expired");
       await expect(
-        main.getByRole("link", { name: "Review a listing", exact: true }),
+        main.getByRole("link", { name: "Continue to listing", exact: true }),
       ).toHaveCount(0);
       resaleMode = "KATHA_HELD";
       await main.getByRole("link", { name: "Back to my collection" }).click();
-      await main
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
-      collectionMode = "COLLECTOR";
       listingUnavailable = true;
-      await main
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
-      await expect(main).toContainText("Collector-held");
+      await refreshCollection.click();
+      await expect(main).toContainText("With you");
       await expect(main).toContainText("Listing status unavailable");
       collectionMode = "FAIL";
-      await main
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
-      await expect(main.getByRole("alert")).toContainText("could not be loaded");
-      await expect(main).not.toContainText("Collector-held");
+      await refreshCollection.click();
+      await expect(main.getByRole("alert")).toContainText("couldn't load");
+      await expect(main).not.toContainText("With you");
       collectionMode = "EMPTY";
       await main.getByRole("button", { name: "Try again", exact: true }).click();
-      await expect(main).toContainText(
-        "No published artworks are indexed to this wallet yet",
-      );
+      await expect(main).toContainText("You don't own any artworks yet");
       // Exercise the owner form with a generated instruction, isolated API and RPC.
-
       let listingPreparations = 0;
       let releaseMode = "NONE",
         releasePreparations = 0;
@@ -661,106 +664,98 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       collectionMode = "READY";
       listingUnavailable = false;
       listingActive = false;
-      await main
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
-      await main
-        .getByRole("link", { name: "Offer this artwork for sale", exact: true })
-        .click();
+      await refreshCollection.click();
+      await main.getByRole("link", { name: "List for sale", exact: true }).click();
       await expect(
-        main.getByRole("heading", { name: "Offer your artwork for sale." }),
+        main.getByRole("heading", { name: "Manage listing", exact: true }),
       ).toBeVisible();
-      const prepare = main.getByRole("button", {
-        name: "Prepare listing for review",
-        exact: true,
-      });
+      const prepare = main.getByRole("button", { name: "Review listing", exact: true });
       await expect(prepare).toBeEnabled();
-      await main.getByLabel("Price in test tokens").fill("0");
-      await main
-        .getByLabel("Listing expiry (your local time)")
-        .fill("2030-01-01T00:00");
+      await main.getByLabel("Price", { exact: false }).fill("0");
+      await main.getByLabel("Listing ends", { exact: false }).fill("2030-01-01T00:00");
       await prepare.click();
-      await expect(main.getByRole("alert")).toContainText("positive amount");
+      await expect(main.getByRole("alert")).toContainText("field needs attention");
+      await expect(main).toContainText("Enter a price greater than 0");
       assert.equal(listingPreparations, 0);
-      await main.getByLabel("Price in test tokens").fill("12.500001");
+      await main.getByLabel("Price", { exact: false }).fill("12.500001");
       await prepare.click();
-      const review = main.getByRole("region", {
-        name: "Listing transaction review",
-        exact: true,
-      });
+      const review = main.getByRole("region", { name: "Review listing", exact: true });
       await expect(review).toContainText("Review transaction before wallet approval");
-      await expect(main).toContainText("12500001 test-token base units");
+      await expect(review).toContainText(
+        "12.500001 Katha test token (12500001 base units)",
+      );
       await expect(
-        review.getByRole("button", { name: "Approve in wallet and submit" }),
+        review.getByRole("button", { name: "Approve in wallet" }),
       ).toBeVisible();
       assert.equal(listingPreparations, 1);
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         0,
       );
-      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
-      );
+      await audit();
       await page.evaluate(() => document.activeElement?.blur());
       await page.screenshot({
         path: `/tmp/katha-123-listing-${width}.png`,
         fullPage: true,
       });
-      await review.getByRole("button", { name: "Cancel transaction review" }).click();
-      await expect(prepare).toBeDisabled();
+      await review.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(prepare).toHaveCount(0);
       releaseMode = "ACTIVE";
-      await main
-        .getByRole("button", { name: "Refresh listing state", exact: true })
-        .click();
-      await expect(
-        main.getByRole("button", { name: "Cancel listing", exact: true }),
-      ).toBeEnabled();
+      const refreshListing = main.getByRole("button", {
+        name: "Refresh listing state",
+        exact: true,
+      });
+      await refreshListing.click();
+      await expect(main).toContainText("Your listing is live");
       await main.getByRole("button", { name: "Cancel listing", exact: true }).click();
-      await expect(review).toContainText("CANCEL LISTING");
-      await expect(review).toContainText("Review transaction before wallet approval");
+      const confirmCancel = main.getByRole("alertdialog", {
+        name: "Cancel this listing?",
+      });
+      await expect(confirmCancel).toBeVisible();
+      await confirmCancel
+        .getByRole("button", { name: "Cancel listing", exact: true })
+        .click();
+      const cancelReview = main.getByRole("region", {
+        name: "Cancel listing",
+        exact: true,
+      });
+      await expect(cancelReview).toContainText("cancel listing ·");
+      await expect(cancelReview).toContainText(
+        "Review transaction before wallet approval",
+      );
       assert.equal(releasePreparations, 1);
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         0,
       );
-      await review
-        .getByRole("button", { name: "Approve in wallet and submit" })
-        .click();
-      await expect(review).toContainText("Transaction not completed");
-      await expect(main).not.toContainText("Cancellation recorded");
-      await review.getByRole("button", { name: "Cancel transaction review" }).click();
+      await cancelReview.getByRole("button", { name: "Approve in wallet" }).click();
+      await expect(cancelReview).toContainText("Transaction not completed");
+      await cancelReview.getByRole("button", { name: "Cancel", exact: true }).click();
       releaseMode = "EXPIRED";
-      await main
-        .getByRole("button", { name: "Refresh listing state", exact: true })
-        .click();
-      await expect(main).toContainText("Expiry alone does not unlock the asset");
+      await refreshListing.click();
+      await expect(main).toContainText(
+        "The asset stays locked until you release the listing",
+      );
       const release = main.getByRole("button", {
         name: "Release expired listing",
         exact: true,
       });
       await expect(release).toBeEnabled();
       await release.click();
-      await expect(review).toContainText("Review transaction before wallet approval");
-      assert.equal(releasePreparations, 2);
-      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
+      await expect(cancelReview).toContainText(
+        "Review transaction before wallet approval",
       );
+      assert.equal(releasePreparations, 2);
+      await audit();
       await page.evaluate(() => document.activeElement?.blur());
       await page.screenshot({
         path: `/tmp/katha-124-expired-listing-${width}.png`,
         fullPage: true,
       });
-      await review.getByRole("button", { name: "Cancel transaction review" }).click();
-      // Simulate cleanup finalized elsewhere, then read actual terminal observation.
+      await cancelReview.getByRole("button", { name: "Cancel", exact: true }).click();
+      // Simulate cleanup finalized elsewhere, then read the actual terminal observation.
       releaseMode = "CANCELLED";
-      await main
-        .getByRole("button", { name: "Refresh listing state", exact: true })
-        .click();
-      await expect(main).toContainText("Cancellation recorded");
+      await refreshListing.click();
       await expect(prepare).toBeEnabled();
       await expect(release).toHaveCount(0);
 
@@ -768,18 +763,10 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         .getByRole("link", { name: "Back to my collection", exact: true })
         .click();
       collectionMode = "READY";
-      await main
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
+      await refreshCollection.click();
       await main
         .getByRole("link", { name: "Synthetic Paubha study", exact: true })
         .click();
-      await main
-        .getByRole("link", { name: "Review purchase quote", exact: true })
-        .click();
-      const quoteSigningBefore = await page.evaluate(() =>
-        globalThis.__kathaWalletTest.transactionCalls(),
-      );
       let quoteMode = "PRIMARY",
         quoteReads = 0;
       await context.route(
@@ -816,32 +803,33 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           return route.fulfill({ headers, json: quote });
         },
       );
+      const quoteSigningBefore = await page.evaluate(() =>
+        globalThis.__kathaWalletTest.transactionCalls(),
+      );
+      await main.getByRole("link", { name: "Review purchase", exact: true }).click();
       await expect(
-        main.getByRole("heading", { name: "Understand the purchase." }),
+        main.getByRole("heading", { name: "Review purchase", exact: true }),
       ).toBeVisible();
-      assert.equal(quoteReads, 0);
+      // Signed-in buyers see current terms on arrival; quotes never reserve the work.
+      await expect(main).toContainText(
+        "Katha test token, exact total (100000001 base units)",
+      );
+      assert.ok(quoteReads >= 1);
+      await expect(main).toContainText("97.500001");
+      await expect(main).toContainText("Primary sale");
+      await expect(main).toContainText("Recorded custody");
+      await expect(main).toContainText("No monetary value");
+      await expect(main).toContainText("A quote doesn't reserve the work.");
       const refreshQuote = main.getByRole("button", {
-        name: "Refresh purchase quote",
+        name: "Refresh terms",
         exact: true,
       });
-      await refreshQuote.click();
-      await expect(main).toContainText("Total: 100.000001 test tokens");
-      await expect(main).toContainText("97.500001 test tokens");
-      await expect(main).toContainText("0.000000 test tokens");
-      await expect(main).toContainText("Expected listing revision");
-      await expect(main).toContainText("Recorded physical custody");
-      await expect(main).toContainText("No monetary value");
       quoteMode = "SECONDARY";
       await refreshQuote.click();
       await expect(main).toContainText("Secondary sale");
-      await expect(main).toContainText("92.500001 test tokens");
-      await expect(main).toContainText("5.000000 test tokens");
-      await expect(main).toContainText("merged amounts");
-      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
-      );
+      await expect(main).toContainText("92.500001");
+      await expect(main).toContainText("merged totals");
+      await audit();
       await page.evaluate(() => document.activeElement?.blur());
       await page.screenshot({
         path: `/tmp/katha-125-quote-${width}.png`,
@@ -849,12 +837,14 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       });
       quoteMode = "FAIL";
       await refreshQuote.click();
-      await expect(main.getByRole("alert")).toContainText("quote is unavailable");
-      await expect(main).not.toContainText("92.500001 test tokens");
+      await expect(main.getByRole("alert")).toContainText(
+        "Purchase terms aren't available",
+      );
+      await expect(main).not.toContainText("92.500001");
       await expect(main).not.toContainText("PRIVATE QUOTE ERROR");
       quoteMode = "PRIMARY";
       await refreshQuote.click();
-      await expect(main).toContainText("100.000001 test tokens");
+      await expect(main).toContainText("100000001 base units");
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         quoteSigningBefore,
@@ -884,29 +874,28 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
             : route.fulfill({ status: 201, headers, json: purchase.operation });
         },
       );
-      await main
-        .getByRole("button", { name: "Prepare reviewed purchase", exact: true })
-        .click();
+      const prepareTransaction = main.getByRole("button", {
+        name: "Prepare transaction",
+        exact: true,
+      });
+      await prepareTransaction.click();
       await expect(main).toContainText("quote may be stale");
-      await expect(main).not.toContainText("Total: 100.000001 test tokens");
+      await expect(main).not.toContainText("100000001 base units");
       assert.equal(purchasePrepares, 1);
       purchaseMode = "READY";
       await refreshQuote.click();
-      await main
-        .getByRole("button", { name: "Prepare reviewed purchase", exact: true })
-        .click();
+      await expect(main).toContainText("100000001 base units");
+      await prepareTransaction.click();
       await expect(main).toContainText("Review transaction before wallet approval");
-      await expect(main).toContainText("test-token payment below is included");
+      await expect(main).toContainText(
+        "The test-token payment above is part of this operation",
+      );
       await expect(main).toContainText("97500001 base units");
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         quoteSigningBefore,
       );
-      assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
-      assert.equal(
-        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
-        true,
-      );
+      await audit();
       await page.evaluate(() => {
         document.activeElement?.blur();
         globalThis.scrollTo(0, 0);
@@ -916,7 +905,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         fullPage: true,
       });
       await main
-        .getByRole("button", { name: "Approve in wallet and submit", exact: true })
+        .getByRole("button", { name: "Approve in wallet", exact: true })
         .click();
       await expect(main).toContainText(
         "Wallet approval or preflight was not completed",
@@ -925,29 +914,21 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         quoteSigningBefore + 1,
       );
-      await main
-        .getByRole("button", { name: "Cancel transaction review", exact: true })
-        .click();
-      await page.getByRole("button", { name: "Wallet connected", exact: true }).click();
-      await page
-        .locator("#wallet-connection-panel")
-        .getByRole("link", { name: "My account", exact: true })
-        .click();
-
-      await expect(main).toContainText("This count reflects");
+      await main.getByRole("button", { name: "Cancel", exact: true }).click();
       mode = "FAIL";
-      await main.getByRole("button", { name: "Refresh account" }).click();
-      await expect(main.getByRole("alert")).toContainText("could not be loaded");
+      await openAccount();
+      await expect(main.getByRole("alert")).toContainText("couldn't load");
       await expect(main).not.toContainText("PRIVATE ACCOUNT ERROR");
       mode = "EMPTY";
       await main.getByRole("button", { name: "Try again", exact: true }).click();
-      await expect(main).toContainText("No published artworks are indexed");
+      await expect(main).toContainText("0 artworks indexed");
       mode = "REVOKED";
-      await main.getByRole("button", { name: "Refresh account" }).click();
+      await main.getByRole("link", { name: "View my collection", exact: true }).click();
+      await openAccount();
       await expect(
-        main.getByRole("button", { name: "Sign in to Katha", exact: true }),
+        main.getByRole("button", { name: "Sign in with wallet", exact: true }),
       ).toBeVisible();
-      await expect(main).not.toContainText("Evaluated");
+      await expect(main).not.toContainText("artworks indexed");
       assert.deepEqual(errors, []);
       await context.close();
     }

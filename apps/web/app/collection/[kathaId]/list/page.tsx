@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { kathaIdSchema } from "@katha/shared";
 import { serverApiOrigin } from "../../../../lib/server-api";
+import { collectorArtwork } from "../../../../lib/collector-page";
 import { OwnerListingPanel } from "../../../../components/owner-listing";
+import { CollectorArtworkHeader } from "../../../../components/collector-artwork-header";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "List an artwork — Katha",
+  title: "Manage listing — Katha",
   robots: { index: false, follow: false },
 };
 export default async function ListingPage({
@@ -16,21 +17,18 @@ export default async function ListingPage({
 }) {
   const id = kathaIdSchema.safeParse((await params).kathaId);
   if (!id.success) notFound();
+  const apiOrigin = serverApiOrigin();
   return (
-    <div className="page-container py-16 sm:py-24">
-      <p className="eyebrow text-brand">Owner listing · Test environment</p>
-      <h1 className="mt-4 text-section">Offer your artwork for sale.</h1>
-      <p className="mt-5 max-w-reading text-muted">
-        Preserve the artist’s authorship while offering digital ownership. Listing locks
-        the Core asset temporarily; physical custody stays separate.
-      </p>
-      <Link
-        href="/collection"
-        className="text-link mt-5 inline-flex min-h-11 items-center"
-      >
-        Back to my collection
-      </Link>
-      <OwnerListingPanel kathaId={id.data} apiOrigin={serverApiOrigin()} />
+    <div className="app-main" style={{ paddingTop: "clamp(32px, 4vw, 56px)" }}>
+      <div className="wrap">
+        <CollectorArtworkHeader
+          title="Manage listing"
+          kathaId={id.data}
+          artwork={await collectorArtwork(id.data)}
+          apiOrigin={apiOrigin}
+        />
+        <OwnerListingPanel kathaId={id.data} apiOrigin={apiOrigin} />
+      </div>
     </div>
   );
 }

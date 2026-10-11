@@ -108,6 +108,39 @@ const api = createServer((request, response) => {
       }),
     );
   }
+  if (path.endsWith("/listing")) {
+    // Public listing observation: the synthetic work has an active test listing.
+    if (!path.includes("KATHA-PAUBHA-000001")) {
+      response.statusCode = 404;
+      return response.end("{}");
+    }
+    return response.end(
+      JSON.stringify({
+        kathaId: artworkFixture.kathaId,
+        cluster: "localnet",
+        commitment: "finalized",
+        observedSlot: "1",
+        chainTime: "1800000000",
+        owner: artworkFixture.ownership.ownerWallet,
+        asset: artworkFixture.chain.coreAssetAddress,
+        currentRevision: "1",
+        listing: {
+          address: "11111111111111111111111111111113",
+          status: "ACTIVE",
+          revision: "1",
+          completedSales: "0",
+          saleKind: "PRIMARY",
+          seller: artworkFixture.ownership.ownerWallet,
+          paymentMint: "11111111111111111111111111111114",
+          decimals: 6,
+          price: "100000001",
+          createdAt: "1700000000",
+          expiresAt: "1900000000",
+          active: true,
+        },
+      }),
+    );
+  }
   if (path.endsWith("/provenance")) {
     if (path.includes("KATHA-PAUBHA-000001")) {
       const offset = Number(
@@ -264,31 +297,33 @@ try {
   assert.equal((success.html.match(/<main(?:\s|>)/g) ?? []).length, 1);
   const visibleMarkup = success.html.replace(/<!--[\s\S]*?-->/g, "");
   for (const text of [
-    "Katha verification recorded",
-    "Good · Report #1",
-    "Physical custody unknown",
+    "Authenticity verification",
+    "Latest condition inspection",
+    "Version 1",
+    "Not recorded",
     "latest available inspection",
-    "Record freshness is unconfirmed",
+    "For sale",
+    "100.000001",
   ])
     assert.ok(visibleMarkup.includes(text), text);
   assert.ok(success.html.includes(artworkFixture.ownership.ownerWallet));
-  assert.ok(visibleMarkup.includes("Digital ownership transferred"));
+  assert.ok(visibleMarkup.includes("Recorded new owner"));
   for (const text of [
-    "Primary purchase",
-    "Secondary purchase",
+    "Primary sale",
+    "Secondary sale",
     "Condition report 2",
     "Photo SHA-256",
-    "Custody revision 3",
-    "1000000",
-    "Artist royalty 50000",
+    "Revision 3",
+    "1000000 base units",
+    "Artist royalty 0.05",
   ])
     assert.ok(visibleMarkup.includes(text), text);
   assert.ok(visibleMarkup.includes("Metadata bytes match the published commitment"));
   assert.ok(visibleMarkup.includes("?historyOffset=20#provenance"));
   assert.equal(
     requests,
-    3,
-    "One artwork read, one history read and one metadata document read per render",
+    4,
+    "One artwork, history, listing and metadata document read per render",
   );
 
   const nextHistory = await page(`${artworkFixture.kathaId}?historyOffset=20`);
@@ -300,7 +335,7 @@ try {
   assert.ok(sparse.html.includes("Artwork photography is not available yet."));
   assert.ok(sparse.html.includes("Not yet documented."));
   assert.ok(sparse.html.includes("History is unavailable"));
-  assert.ok(sparse.html.includes("Metadata integrity is unchecked"));
+  assert.ok(sparse.html.includes("integrity is unchecked"));
   const beforeInvalid = requests;
   const invalid = await page("not-a-permanent-id");
   assert.ok([200, 404].includes(invalid.status));
@@ -333,7 +368,7 @@ try {
   const catalogue = await explore("?category=PAUBHA");
   assert.equal(catalogue.status, 200);
   for (const text of [
-    "Explore the artworks",
+    "Every work published on Katha",
     artworkFixture.title,
     artworkFixture.artist.displayName,
     `/storage/public/${artworkFixture.media[0].contentHash}.png`,
@@ -345,9 +380,9 @@ try {
   assert.ok(paged.html.includes("No artworks on this page"));
   assert.ok(paged.html.includes("Return to the first page"));
   const emptyCategory = await explore("?category=THANGKA");
-  assert.ok(emptyCategory.html.includes("No published artworks yet"));
+  assert.ok(emptyCategory.html.includes("No Thangka works yet"));
   const unavailableCategory = await explore("?category=MANDALA");
-  assert.ok(unavailableCategory.html.includes("Artworks are unavailable right now"));
+  assert.ok(unavailableCategory.html.includes("Catalogue unavailable"));
   assert.ok(unavailableCategory.html.includes("/explore?category=MANDALA"));
   assert.ok(!unavailableCategory.html.includes("PRIVATE_UPSTREAM_SENTINEL"));
   const beforeBadFilters = requests;
@@ -372,10 +407,11 @@ try {
   assert.ok(home.includes('href="/artists/synthetic-artist"'));
   assert.ok(home.includes('href="https://katha.fun/"'));
   assert.ok(home.includes('id="purpose"') && home.includes('id="traditions"'));
-  assert.ok(home.includes("Real World Assets, rooted in Nepali culture."));
+  assert.ok(home.includes("RWAs on Solana."));
+  assert.ok(home.includes('id="collecting"'));
   for (const [mode, message] of [
-    ["EMPTY", "No published artworks are available yet"],
-    ["UNAVAILABLE", "Featured artworks are temporarily unavailable"],
+    ["EMPTY", "No works are published yet"],
+    ["UNAVAILABLE", "The Katha catalogue didn"],
   ]) {
     homeMode = mode;
     const fallback = await globalThis.fetch(origin).then((response) => response.text());
@@ -403,7 +439,7 @@ try {
     artistFixture.biography.split("\n")[0],
     artistFixture.region,
     "Art traditions",
-    "Artworks by",
+    "Published works",
     'href="/art/KATHA-PAUBHA-000001"',
     `https://katha.fun/artists/${artistFixture.slug}`,
   ])
@@ -415,13 +451,11 @@ try {
   );
   assert.ok(!profile.html.includes(artworkFixture.ownership.ownerWallet));
   const artistPaged = await artistPage(`${artistFixture.slug}?offset=12`);
-  assert.ok(artistPaged.html.includes("No published artworks on this page"));
+  assert.ok(artistPaged.html.includes("No published works on this page"));
   const artistEmpty = await artistPage("empty-artist");
-  assert.ok(
-    artistEmpty.html.includes("This does not mean the artist has created no works"),
-  );
+  assert.ok(artistEmpty.html.includes("mean the artist has created no works"));
   const worksUnavailable = await artistPage("unavailable-works");
-  assert.ok(worksUnavailable.html.includes("Published artworks are unavailable"));
+  assert.ok(worksUnavailable.html.includes("Catalogue unavailable"));
   assert.ok(worksUnavailable.html.includes(artistFixture.biography.split("\n")[0]));
   const beforeInvalidArtist = requests;
   const invalidArtist = await artistPage("invalid_slug");

@@ -141,19 +141,25 @@ export async function runPrimaryJourney(context) {
     const [admin, verifier, buyer, secondBuyer] = pages;
     async function visit(page, path) {
       globalThis.console.log(`Primary journey: ${path}`);
-      await page.goto(`${context.origin}${path}`);
-      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
-      const panel = page.getByRole("region", { name: "Your Solana wallet" });
-      await panel
+      // The wallet session lives in memory, so sign in on the account page and
+      // continue to the target with a client-side navigation.
+      await page.goto(`${context.origin}/account?next=${encodeURIComponent(path)}`);
+      const main = page.getByRole("main");
+      await main.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      await page
+        .getByRole("dialog", { name: "Choose a wallet" })
         .getByRole("button", { name: "Connect Primary journey wallet", exact: true })
         .click();
-      await panel
-        .getByRole("button", { name: "Sign in to Katha", exact: true })
+      await main
+        .getByRole("button", { name: "Sign in with wallet", exact: true })
         .click();
       await expect(
-        panel.getByText("Signed in to Katha", { exact: true }),
+        main.getByText("Connected and signed in", { exact: true }),
       ).toBeVisible();
-      await page.getByRole("button", { name: "Wallet connected", exact: true }).click();
+      await main
+        .getByRole("link", { name: "Continue where you left off", exact: true })
+        .click();
+      await expect(page).toHaveURL(`${context.origin}${path}`);
     }
     async function postResult(page, path, action, method = "POST") {
       const pending = page.waitForResponse(
@@ -173,7 +179,7 @@ export async function runPrimaryJourney(context) {
       globalThis.console.log(`Primary journey: ${prepare}`);
       await page.getByRole("button", { name: prepare, exact: true }).click();
       const approve = page.getByRole("button", {
-        name: "Approve in wallet and submit",
+        name: "Approve in wallet",
         exact: true,
       });
       await expect(approve).toBeEnabled({ timeout: 15000 });
@@ -194,7 +200,7 @@ export async function runPrimaryJourney(context) {
       try {
         await approve.click();
         const retry = page.getByRole("button", {
-          name: "Check this transaction again",
+          name: "Check status",
           exact: true,
         });
         await expect
@@ -229,7 +235,7 @@ export async function runPrimaryJourney(context) {
 
     await visit(buyer, "/admin");
     await expect(
-      buyer.getByText(/no applicable administration permission/i).first(),
+      buyer.getByText("You don't have access to operations", { exact: true }),
     ).toBeVisible();
     const forbidden = await globalThis.fetch(`${context.apiOrigin}/admin/artists`, {
       method: "POST",
@@ -241,35 +247,32 @@ export async function runPrimaryJourney(context) {
     });
     assert.equal(forbidden.status, 403);
     await visit(admin, "/admin");
-    for (const [label, value] of [
-      ["Artist display name", "Synthetic Nepali artist"],
-      ["Public profile slug", `primary-${randomUUID()}`],
-      ["Biography", "Fictional Paubha artist for local browser verification."],
-      ["Region", "Patan"],
-      ["Art traditions (one per line)", "Paubha"],
-      ["Payout wallet (optional)", context.actors[3].address],
+    for (const [name, value] of [
+      ["displayName", "Synthetic Nepali artist"],
+      ["slug", `primary-${randomUUID()}`],
+      ["biography", "Fictional Paubha artist for local browser verification."],
+      ["region", "Patan"],
+      ["payoutWallet", context.actors[3].address],
     ])
-      await admin.getByLabel(label, { exact: true }).fill(value);
+      await admin.locator(`[name="${name}"]`).fill(value);
+    await admin.getByRole("checkbox", { name: "Paubha", exact: true }).check();
     const artist = await postResult(admin, "/admin/artists", () =>
-      admin.getByRole("button", { name: "Create artist profile", exact: true }).click(),
+      admin.getByRole("button", { name: "Create artist", exact: true }).click(),
     );
     await visit(verifier, "/admin");
-    await verifier.getByLabel("Artist UUID", { exact: true }).fill(artist.id);
+    await verifier.getByLabel("Artist record ID", { exact: true }).fill(artist.id);
+    await verifier.getByRole("button", { name: "Look up", exact: true }).click();
     await verifier
-      .getByRole("button", { name: "Load artist profile", exact: true })
-      .click();
-    await verifier
-      .getByRole("checkbox", { name: /I completed manual artist verification/ })
+      .getByRole("checkbox", { name: /checked this artist's identity/ })
       .check();
     await postResult(verifier, `/verifier/artists/${artist.id}/verification`, () =>
       verifier
-        .getByRole("button", { name: "Record artist verification", exact: true })
+        .getByRole("button", { name: "Record verification", exact: true })
         .click(),
     );
     await visit(admin, "/admin/artworks/new");
     for (const [name, value] of Object.entries({
       artistId: artist.id,
-      category: "PAUBHA",
       creationYear: "2026",
       title: "Synthetic Patan Paubha",
       countryCode: "NP",
@@ -285,8 +288,9 @@ export async function runPrimaryJourney(context) {
       authorshipEvidenceHash: evidence,
     }))
       await admin.locator(`[name="${name}"]`).fill(value);
+    await admin.getByRole("radio", { name: "Paubha", exact: true }).check();
     const draft = await postResult(admin, "/admin/artworks", () =>
-      admin.getByRole("button", { name: "Create artwork draft", exact: true }).click(),
+      admin.getByRole("button", { name: "Create artwork", exact: true }).click(),
     );
     const id = draft.kathaId;
     assert.ok(id);
@@ -295,34 +299,30 @@ export async function runPrimaryJourney(context) {
       .locator('[name="file"]')
       .setInputFiles({ name: "synthetic.png", mimeType: "image/png", buffer: png });
     await admin.locator('[name="role"]').selectOption("HERO");
-    await admin.locator('[name="visibility"]').selectOption("PUBLIC");
+    await admin.locator('[name="visibility"][value="PUBLIC"]').check();
     await admin.locator('[name="approvedPublic"]').check();
     await admin.locator('[name="altText"]').fill("Synthetic Paubha test image");
-    await admin
-      .getByRole("button", { name: "Upload artwork file", exact: true })
-      .click();
-    await expect(admin.getByText(/Artwork media saved\./)).toBeVisible();
+    await admin.getByRole("button", { name: "Upload file", exact: true }).click();
+    await expect(admin.getByText("Media saved.", { exact: true })).toBeVisible();
     await visit(admin, `/admin/artworks/${id}/registration`);
-    await admin
-      .getByRole("button", { name: "Prepare canonical metadata", exact: true })
-      .click();
+    await admin.getByRole("button", { name: "Prepare document", exact: true }).click();
     await admin
       .getByRole("checkbox", { name: /I reviewed the permanent identity/ })
       .check();
     await transact(admin, "Prepare and simulate registration");
     await visit(verifier, `/admin/artworks/${id}/verification`);
     await verifier
-      .getByLabel("Reviewed evidence SHA-256", { exact: true })
+      .getByLabel(/^Fingerprint of the evidence you reviewed/)
       .fill(evidence);
     await verifier
-      .getByRole("checkbox", { name: /I physically inspected this artwork/ })
+      .getByRole("checkbox", { name: /inspected this physical artwork in person/ })
       .check();
     await verifier
-      .getByRole("checkbox", { name: /I reviewed the artist attribution/ })
+      .getByRole("checkbox", { name: /authorship evidence supports attribution/ })
       .check();
-    await transact(verifier, "Prepare and simulate verification");
+    await transact(verifier, "Prepare verification transaction");
     await visit(verifier, `/admin/artworks/${id}/condition`);
-    await verifier.getByLabel("Inspection image", { exact: true }).setInputFiles({
+    await verifier.getByLabel("Add an evidence image", { exact: true }).setInputFiles({
       name: "private.png",
       mimeType: "image/png",
       buffer: privatePng,
@@ -330,49 +330,40 @@ export async function runPrimaryJourney(context) {
     await verifier
       .getByRole("button", { name: "Upload private evidence", exact: true })
       .click();
-    await verifier.getByRole("checkbox", { name: /Evidence 1/ }).check();
+    await verifier.getByRole("checkbox", { name: /Evidence image 1/ }).check();
     const privateHash = createHash("sha256").update(privatePng).digest("hex");
     assert.equal(
       (await globalThis.fetch(`${context.apiOrigin}/storage/public/${privateHash}.png`))
         .status,
       404,
     );
+    await verifier.getByRole("radio", { name: "Good", exact: true }).check();
+    await verifier.getByLabel(/^Inspector record ID/).fill(randomUUID());
     await verifier
-      .getByLabel("Inspector record UUID", { exact: true })
-      .fill(randomUUID());
-    await verifier
-      .getByLabel("Actual inspection date and time (your local timezone)", {
-        exact: true,
-      })
+      .getByLabel(/^Inspected at/)
       .fill(new Date(Date.now() - 60000).toISOString().slice(0, 16));
+    await verifier.getByLabel(/^Notes/).fill("Synthetic private inspection notes");
     await verifier
-      .getByLabel("Private condition notes", { exact: true })
-      .fill("Synthetic private inspection notes");
-    await verifier
-      .getByRole("checkbox", {
-        name: /I physically inspected this artwork and approve these notes/,
-      })
+      .getByRole("checkbox", { name: /I inspected this work in person/ })
       .check();
-    await verifier
-      .getByRole("button", { name: "Save private condition report", exact: true })
-      .click();
+    await verifier.getByRole("button", { name: "Prepare report", exact: true }).click();
     await verifier
       .getByRole("checkbox", { name: /I reviewed the exact saved report/ })
       .check();
     await context.waitForClock();
-    await transact(verifier, "Prepare and simulate condition attestation");
+    await transact(verifier, "Prepare and simulate the report transaction");
     await visit(admin, `/admin/artworks/${id}/custody`);
     await admin
       .getByLabel("Physical movement", { exact: true })
       .selectOption("ATTEST_KATHA_CUSTODY");
     await admin
-      .getByRole("checkbox", { name: /I confirmed that this physical movement/ })
+      .getByRole("checkbox", { name: /this physical movement has already happened/ })
       .check();
-    await transact(admin, "Prepare custody attestation");
+    await transact(admin, "Review custody change");
     await visit(admin, `/admin/artworks/${id}/metadata`);
     await admin
       .getByRole("checkbox", {
-        name: /I reviewed the saved document and commitment change/,
+        name: /I reviewed the saved document/,
       })
       .check();
     await transact(admin, "Prepare metadata revision");
@@ -380,16 +371,18 @@ export async function runPrimaryJourney(context) {
     await admin
       .getByRole("checkbox", { name: /I reviewed the public metadata/ })
       .check();
-    await transact(admin, "Prepare Core mint");
+    await transact(admin, "Review and approve mint");
     await admin
       .getByRole("button", { name: "Reload saved state", exact: true })
       .click();
-    await admin
+    await admin.getByRole("button", { name: "Publish artwork", exact: true }).click();
+    const publish = admin.getByRole("alertdialog");
+    await publish
       .getByRole("checkbox", { name: /I reviewed the finalized asset/ })
       .check();
-    await admin.getByRole("button", { name: "Publish artwork", exact: true }).click();
+    await publish.getByRole("button", { name: "Publish artwork", exact: true }).click();
     await expect(
-      admin.getByRole("link", { name: "View published artwork", exact: true }),
+      admin.getByRole("link", { name: "View public record", exact: true }),
     ).toBeVisible();
     await context.initializeSaleTerms(id);
     const tagId = randomUUID();
@@ -414,13 +407,13 @@ export async function runPrimaryJourney(context) {
     await admin
       .getByRole("button", { name: "Refresh listing state", exact: true })
       .click();
-    await admin.getByLabel("Price in test tokens", { exact: true }).fill("1");
+    await admin.getByLabel(/^Price/).fill("1");
     await admin
-      .getByLabel("Listing expiry (your local time)", { exact: true })
+      .getByLabel(/^Listing ends/)
       .fill(new Date(Date.now() + 3600000).toISOString().slice(0, 16));
     await transact(
       admin,
-      "Prepare listing for review",
+      "Review listing",
       "Transaction finalized and active listing observed",
     );
     // Resolve the canonical path against the local server: this test never
@@ -429,18 +422,14 @@ export async function runPrimaryJourney(context) {
     await expect(
       buyer.getByRole("heading", { name: "Synthetic Patan Paubha", exact: true }),
     ).toBeVisible();
-    await buyer
-      .getByRole("link", { name: "Review purchase quote", exact: true })
-      .click();
-    await buyer
-      .getByRole("button", { name: "Refresh purchase quote", exact: true })
-      .click();
+    await buyer.getByRole("link", { name: "Review purchase", exact: true }).click();
+    await buyer.getByRole("button", { name: "Refresh terms", exact: true }).click();
     if (context.trust) {
       await buyer
-        .getByRole("button", { name: "Prepare reviewed purchase", exact: true })
+        .getByRole("button", { name: "Prepare transaction", exact: true })
         .click();
       const approve = buyer.getByRole("button", {
-        name: "Approve in wallet and submit",
+        name: "Approve in wallet",
         exact: true,
       });
       await expect(approve).toBeEnabled();
@@ -455,18 +444,14 @@ export async function runPrimaryJourney(context) {
         ),
       ).toBeVisible();
       await context.trust.assertRejected(id);
-      await buyer
-        .getByRole("button", { name: "Cancel transaction review", exact: true })
-        .click();
+      await buyer.getByRole("button", { name: "Cancel", exact: true }).click();
       await postResult(buyer, `/artworks/${id}/purchase-quote`, () =>
-        buyer
-          .getByRole("button", { name: "Refresh purchase quote", exact: true })
-          .click(),
+        buyer.getByRole("button", { name: "Refresh terms", exact: true }).click(),
       );
     }
     await transact(
       buyer,
-      "Prepare reviewed purchase",
+      "Prepare transaction",
       "Purchase finalized; buyer Core ownership confirmed and transfer history indexed",
     );
     await context.assertPurchase(id, artist.id);
@@ -479,11 +464,9 @@ export async function runPrimaryJourney(context) {
       resolved.headers.get("location"),
     );
     await visit(buyer, "/collection");
-    await buyer
-      .getByRole("button", { name: "Refresh collection", exact: true })
-      .click();
+    await buyer.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(
-      buyer.getByText("Synthetic Patan Paubha", { exact: true }),
+      buyer.getByText("Synthetic Patan Paubha", { exact: true }).first(),
     ).toBeVisible();
     async function move(action, requestId) {
       await visit(admin, `/admin/artworks/${id}/custody`);
@@ -493,84 +476,65 @@ export async function runPrimaryJourney(context) {
           .selectOption(requestId);
       await admin.getByLabel("Physical movement", { exact: true }).selectOption(action);
       await admin
-        .getByRole("checkbox", { name: /I confirmed that this physical movement/ })
+        .getByRole("checkbox", { name: /this physical movement has already happened/ })
         .check();
-      await transact(admin, "Prepare custody attestation");
+      await transact(admin, "Review custody change");
     }
     async function inspect(reason) {
       await visit(verifier, `/admin/artworks/${id}/condition`);
-      await verifier.getByRole("checkbox", { name: /Evidence 1/ }).check();
-      await verifier.getByLabel(/^Inspection reason/).selectOption(reason);
+      await verifier.getByRole("checkbox", { name: /Evidence image 1/ }).check();
+      await verifier.getByRole("radio", { name: "Good", exact: true }).check();
+      await verifier.getByLabel(/^Reason/).selectOption(reason);
+      await verifier.getByLabel(/^Inspector record ID/).fill(randomUUID());
       await verifier
-        .getByLabel("Inspector record UUID", { exact: true })
-        .fill(randomUUID());
-      await verifier
-        .getByLabel("Actual inspection date and time (your local timezone)", {
-          exact: true,
-        })
+        .getByLabel(/^Inspected at/)
         .fill(new Date(Date.now() - 60000).toISOString().slice(0, 16));
       await verifier
-        .getByLabel("Private condition notes", { exact: true })
+        .getByLabel(/^Notes/)
         .fill(`Synthetic private ${reason} inspection`);
       await verifier
-        .getByRole("checkbox", {
-          name: /I physically inspected this artwork and approve these notes/,
-        })
+        .getByRole("checkbox", { name: /I inspected this work in person/ })
         .check();
       await verifier
-        .getByRole("button", { name: "Save private condition report", exact: true })
+        .getByRole("button", { name: "Prepare report", exact: true })
         .click();
       await verifier
         .getByRole("checkbox", { name: /I reviewed the exact saved report/ })
         .check();
       await context.waitForClock();
-      await transact(verifier, "Prepare and simulate condition attestation");
+      await transact(verifier, "Prepare and simulate the report transaction");
     }
     let delivery;
     if (context.collectorDelivery) {
       await visit(buyer, `/collection/${id}/delivery`);
+      await buyer.getByLabel("Full name").fill("Synthetic Collector A");
       await buyer
-        .getByRole("button", { name: "Refresh delivery requests", exact: true })
-        .click();
-      await buyer
-        .getByLabel("Recipient name", { exact: true })
-        .fill("Synthetic Collector A");
-      await buyer
-        .getByLabel("Contact email", { exact: true })
+        .getByRole("textbox", { name: /^Email/ })
         .fill("synthetic-collector@example.invalid");
-      await buyer
-        .getByLabel("Address lines", { exact: true })
-        .fill("Private Test Lane");
-      await buyer.getByLabel("City", { exact: true }).fill("Patan");
+      await buyer.getByLabel("Address line 1").fill("Private Test Lane");
+      await buyer.getByLabel("City").fill("Patan");
       delivery = await postResult(buyer, `/fulfillment/artworks/${id}`, () =>
-        buyer
-          .getByRole("button", { name: "Send private delivery request", exact: true })
-          .click(),
+        buyer.getByRole("button", { name: "Request delivery", exact: true }).click(),
       );
       const status = async (value) => {
         await visit(admin, `/admin/artworks/${id}/custody`);
-        await admin.locator("summary").filter({ hasText: delivery.id }).click();
-        await admin
-          .getByLabel("Fulfillment status", { exact: true })
-          .selectOption(value);
+        const card = admin.locator(`section[aria-labelledby="request-${delivery.id}"]`);
         if (value === "DISPATCHED") {
-          await admin.getByLabel("Courier", { exact: true }).fill("Synthetic courier");
-          await admin
-            .getByLabel("Tracking reference", { exact: true })
-            .fill("PRIVATE-TEST-TRACKING");
+          await card.getByLabel(/^Courier/).fill("Synthetic courier");
+          await card.getByLabel(/^Tracking number/).fill("PRIVATE-TEST-TRACKING");
         }
-        await admin
-          .getByRole("checkbox", {
-            name: /I confirmed this fulfillment status manually/,
-          })
+        await card
+          .getByRole("checkbox", { name: /I confirmed this update manually/ })
           .check();
+        const action = {
+          APPROVED: "Approve request",
+          DISPATCHED: "Mark dispatched",
+          RECEIVED: "Mark received",
+        }[value];
         delivery = await postResult(
           admin,
           `/admin/fulfillment/${delivery.id}`,
-          () =>
-            admin
-              .getByRole("button", { name: "Save fulfillment status", exact: true })
-              .click(),
+          () => card.getByRole("button", { name: action, exact: true }).click(),
           "PATCH",
         );
       };
@@ -580,9 +544,6 @@ export async function runPrimaryJourney(context) {
       await context.collectorDelivery.assertState(id, "IN_TRANSIT_A");
       await visit(buyer, `/collection/${id}/delivery`);
       await buyer
-        .getByRole("button", { name: "Refresh delivery requests", exact: true })
-        .click();
-      await buyer
         .getByRole("checkbox", {
           name: "I physically received this artwork.",
           exact: true,
@@ -590,7 +551,7 @@ export async function runPrimaryJourney(context) {
         .check();
       delivery = await postResult(buyer, `/fulfillment/${delivery.id}/receipt`, () =>
         buyer
-          .getByRole("button", { name: "Report physical receipt", exact: true })
+          .getByRole("button", { name: "I've received the painting", exact: true })
           .click(),
       );
       assert.equal(delivery.status, "DISPATCHED");
@@ -602,16 +563,13 @@ export async function runPrimaryJourney(context) {
       await inspect("POST_DELIVERY");
       await context.collectorDelivery.assertState(id, "POST_DELIVERY_A");
       await visit(buyer, `/collection/${id}/resale`);
-      await buyer
-        .getByRole("button", { name: "Refresh inspection status", exact: true })
-        .click();
       await expect(
-        buyer.getByText("Inspection approval: required.", { exact: true }),
+        buyer.getByText("Katha needs to inspect this painting before you can list it", {
+          exact: true,
+        }),
       ).toBeVisible();
       const request = await postResult(buyer, `/resale/artworks/${id}`, () =>
-        buyer
-          .getByRole("button", { name: "Request Katha resale inspection", exact: true })
-          .click(),
+        buyer.getByRole("button", { name: "Request inspection", exact: true }).click(),
       );
       assert.equal(request.inspection.status, "REQUIRED");
       assert.equal(request.canList, false);
@@ -619,10 +577,10 @@ export async function runPrimaryJourney(context) {
       await buyer
         .getByRole("button", { name: "Refresh listing state", exact: true })
         .click();
-      await expect(buyer.getByText(/Inspection approval: required/)).toBeVisible();
+      await expect(buyer.getByText("This work can't be listed yet.")).toBeVisible();
       await expect(
-        buyer.getByRole("button", { name: "Prepare listing for review", exact: true }),
-      ).toBeDisabled();
+        buyer.getByRole("button", { name: "Review listing", exact: true }),
+      ).toHaveCount(0);
       const refused = await globalThis.fetch(
         `${context.apiOrigin}/artworks/${id}/operations/listing`,
         {
@@ -643,19 +601,14 @@ export async function runPrimaryJourney(context) {
       assert.equal(refused.status, 409);
       await visit(verifier, `/admin/artworks/${id}/condition`);
       await verifier
-        .getByRole("button", { name: "Refresh inspection status", exact: true })
+        .getByRole("button", { name: "Refresh requests", exact: true })
         .click();
-      await expect(verifier.getByText(/Owner .*Custody revision 3/)).toBeVisible();
+      await expect(verifier.getByText(/custody revision 3/i).first()).toBeVisible();
       await inspect("PRE_RESALE");
       await context.collectorDelivery.assertState(id, "APPROVED_A");
       await context.trust?.verify(id, tokens[0], tokens[2]);
       await visit(buyer, `/collection/${id}/resale`);
-      await buyer
-        .getByRole("button", { name: "Refresh inspection status", exact: true })
-        .click();
-      await expect(
-        buyer.getByText("Inspection approval: approved.", { exact: true }),
-      ).toBeVisible();
+      await expect(buyer.getByText("Approved for resale").first()).toBeVisible();
     }
     if (context.custodyResale) {
       const listingRequest = {
@@ -685,8 +638,8 @@ export async function runPrimaryJourney(context) {
         }),
       ).toBeVisible();
       await expect(
-        admin.getByRole("button", { name: "Prepare listing for review", exact: true }),
-      ).toBeDisabled();
+        admin.getByRole("button", { name: "Review listing", exact: true }),
+      ).toHaveCount(0);
       assert.equal(
         (await post(`/artworks/${id}/operations/listing`, 0, listingRequest)).status,
         403,
@@ -696,20 +649,14 @@ export async function runPrimaryJourney(context) {
       await buyer
         .getByRole("button", { name: "Refresh listing state", exact: true })
         .click();
-      await expect(
-        buyer.getByText(
-          context.collectorDelivery
-            ? /Inspection approval: approved/
-            : /Inspection approval: not_required/,
-        ),
-      ).toBeVisible();
-      await buyer.getByLabel("Price in test tokens", { exact: true }).fill("2");
+      await expect(buyer.getByText("Eligible to list", { exact: true })).toBeVisible();
+      await buyer.getByLabel(/^Price/).fill("2");
       await buyer
-        .getByLabel("Listing expiry (your local time)", { exact: true })
+        .getByLabel(/^Listing ends/)
         .fill(new Date(Date.now() + 3600000).toISOString().slice(0, 16));
       await transact(
         buyer,
-        "Prepare listing for review",
+        "Review listing",
         "Transaction finalized and active listing observed",
       );
       await context.custodyResale.assertListed(id);
@@ -724,7 +671,7 @@ export async function runPrimaryJourney(context) {
 
       await visit(secondBuyer, new URL(resolved.headers.get("location")).pathname);
       await secondBuyer
-        .getByRole("link", { name: "Review purchase quote", exact: true })
+        .getByRole("link", { name: "Review purchase", exact: true })
         .click();
       await context.trust?.verifyExpiredPurchase(id, tokens[4]);
       const quote = await postResult(
@@ -732,7 +679,7 @@ export async function runPrimaryJourney(context) {
         `/artworks/${id}/purchase-quote`,
         () =>
           secondBuyer
-            .getByRole("button", { name: "Refresh purchase quote", exact: true })
+            .getByRole("button", { name: "Refresh terms", exact: true })
             .click(),
       );
       assert.equal(quote.saleKind, "SECONDARY");
@@ -744,11 +691,11 @@ export async function runPrimaryJourney(context) {
         secondBuyer.getByText("Secondary sale", { exact: true }),
       ).toBeVisible();
       await expect(
-        secondBuyer.getByText("Total: 2.000000 test tokens", { exact: true }),
+        secondBuyer.getByRole("row", { name: "Total 2", exact: true }),
       ).toBeVisible();
       await transact(
         secondBuyer,
-        "Prepare reviewed purchase",
+        "Prepare transaction",
         "Purchase finalized; buyer Core ownership confirmed and transfer history indexed",
       );
       // A consumed quote and the previous owner cannot create another settlement.
@@ -779,23 +726,17 @@ export async function runPrimaryJourney(context) {
       assert.equal(finalTag.status, 302);
       assert.equal(finalTag.headers.get("location"), resolved.headers.get("location"));
       await visit(buyer, "/collection");
-      await buyer
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
+      await buyer.getByRole("button", { name: "Refresh", exact: true }).click();
       await expect(
-        buyer.getByText("No published artworks are indexed to this wallet yet", {
-          exact: true,
-        }),
+        buyer.getByText("You don't own any artworks yet", { exact: true }),
       ).toBeVisible();
       await expect(
         buyer.getByText("Synthetic Patan Paubha", { exact: true }),
       ).toHaveCount(0);
       await visit(secondBuyer, "/collection");
-      await secondBuyer
-        .getByRole("button", { name: "Refresh collection", exact: true })
-        .click();
+      await secondBuyer.getByRole("button", { name: "Refresh", exact: true }).click();
       await expect(
-        secondBuyer.getByText("Synthetic Patan Paubha", { exact: true }),
+        secondBuyer.getByText("Synthetic Patan Paubha", { exact: true }).first(),
       ).toBeVisible();
     }
     if (context.collectorDelivery) {
@@ -817,11 +758,8 @@ export async function runPrimaryJourney(context) {
       await move("RECEIVE_BY_COLLECTOR");
       await context.collectorDelivery.assertState(id, "HELD_B");
       await visit(secondBuyer, `/collection/${id}/resale`);
-      await secondBuyer
-        .getByRole("button", { name: "Refresh inspection status", exact: true })
-        .click();
       await expect(
-        secondBuyer.getByText("Inspection approval: stale.", { exact: true }),
+        secondBuyer.getByText("This approval no longer applies", { exact: true }),
       ).toBeVisible();
       await inspect("POST_DELIVERY");
       await context.collectorDelivery.assertState(id, "POST_DELIVERY_B");

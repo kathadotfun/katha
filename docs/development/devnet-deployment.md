@@ -173,7 +173,7 @@ Select the intended wallet and account. Fund that public operator with test SOL.
    operation, authorities, signer addresses, transaction version, estimated
    network fee and rent notice. A successful simulation is a prerequisite, not a
    guarantee of finalization. Confirm the review, then separately choose
-   **Approve in wallet and submit**. Save its signature and check until finalized.
+   **Approve in wallet**. Save its signature and check until finalized.
 4. After finalization choose **Start next operation**, then **registry**. Review
    and approve again. Registry validates the deployed upgrade authority and a
    fresh Core collection controlled by its collection-authority PDA.

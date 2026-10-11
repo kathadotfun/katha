@@ -251,6 +251,15 @@ async function fixture(
     updateArtworkMedia: async () => {
       throw new Error("Unused");
     },
+    assignNfcTag: async () => {
+      throw new Error("Unexpected NFC assignment");
+    },
+    readNfcTag: async () => {
+      throw new Error("Unexpected NFC lookup");
+    },
+    retireNfcTag: async () => {
+      throw new Error("Unexpected NFC retirement");
+    },
     readArtworkDraft: async () => {
       throw new Error("Unused");
     },

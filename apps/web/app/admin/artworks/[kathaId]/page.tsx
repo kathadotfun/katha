@@ -1,27 +1,20 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { artworkDraftParamsSchema } from "@katha/shared";
+import { serverApiOrigin } from "../../../../lib/server-api";
 import { ArtworkDraftEditorPanel } from "../../../../components/artwork-draft-editor";
 export const metadata: Metadata = {
-  title: "Artwork documentation — Katha",
+  title: "Artwork documentation — Katha operations",
   robots: { index: false, follow: false },
 };
-export default async function EditArtworkPage({
+// The workflow layout renders the shared navigation for this permanent ID.
+export default async function Page({
   params,
 }: {
   params: Promise<{ kathaId: string }>;
 }) {
   const parsed = artworkDraftParamsSchema.safeParse(await params);
   if (!parsed.success) notFound();
-  return (
-    <div className="page-container admin-page">
-      <Link href="/admin/artworks" className="text-link">
-        Artwork drafts
-      </Link>
-      <p className="eyebrow mt-8">Katha administration</p>
-      <h1 className="mt-4 text-4xl sm:text-5xl">Artwork documentation</h1>
-      <ArtworkDraftEditorPanel kathaId={parsed.data.kathaId} />
-    </div>
-  );
+  const { kathaId } = parsed.data;
+  return <ArtworkDraftEditorPanel kathaId={kathaId} apiOrigin={serverApiOrigin()} />;
 }

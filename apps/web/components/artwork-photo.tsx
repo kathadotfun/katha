@@ -1,17 +1,35 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { KathaMark } from "./ui/katha-mark";
 
+// Placeholders stand in for missing approved media; they never imply a real photo.
+export function PhotoPlaceholder({
+  label,
+  size = 56,
+}: {
+  label?: string;
+  size?: number;
+}) {
+  return (
+    <>
+      <KathaMark size={size} variant="outline" />
+      {label && <span>{label}</span>}
+    </>
+  );
+}
+
+// Renders inside a `.ph` frame. The full work stays uncropped (object-fit: contain).
 export function ArtworkPhoto({
   src,
   alt,
-  caption,
   primary = false,
+  fallbackSize = 56,
 }: {
   src: string;
   alt: string;
-  caption: string;
   primary?: boolean;
+  fallbackSize?: number;
 }) {
   const [failed, setFailed] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -20,29 +38,18 @@ export function ArtworkPhoto({
     if (imageRef.current?.complete && imageRef.current.naturalWidth === 0)
       setFailed(true);
   }, [src]);
-  return (
-    <figure className="min-w-0">
-      <div
-        className={primary ? "artwork-photo artwork-photo-primary" : "artwork-photo"}
-      >
-        {failed ? (
-          <p role="status" className="p-6 text-center text-muted">
-            This photograph is unavailable.
-          </p>
-        ) : (
-          <img
-            ref={imageRef}
-            src={src}
-            alt={alt}
-            loading={primary ? "eager" : "lazy"}
-            fetchPriority={primary ? "high" : "auto"}
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={() => setFailed(true)}
-          />
-        )}
-      </div>
-      <figcaption className="mt-3 text-sm text-muted">{caption}</figcaption>
-    </figure>
+  return failed ? (
+    <PhotoPlaceholder label="This photograph is unavailable." size={fallbackSize} />
+  ) : (
+    <img
+      ref={imageRef}
+      src={src}
+      alt={alt}
+      loading={primary ? "eager" : "lazy"}
+      fetchPriority={primary ? "high" : "auto"}
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
   );
 }

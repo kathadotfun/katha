@@ -50,7 +50,7 @@ physical move. Relisting still rechecks current sale eligibility.
 
 Wallet/session changes abort pending reads/preparation and discard late responses.
 Only one preparation runs at a time. After uncertain preparation, inspect retained
-transaction status and refresh before retrying. **Cancel transaction review**
+transaction status and refresh before retrying. **Cancel**
 only discards an unsigned browser review; it does not cancel an on-chain listing.
 
 ## Verification

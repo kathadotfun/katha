@@ -11,6 +11,20 @@ import {
   type TransactionSnapshot,
 } from "../lib/transaction-lifecycle.ts";
 const require = createRequire(import.meta.url);
+async function compile(path: string, aliases: Readonly<Record<string, string>>) {
+  let source = ts.transpileModule(
+    await readFile(new URL(path, import.meta.url), "utf8"),
+    { compilerOptions: { module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } },
+  ).outputText;
+  for (const [specifier, target] of Object.entries(aliases))
+    source = source.replaceAll(JSON.stringify(specifier), JSON.stringify(target));
+  return `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+}
+const runtime = {
+  react: pathToFileURL(require.resolve("react")).href,
+  "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
+};
+const statusModule = await compile("../components/ui/status.tsx", runtime);
 let code = ts.transpileModule(
   await readFile(
     new URL("../components/transaction-review.tsx", import.meta.url),
@@ -19,6 +33,8 @@ let code = ts.transpileModule(
   { compilerOptions: { module: ts.ModuleKind.ESNext, jsx: ts.JsxEmit.ReactJSX } },
 ).outputText;
 for (const [specifier, target] of Object.entries({
+  "./ui/status": statusModule,
+  "../lib/format": new URL("../lib/format.ts", import.meta.url).href,
   react: pathToFileURL(require.resolve("react")).href,
   "react/jsx-runtime": pathToFileURL(require.resolve("react/jsx-runtime")).href,
   "./wallet-provider":
@@ -61,10 +77,10 @@ test("transaction panel displays distinct pending, failure, finalization and ind
     const html = render(state);
     assert.ok(html.includes(text));
     assert.ok(html.includes('role="status"'));
-    assert.equal(html.includes("Approve in wallet and submit"), phase === "review");
+    assert.equal(html.includes(">Approve in wallet<"), phase === "review");
     if (["unknown", "indexing-delay", "expired"].includes(phase))
-      assert.ok(html.includes("Check this transaction again"));
-    if (state.signature) assert.ok(!html.includes("Cancel transaction review"));
+      assert.ok(html.includes(">Check status<"));
+    if (state.signature) assert.ok(!html.includes(">Cancel<"));
   }
   assert.ok(
     render({

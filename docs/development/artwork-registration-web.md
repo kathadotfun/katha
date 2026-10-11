@@ -14,7 +14,7 @@ public HERO image, dimensions, materials, technique and all cultural description
 required by the canonical metadata schema. Creator-wallet attribution may remain
 absent; payout-wallet configuration is not part of registration.
 
-**Prepare canonical metadata** calls the admin public-document endpoint and reloads
+**Prepare document** calls the admin public-document endpoint and reloads
 its saved version. Preparing this document publishes its exact JSON bytes and
 closes draft/media editing under the existing conservative lifecycle rules. Review
 and approve source content and media before this action. Private photographs,
@@ -36,7 +36,7 @@ Localnet requires v0; Devnet supports v1 or v0 according to wallet capabilities.
 The generated instruction is decoded and compared with the independently reviewed
 artist, creator wallet, category, year and evidence commitment. Simulation and the
 shared transaction review then show the test network, authority/fee payer, fee,
-account privileges and message hash. **Approve in wallet and submit** is the only
+account privileges and message hash. **Approve in wallet** is the only
 signing trigger. The page and persistent wallet panel share one transaction controller;
 their approval buttons cannot cause duplicate submission.
 
@@ -63,7 +63,7 @@ finalized receipt into a failed transaction.
 Use **Reload registration state** to inspect saved outcomes. Older unresolved signed
 attempts cannot be hidden by newer unsigned preparations. Such an outcome blocks
 fresh preparation, including after refresh. While the original signed bytes remain
-in the transaction controller, **Check this transaction again** reconciles that
+in the transaction controller, **Check status** reconciles that
 attempt without signing or sending. Refresh/account changes discard in-memory
 transaction bytes. If they are lost, the saved receipt still shows its signature;
 an operator must reconcile the retained attempt using the existing receipt workflow

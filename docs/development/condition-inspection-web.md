@@ -40,7 +40,7 @@ hash, permanent identity and selected evidence. A saved report is not an attesta
 ## Attest and reconcile
 
 Review **Review exact private canonical report** and the saved digest. Approve the
-report separately, then **Prepare and simulate condition attestation**. Initial
+report separately, then **Prepare and simulate the report transaction**. Initial
 inspection uses INITIAL_VERIFICATION. Later unminted reports use PRE_SALE or
 INSURANCE; minted reports offer the eligible follow-up reasons. Chain condition
 versions and local report versions are separate counters.
@@ -51,7 +51,7 @@ reviewed report. It validates artwork, config, verification, condition head, rep
 custody and asset PDAs as applicable, the signer, system program and account roles.
 A changed owner or custody revision requires a new report and review. Simulation
 uses the existing [Solana RPC contract](https://solana.com/docs/rpc/http/simulatetransaction)
-and does not establish success. **Approve in wallet and submit** remains separate.
+and does not establish success. **Approve in wallet** remains separate.
 See [wallet transaction lifecycles](transaction-lifecycle-web.md).
 
 Signed bytes are checked, the signature is retained before one broadcast, and the

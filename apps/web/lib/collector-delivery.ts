@@ -14,6 +14,18 @@ export const emptyDeliverySnapshot = {
   reloadRequired: false,
   requestId: null as string | null,
 };
+// The API only accepts a return while the owner holds the work; it rechecks the
+// custody subject and rejects a second open request.
+export function canReturn(page: CollectorDeliveryReview) {
+  return (
+    page.custodyState === "COLLECTOR_HELD" &&
+    !page.requests.some(
+      (row) =>
+        row.kind === "RETURN_TO_KATHA" &&
+        ["REQUESTED", "APPROVED", "DISPATCHED"].includes(row.status),
+    )
+  );
+}
 export function createCollectorDelivery(
   session: Pick<
     WalletSessionController,
@@ -111,10 +123,12 @@ export function createCollectorDelivery(
       );
     },
     create(input: FulfillmentCreateRequest) {
-      if (!state.page?.canRequest) return Promise.resolve();
+      const page = state.page;
+      if (!page || !(input.kind === "DELIVERY" ? page.canRequest : canReturn(page)))
+        return Promise.resolve();
       return run(true, async (signal) => {
         const data = fulfillmentCreateRequestSchema.parse(input);
-        if (data.kind !== "DELIVERY" || data.requestId !== state.requestId)
+        if (data.kind !== input.kind || data.requestId !== state.requestId)
           throw new Error("Unsupported request");
         const result = await session.createDelivery(kathaId, data, signal);
         if (result.id !== data.requestId || result.kathaId !== kathaId)

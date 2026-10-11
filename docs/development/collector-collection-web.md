@@ -10,7 +10,7 @@ The [authenticated collection API](collector-api.md) supplies up to 20 published
 indexed holdings per page, ordered by permanent Katha ID. Each work links to its
 canonical artwork page and artist profile. Only approved public hero media can
 appear; unavailable photographs have a text fallback. **Previous page**, **Next
-page**, and **Refresh collection** read another observation, with bounded offsets.
+page**, and **Refresh** read another observation, with bounded offsets.
 A later empty page can return to the preceding page.
 
 ## Independent observations

@@ -46,7 +46,7 @@ account privileges and message commitment. Registry operations contain no token
 payment; account creation rent may additionally apply and is not estimated here.
 Simulation is a check, not a guarantee of execution success.
 
-**Approve in wallet and submit** is the only signing trigger. The controller checks
+**Approve in wallet** is the only signing trigger. The controller checks
 identity/lifetime and reruns simulation before prompting. If the fee estimate changes,
 it returns to review and requires approval again. The wallet adapter uses only Kit's
 separate modifying signer (`solana:signTransaction`), never a wallet's combined

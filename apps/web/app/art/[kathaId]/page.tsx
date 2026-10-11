@@ -7,6 +7,7 @@ import {
   artworkCanonicalUrl,
   artworkCategoryLabels,
   loadPublicArtwork,
+  loadPublicListing,
 } from "../../../lib/artwork-page";
 import {
   checkMetadataIntegrity,
@@ -19,7 +20,10 @@ export const dynamic = "force-dynamic";
 
 type ArtworkPageProps = {
   params: Promise<{ kathaId: string }>;
-  searchParams: Promise<{ historyOffset?: string | string[] }>;
+  searchParams: Promise<{
+    historyOffset?: string | string[];
+    source?: string | string[];
+  }>;
 };
 
 const getArtwork = cache(async (id: string) => {
@@ -52,9 +56,10 @@ export async function generateMetadata({
 
 export default async function ArtworkPage({ params, searchParams }: ArtworkPageProps) {
   const artwork = await getArtwork((await params).kathaId);
-  const offset = historyOffset((await searchParams).historyOffset);
+  const query = await searchParams;
+  const offset = historyOffset(query.historyOffset);
   const apiOrigin = serverApiOrigin();
-  const [history, integrity] = await Promise.all([
+  const [history, integrity, listing] = await Promise.all([
     offset === null
       ? Promise.resolve(null)
       : serverApi()
@@ -62,12 +67,17 @@ export default async function ArtworkPage({ params, searchParams }: ArtworkPageP
           .then((value) => validateArtworkHistory(artwork, value, offset))
           .catch(() => null),
     checkMetadataIntegrity(artwork, apiOrigin),
+    loadPublicListing(artwork, (id) => serverApi().listing(id)),
   ]);
   return (
     <ArtworkDetail
       artwork={artwork}
       apiOrigin={apiOrigin}
       evidence={{ history, integrity }}
+      listing={listing}
+      // TODO(nfc): the API's /nfc/:tagId redirect does not yet append
+      // `?source=nfc`, so this arrival note only appears on links that include it.
+      arrivedByNfc={query.source === "nfc"}
     />
   );
 }

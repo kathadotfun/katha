@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   useWalletSession,
@@ -12,11 +13,16 @@ import {
   emptyVerificationSnapshot,
   type ArtworkVerificationWorkflow,
 } from "../lib/artwork-verification";
+import { artworkCategoryLabels } from "../lib/artwork-page";
 import { TransactionReviewView } from "./transaction-review";
+import { OpsSignedOut, ReceiptLine, WorkflowIntro } from "./ops-ui";
+import { Badge, FieldTag, Notice, type Tone } from "./ui/status";
+
 const noop = () => () => {};
 const emptyAuth = () => signedOutSnapshot;
 const emptyFlow = () => idleTransactionSnapshot;
 const emptyPage = () => emptyVerificationSnapshot;
+
 export function ArtworkVerificationPanel({ kathaId }: { kathaId: string }) {
   const session = useWalletSession(),
     connection = useWalletConnection(),
@@ -53,47 +59,59 @@ export function ArtworkVerificationPanel({ kathaId }: { kathaId: string }) {
   );
   if (!auth.session)
     return (
-      <p role="status" className="mt-10">
-        Connect and sign in with a verifier wallet in the header to review authenticity.
-      </p>
+      <OpsSignedOut path={`/admin/artworks/${kathaId}/verification`} role="verifier" />
     );
+  const page = state.page;
+  const [tone, status]: [Tone, string] = !page
+    ? state.error
+      ? ["err", "Unavailable"]
+      : ["neu", "Checking"]
+    : page.verification.finalized
+      ? ["ok", "Verified"]
+      : page.verification.unresolved
+        ? ["warn", "Reconciling"]
+        : !page.registration.finalized
+          ? ["err", "Registration needed"]
+          : ["neu", "Not verified"];
   return (
-    <section
-      className="admin-workspace mt-10"
-      aria-labelledby="verification-controls"
-      aria-busy={state.busy}
-    >
-      <h2 id="verification-controls" className="text-2xl">
-        Manual authentication and chain attestation
-      </h2>
-      <p className="mt-4 text-sm text-muted">
-        Inspect the physical artwork and authorship evidence before approving
-        authenticity. A digest, NFC link or successful simulation does not perform that
-        inspection. Condition, custody and ownership are recorded separately.
-      </p>
-      {state.busy && (
-        <p role="status" className="mt-4">
+    <div className="flex flex-col gap-6" aria-busy={state.busy}>
+      <WorkflowIntro tone={tone} status={status}>
+        A verification records that a Katha verifier inspected the physical work and
+        checked its authorship evidence. It&apos;s a manual assessment, recorded with
+        your wallet, not a guarantee. A fingerprint, NFC link or passing simulation
+        doesn&apos;t perform that inspection.
+      </WorkflowIntro>
+      {state.busy && !page && (
+        <p role="status" className="p">
           Checking access and saved verification state…
         </p>
       )}
       {state.error && (
-        <p role="alert" className="mt-4">
-          {state.error}
-        </p>
+        <Notice tone="err" icon="warning">
+          <p>
+            <strong>Verification can&apos;t continue right now.</strong> {state.error}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="btn btn-o btn-sm"
+              disabled={state.busy || !workflow}
+              onClick={() => void workflow?.read()}
+            >
+              Check again
+            </button>
+            <Link className="btn btn-o btn-sm" href="/account">
+              Switch wallet
+            </Link>
+          </div>
+        </Notice>
       )}
-      <button
-        type="button"
-        className="text-link mt-4"
-        disabled={state.busy || !workflow}
-        onClick={() => void workflow?.read()}
-      >
-        Reload verification state
-      </button>
-      {state.page && (
+      {page && (
         <VerificationContent
-          key={`${auth.session.walletId}:${auth.session.expiresAt}:${state.page.updatedAt}:${state.page.metadata?.id}:${state.page.verification.finalized}:${state.page.verification.unresolved}`}
-          page={state.page}
+          key={`${auth.session.walletId}:${auth.session.expiresAt}:${page.updatedAt}:${page.metadata?.id}:${page.verification.finalized}:${page.verification.unresolved}`}
+          page={page}
           disabled={state.busy || state.reloadRequired}
+          busy={state.busy}
           workflow={workflow}
           flow={flow}
         />
@@ -102,24 +120,27 @@ export function ArtworkVerificationPanel({ kathaId }: { kathaId: string }) {
         flow.operation.kathaId === kathaId && (
           <TransactionReviewView
             id="artwork-verification-transaction"
-            title="Artwork authenticity transaction review"
+            title="Verification transaction"
             state={flow}
             onApprove={() => void transactions?.approveAndSend()}
             onCheck={() => void transactions?.checkConfirmation()}
             onCancel={() => transactions?.cancel()}
           />
         )}
-    </section>
+    </div>
   );
 }
+
 function VerificationContent({
   page,
   disabled,
+  busy,
   workflow,
   flow,
 }: {
   page: NonNullable<ReturnType<ArtworkVerificationWorkflow["getSnapshot"]>["page"]>;
   disabled: boolean;
+  busy: boolean;
   workflow: ArtworkVerificationWorkflow | null;
   flow: typeof idleTransactionSnapshot;
 }) {
@@ -146,191 +167,252 @@ function VerificationContent({
     ].includes(flow.phase) &&
     (!flow.signature || ["failed", "indexing-delay", "indexed"].includes(flow.phase));
   const receipt = page.verification.receipt;
+  const matches = digest.trim() === page.identity?.authorshipEvidenceHash;
   return (
     <>
-      <dl className="mt-6 space-y-3 text-sm">
-        <div>
-          <dt>Permanent Katha ID</dt>
-          <dd>{page.kathaId}</dd>
-        </div>
-        <div>
-          <dt>Artwork</dt>
-          <dd>{page.title}</dd>
-        </div>
-        <div>
-          <dt>Network</dt>
-          <dd>
-            {page.cluster === "devnet" ? "Devnet" : "Localnet"} · Test environment
-          </dd>
-        </div>
-        <div>
-          <dt>Artist profile</dt>
-          <dd>
-            {page.artistVerified ? "Manually verified" : "Artist verification required"}
-          </dd>
-        </div>
-        <div>
-          <dt>Registration</dt>
-          <dd>
-            {page.registration.finalized
-              ? "Registration finalized"
-              : "Finalized registration required"}
-          </dd>
-        </div>
-        {page.identity && (
-          <>
-            <div>
-              <dt>Immutable artist ID</dt>
-              <dd className="break-all">{page.identity.artistId}</dd>
+      {page.verification.finalized && (
+        <Notice tone="ok">
+          <p>
+            <strong>Already verified.</strong> This work&apos;s verification is
+            finalized. There&apos;s nothing more to record here.
+          </p>
+          <Link
+            className="btn btn-o btn-sm self-start"
+            href={`/admin/artworks/${page.kathaId}/condition`}
+          >
+            Continue to condition
+          </Link>
+        </Notice>
+      )}
+      {page.verification.unresolved && (
+        <Notice tone="warn" icon="warning">
+          <p>
+            <strong>A verification is waiting to be reconciled.</strong> A saved
+            transaction hasn&apos;t been confirmed by Katha yet. Don&apos;t send
+            another; reload to check its outcome.
+          </p>
+        </Notice>
+      )}
+      <div
+        className="grid items-start gap-5"
+        style={{
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(380px, 100%), 1fr))",
+        }}
+      >
+        <section className="panel cut" aria-labelledby="verification-identity">
+          <h2 id="verification-identity" className="h3">
+            Registered identity
+          </h2>
+          <dl className="mt-3 mb-0">
+            <div className="kv kv-ops">
+              <dt>Katha ID</dt>
+              <dd className="id">{page.kathaId}</dd>
             </div>
-            <div>
-              <dt>Creator wallet</dt>
-              <dd className="break-all">
-                {page.identity.creatorWallet ?? "No creator wallet recorded"}
-              </dd>
+            <div className="kv kv-ops">
+              <dt>Artwork</dt>
+              <dd>{page.title}</dd>
             </div>
-            <div>
-              <dt>Category and creation year</dt>
+            <div className="kv kv-ops">
+              <dt>Registration</dt>
               <dd>
-                {page.identity.category} · {page.identity.creationYear}
+                {page.registration.finalized
+                  ? "Finalized"
+                  : "Finalized registration required"}
               </dd>
             </div>
-            <div>
-              <dt>Registered authorship evidence commitment</dt>
-              <dd className="break-all font-mono">
-                {page.identity.authorshipEvidenceHash}
+            {page.identity && (
+              <div className="kv kv-ops">
+                <dt>Tradition, year</dt>
+                <dd>
+                  {artworkCategoryLabels[page.identity.category]},{" "}
+                  {page.identity.creationYear}
+                </dd>
+              </div>
+            )}
+            <div className="kv kv-ops">
+              <dt>Network</dt>
+              <dd>{page.cluster === "devnet" ? "Solana Devnet" : "Localnet"}</dd>
+            </div>
+          </dl>
+        </section>
+        <section className="panel cut" aria-labelledby="verification-attribution">
+          <h2 id="verification-attribution" className="h3">
+            Artist attribution
+          </h2>
+          <dl className="mt-3 mb-0">
+            {page.identity && (
+              <>
+                <div className="kv kv-ops">
+                  <dt>Artist record</dt>
+                  <dd className="id">{page.identity.artistId}</dd>
+                </div>
+                <div className="kv kv-ops">
+                  <dt>Creator wallet</dt>
+                  <dd className="id">
+                    {page.identity.creatorWallet ?? "No creator wallet recorded"}
+                  </dd>
+                </div>
+              </>
+            )}
+            <div className="kv kv-ops">
+              <dt>Profile</dt>
+              <dd>
+                <Badge tone={page.artistVerified ? "ok" : "warn"} marker={false}>
+                  {page.artistVerified ? "Verified" : "Not verified"}
+                </Badge>
               </dd>
             </div>
-          </>
-        )}
-      </dl>
-      <p role="status" className="mt-6">
-        {page.verification.finalized
-          ? "Artwork verification finalized."
-          : page.verification.unresolved
-            ? "A retained verification signature is unresolved. Check its outcome before preparing a replacement."
-            : "No finalized artwork verification recorded."}
-      </p>
-      {receipt && (
-        <div className="mt-3 text-sm">
-          <p className="break-all">
-            Retained verification signature: {receipt.signature}
-          </p>
-          <p>
-            Receipt: {receipt.status}
-            {receipt.slot ? ` · Slot ${receipt.slot}` : ""}
-          </p>
-          <p>
-            {receipt.status === "FINALIZED"
-              ? receipt.indexed
-                ? "Verification event indexed."
-                : "Finalized; verification indexing pending."
-              : "A signature alone does not establish successful verification."}
-          </p>
+            {page.metadata && (
+              <div className="kv kv-ops">
+                <dt>Metadata reviewed</dt>
+                <dd>
+                  Version {page.metadata.version},{" "}
+                  <span className="id">sha256 {page.metadata.documentHash}</span>
+                </dd>
+              </div>
+            )}
+          </dl>
+          {page.metadata && (
+            <details className="more mt-1">
+              <summary>View full document</summary>
+              <pre className="xs inset mt-2 overflow-x-auto whitespace-pre-wrap wrap-anywhere">
+                {page.metadata.canonicalDocument}
+              </pre>
+            </details>
+          )}
+        </section>
+      </div>
+
+      <section className="panel cut" aria-labelledby="verification-evidence">
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
+          <h2 id="verification-evidence" className="h3">
+            Authorship evidence
+          </h2>
+          <FieldTag kind="priv" />
         </div>
-      )}
-      {page.metadata && (
-        <>
-          <h3 className="mt-8 text-xl">
-            Reviewed public document · Version {page.metadata.version}
-          </h3>
-          <p className="mt-3 text-sm">
-            Exact saved bytes and SHA-256 verified. The document remains public; private
-            inspection records and evidence stay outside it.
-          </p>
-          <p className="mt-3 break-all font-mono text-sm">
-            {page.metadata.documentHash}
-          </p>
-          <details className="mt-4">
-            <summary>Review exact canonical document</summary>
-            <pre className="mt-3 whitespace-pre-wrap break-all text-sm">
-              {page.metadata.canonicalDocument}
-            </pre>
-          </details>
-        </>
-      )}
-      <fieldset className="mt-8 space-y-4" disabled={disabled || !eligible || !free}>
-        <legend className="text-xl">Verifier approval</legend>
-        <p className="text-sm">
-          Keep the inspection record and original authorship evidence in approved
-          private storage. Compute SHA-256 from the exact evidence bytes used at
-          registration; enter only the digest here. This form does not upload evidence
-          or inspection notes.
+        <p className="p sm mt-2">
+          Keep the evidence and inspection record in approved private storage. Compute
+          the SHA-256 of the exact evidence bytes used at registration and enter only
+          the fingerprint here; nothing is uploaded.
         </p>
-        <label className="block">
-          Reviewed evidence SHA-256
+        <div className="ev mt-2">
+          <span>Registered fingerprint</span>
+          <span className="id xs">
+            {page.identity
+              ? `sha256 ${page.identity.authorshipEvidenceHash}`
+              : "Not recorded"}
+          </span>
+        </div>
+        <div className="fld mt-3">
+          <label className="lbl" htmlFor="verification-digest">
+            Fingerprint of the evidence you reviewed <FieldTag kind="req" />
+          </label>
           <input
-            className="mt-2 block w-full min-w-0 min-h-12 border border-muted bg-surface px-3 py-2 font-mono"
+            id="verification-digest"
+            className="inp id font-medium"
             value={digest}
-            onChange={(e) => setDigest(e.target.value)}
+            onChange={(event) => setDigest(event.target.value)}
             maxLength={64}
             autoComplete="off"
             spellCheck={false}
+            disabled={disabled || !eligible || !free}
+            aria-invalid={digest && !matches ? true : undefined}
             aria-describedby="evidence-match"
           />
-        </label>
-        <p id="evidence-match" className="text-sm" role="status">
-          {digest && digest !== page.identity?.authorshipEvidenceHash
-            ? "The reviewed evidence digest does not match the registered commitment."
-            : digest
-              ? "Reviewed evidence digest matches the registered commitment."
-              : "Enter the digest of the evidence you reviewed."}
-        </p>
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={inspected}
-            onChange={(e) => setInspected(e.target.checked)}
-          />
-          <span>
-            I physically inspected this artwork and matched it to its permanent identity
-            and documentation.
+        </div>
+        <div className="ev mt-2">
+          <span>Fingerprint check</span>
+          <span id="evidence-match" role="status">
+            {!digest ? (
+              <Badge tone="neu" marker={false}>
+                Enter the fingerprint you reviewed
+              </Badge>
+            ) : matches ? (
+              <Badge tone="ok">Matches registration</Badge>
+            ) : (
+              <Badge tone="err">Doesn&apos;t match registration</Badge>
+            )}
           </span>
-        </label>
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={authorship}
-            onChange={(e) => setAuthorship(e.target.checked)}
-          />
-          <span>
-            I reviewed the artist attribution and private authorship evidence and
-            approve this artwork’s authenticity.
-          </span>
-        </label>
-        <button
-          className="button-primary"
-          type="button"
-          disabled={
-            !inspected ||
-            !authorship ||
-            digest !== page.identity?.authorshipEvidenceHash
-          }
-          onClick={() => {
-            const confirmed = inspected && authorship;
-            setInspected(false);
-            setAuthorship(false);
-            setDigest("");
-            void workflow?.prepare(confirmed, digest);
-          }}
+        </div>
+      </section>
+
+      {receipt && (
+        <ReceiptLine
+          receipt={receipt}
+          cluster={page.cluster}
+          label="Saved verification transaction"
+        />
+      )}
+
+      {!page.verification.finalized && (
+        <section
+          className="panel cut flex flex-col gap-3"
+          aria-labelledby="verification-confirm"
         >
-          Prepare and simulate verification
-        </button>
-      </fieldset>
-      {!eligible && !page.verification.finalized && (
-        <p className="mt-4 text-sm">
-          Verification requires a verified artist, prepared metadata and finalized
-          registration, with no unresolved signed attempt.
-        </p>
+          <h2 id="verification-confirm" className="h3">
+            Your confirmation
+          </h2>
+          <p className="p sm">
+            Both are required before the verification transaction can be prepared.
+          </p>
+          <fieldset
+            className="flex flex-col gap-3"
+            disabled={disabled || !eligible || !free}
+          >
+            <legend className="sr-only">Verifier approval</legend>
+            <label className="chk chk-box cut-s">
+              <input
+                type="checkbox"
+                checked={inspected}
+                onChange={(event) => setInspected(event.target.checked)}
+              />
+              <span>
+                I inspected this physical artwork in person and it matches the
+                registered record.
+              </span>
+            </label>
+            <label className="chk chk-box cut-s">
+              <input
+                type="checkbox"
+                checked={authorship}
+                onChange={(event) => setAuthorship(event.target.checked)}
+              />
+              <span>
+                The private authorship evidence supports attribution to this artist.
+              </span>
+            </label>
+            <button
+              className="btn btn-p cut-s mt-1.5 self-start"
+              type="button"
+              disabled={!inspected || !authorship || !matches}
+              onClick={() => {
+                const confirmed = inspected && authorship;
+                const reviewed = digest.trim();
+                setInspected(false);
+                setAuthorship(false);
+                setDigest("");
+                void workflow?.prepare(confirmed, reviewed);
+              }}
+            >
+              Prepare verification transaction
+            </button>
+          </fieldset>
+          {!eligible && (
+            <p className="p sm">
+              Verification needs a verified artist, a prepared document and a finalized
+              registration, with no unresolved signed attempt.
+            </p>
+          )}
+        </section>
       )}
-      {page.verification.finalized && (
-        <p className="mt-4 text-sm">
-          This records the verifier’s authenticity attestation. Publication and minting
-          require the later inspection and custody steps.
-        </p>
-      )}
+      <button
+        type="button"
+        className="lnk self-start"
+        disabled={busy || !workflow}
+        onClick={() => void workflow?.read()}
+      >
+        Reload verification state
+      </button>
     </>
   );
 }

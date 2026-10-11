@@ -7,7 +7,7 @@ browser; the server-rendered page contains no session or bearer token. The route
 sets `noindex, nofollow` metadata.
 
 1. Connect a compatible wallet using the header.
-2. Choose **Sign in to Katha** on the account page and approve the login message.
+2. Choose **Sign in with wallet** on the account page and approve the login message.
 3. Review your wallet name, full public address, configured localnet/Devnet cluster,
    session expiry, and published indexed artwork count.
 4. Choose **Refresh account** to load another observation, or **Sign out** to clear

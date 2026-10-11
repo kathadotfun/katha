@@ -6,7 +6,7 @@ Sign in with the current Core owner wallet and open **Inspection and resale** fr
 latest report commitment, approval status and your own inspection requests.
 
 A secondary sale of collector-held art requires Katha to inspect the physical
-artwork. Select **Request Katha resale inspection** when offered. The request has
+artwork. Select **Request inspection** when offered. The request has
 no wallet transaction and carries no grade, private evidence or self-approved
 condition. Arrange the physical inspection with Katha manually. A basic NFC scan
 or the collector's report does not replace the inspection.

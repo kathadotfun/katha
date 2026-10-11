@@ -104,6 +104,12 @@ import {
   type WalletChallengeRequest,
   type WalletVerifyRequest,
 } from "@katha/shared";
+import {
+  nfcArtworkParamsSchema,
+  nfcTagAssignmentRequestSchema,
+  nfcTagParamsSchema,
+  nfcTagResponseSchema,
+} from "@katha/shared";
 import { publicApiOrigin } from "./public-api.ts";
 
 export class WalletSessionApiError extends Error {
@@ -876,6 +882,42 @@ export function createWalletSessionApi(
         result.items.length !== data.items.length ||
         result.items.some((item, index) => item.id !== data.items[index]?.id)
       )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async assignNfcTag(
+      kathaId: string,
+      tagId: string,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = nfcArtworkParamsSchema.parse({ kathaId });
+      const input = nfcTagAssignmentRequestSchema.parse({ tagId });
+      const result = nfcTagResponseSchema.parse(
+        await request(`/admin/artworks/${path.kathaId}/nfc-tags`, input, token, signal),
+      );
+      if (
+        result.kathaId !== path.kathaId ||
+        result.tagId !== input.tagId ||
+        result.state !== "ACTIVE"
+      )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async readNfcTag(tagId: string, token: string, signal: AbortSignal) {
+      const path = nfcTagParamsSchema.parse({ tagId });
+      const result = nfcTagResponseSchema.parse(
+        await request(`/admin/nfc-tags/${path.tagId}`, undefined, token, signal, "GET"),
+      );
+      if (result.tagId !== path.tagId) throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async retireNfcTag(tagId: string, token: string, signal: AbortSignal) {
+      const path = nfcTagParamsSchema.parse({ tagId });
+      const result = nfcTagResponseSchema.parse(
+        await request(`/admin/nfc-tags/${path.tagId}/retire`, {}, token, signal),
+      );
+      if (result.tagId !== path.tagId || result.state !== "RETIRED")
         throw new WalletSessionApiError("UNAVAILABLE");
       return result;
     },

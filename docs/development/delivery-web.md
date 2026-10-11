@@ -2,7 +2,7 @@
 
 Sign in with the current Core owner wallet, open `/collection`, and select
 **Delivery and receipt**. The private route is `/collection/{kathaId}/delivery`.
-Select **Refresh delivery requests** to load finalized ownership/custody and your
+Select **Refresh requests** to load finalized ownership/custody and your
 own saved requests. Other owners' shipping details are never included in this page.
 The original requester can still access their individual request through the
 existing private API after a sale; a new owner cannot access that request.
@@ -11,7 +11,7 @@ existing private API after a sale; a new owner cannot access that request.
 
 Katha-held custody and no open delivery for this owner are required. Enter the
 recipient, at least one contact method, address, city and uppercase two-letter
-country code (NP by default). Select **Send private delivery request**. Shipping
+country code (NP by default). Select **Request delivery**. Shipping
 and charges are coordinated manually. This form makes no wallet transaction.
 
 The browser generates a request UUID. Identical retries reuse the UUID and exact
@@ -27,7 +27,7 @@ is retained in the active controller. If the request was saved, it appears in th
 list. A new UUID does not bypass the open-delivery guard. No contact/address data
 belongs in public metadata, URL parameters, logs or Git.
 
-## Report physical receipt
+## Reporting receipt
 
 Katha operators approve and dispatch requests using the existing
 [administration flow](custody-administration-web.md). When a DELIVERY request is

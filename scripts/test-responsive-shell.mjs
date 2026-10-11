@@ -11,7 +11,7 @@ const AxeBuilder = require("@axe-core/playwright").default;
 export async function runResponsiveShellChecks({ origin, apiOrigin }) {
   const browser = await chromium.launch();
   const artifacts = fileURLToPath(
-    new URL("../helper/design/reports/D01/", import.meta.url),
+    new URL("../helper/design/reports/design-handoff/", import.meta.url),
   );
   await mkdir(artifacts, { recursive: true });
   let scans = 0;
@@ -50,9 +50,10 @@ export async function runResponsiveShellChecks({ origin, apiOrigin }) {
       }
       await page.goto(origin);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-      const menu = page.locator(".site-menu-toggle");
-      const nav = page.getByRole("navigation", { name: "Primary", exact: true });
-      if (width < 1024) {
+      const menu = page.locator(".menubtn");
+      const nav = page.getByRole("navigation", { name: "Main", exact: true });
+      // The public header collapses to a Menu button at 860px and below.
+      if (width <= 860) {
         await expect(menu).toBeVisible();
         await expect(nav).toBeHidden();
         await page.keyboard.press("Tab");
@@ -67,7 +68,7 @@ export async function runResponsiveShellChecks({ origin, apiOrigin }) {
         assert.ok(bounds.width >= 44 && bounds.height >= 44);
         await page.keyboard.press("Tab");
         await expect(
-          nav.getByRole("link", { name: "Home", exact: true }),
+          nav.getByRole("link", { name: "Artworks", exact: true }),
         ).toBeFocused();
         await page.keyboard.press("Escape");
         await expect(menu).toBeFocused();
@@ -78,21 +79,30 @@ export async function runResponsiveShellChecks({ origin, apiOrigin }) {
         await expect(nav).toBeVisible();
       }
       await audit("open navigation");
-      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
-      await expect(page.locator("#wallet-connection-panel")).toContainText(
-        "No compatible Solana wallet found",
-      );
-      await audit("expanded wallet");
-      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
-      await nav.getByRole("link", { name: "Explore", exact: true }).click();
+      await nav.getByRole("link", { name: "Artworks", exact: true }).click();
       await expect(page).toHaveURL(`${origin}/explore`);
-      if (width < 1024) await expect(nav).toBeHidden();
+      if (width <= 860) await expect(nav).toBeHidden();
       await audit("catalogue shell");
+      // Wallet selection lives on the account page as a native modal dialog.
+      await page.goto(`${origin}/account`);
+      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      const chooser = page.getByRole("dialog", { name: "Choose a wallet" });
+      await expect(chooser).toContainText("No compatible Solana wallet found");
+      await audit("wallet chooser");
+      await page.keyboard.press("Escape");
+      await expect(chooser).toBeHidden();
+      await expect(
+        page.getByRole("button", { name: "Connect wallet", exact: true }),
+      ).toBeFocused();
       for (const path of [
         "/",
         "/art/KATHA-PAUBHA-000001",
         "/artists/synthetic-artist",
         "/account",
+        "/collection",
+        "/admin",
+        "/admin/artworks/KATHA-PAUBHA-000001",
+        "/not-a-page",
       ]) {
         await page.goto(`${origin}${path}`);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -112,10 +122,10 @@ export async function runResponsiveShellChecks({ origin, apiOrigin }) {
     });
     const page = await noScript.newPage();
     await page.goto(origin);
-    await expect(page.locator(".site-menu-toggle")).toBeHidden();
+    await expect(page.locator(".menubtn")).toBeHidden();
     await page
-      .getByRole("navigation", { name: "Primary", exact: true })
-      .getByRole("link", { name: "Explore", exact: true })
+      .getByRole("navigation", { name: "Main", exact: true })
+      .getByRole("link", { name: "Artworks", exact: true })
       .click();
     await expect(page).toHaveURL(`${origin}/explore`);
     assert.ok(
@@ -125,7 +135,7 @@ export async function runResponsiveShellChecks({ origin, apiOrigin }) {
     );
     await noScript.close();
     globalThis.console.log(
-      `Responsive shell passed: 320/390/640/768/1023/1024/1280/1440px, ${scans} axe scans, keyboard/Escape, navigation closure, wallet expansion, 200% text and no-JavaScript browsing. Screenshots remain private in helper/design/reports/D01/.`,
+      `Responsive shell passed: 320/390/640/768/1023/1024/1280/1440px, ${scans} axe scans, keyboard/Escape, navigation closure, wallet chooser dialog, public/collector/operations/not-found shells, 200% text and no-JavaScript browsing. Screenshots remain private in helper/design/reports/design-handoff/.`,
     );
   } finally {
     await browser.close();

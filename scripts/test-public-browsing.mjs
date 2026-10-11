@@ -5,6 +5,7 @@ import { conditionFixture } from "../apps/web/tests/fixtures/condition.ts";
 import { canonicalDocumentBytes, sha256Hex } from "../packages/shared/dist/index.js";
 import { verificationFixture } from "../apps/web/tests/fixtures/verification.ts";
 import { registrationFixture } from "../apps/web/tests/fixtures/registration.ts";
+import { resaleFixture } from "../apps/web/tests/fixtures/resale.ts";
 /* global Request */
 import { Buffer } from "node:buffer";
 import { TextDecoder } from "node:util";
@@ -41,13 +42,6 @@ export async function runPublicBrowsingJourneys({
       });
       const page = await context.newPage();
       page.setDefaultTimeout(10000);
-      async function openNavigation() {
-        const toggle = page.locator(".site-menu-toggle");
-        if (await toggle.isVisible()) {
-          if ((await toggle.getAttribute("aria-expanded")) === "false")
-            await toggle.click();
-        }
-      }
       // The suite must stay local, including browser images and Next prefetches.
       await context.route("**/*", (route) => {
         const url = new URL(route.request().url());
@@ -60,12 +54,45 @@ export async function runPublicBrowsingJourneys({
         await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
         assert.equal(await page.locator("html").getAttribute("lang"), "en");
         await expect(page).toHaveTitle(/\S/);
+        // Name the widest offending elements so an overflow failure is actionable.
+        const overflow = await page.evaluate(() =>
+          globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth
+            ? []
+            : [...globalThis.document.querySelectorAll("body *")]
+                .filter((element) => {
+                  if (
+                    element.getBoundingClientRect().right <=
+                    globalThis.innerWidth + 1
+                  )
+                    return false;
+                  // Content inside a sideways-scrolling region is contained.
+                  for (
+                    let node = element.parentElement;
+                    node;
+                    node = node.parentElement
+                  )
+                    if (
+                      ["auto", "scroll", "hidden"].includes(
+                        globalThis.getComputedStyle(node).overflowX,
+                      )
+                    )
+                      return node === globalThis.document.body;
+                  return true;
+                })
+                .slice(0, 5)
+                .map((element) =>
+                  `${element.tagName.toLowerCase()}.${element.getAttribute("class") ?? ""}`.slice(
+                    0,
+                    80,
+                  ),
+                ),
+        );
         assert.ok(
           await page.evaluate(
             () =>
               globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth,
           ),
-          `${label} overflows at ${width}px`,
+          `${label} overflows at ${width}px: ${overflow.join(", ")}`,
         );
         const results = await new AxeBuilder({ page }).analyze();
         assert.deepEqual(
@@ -80,14 +107,31 @@ export async function runPublicBrowsingJourneys({
       }
       const pageErrors = [];
       page.on("pageerror", (error) => pageErrors.push(error.message));
-      await page.goto(origin);
-      await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-        "Real World Assets, rooted in Nepali culture.",
+      // Header links stay client-side so the in-memory wallet session survives.
+      async function headerLink(href) {
+        // Home-page section links are native fragments (#id), elsewhere /#id.
+        const target = (scope) =>
+          `${scope} a[href="${href}"], ${scope} a[href="${href.replace(/^\/#/, "#")}"]`;
+        const menu = page.locator(".menubtn");
+        if (await menu.isVisible()) {
+          if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+          await page.locator(target("#mobile-navigation")).click();
+        } else await page.locator(target(".hdr .nav")).click();
+      }
+      const main = page.getByRole("main");
+      const alert = (text) => main.getByRole("alert").filter({ hasText: text }).first();
+      const chooser = page.getByRole("dialog", { name: "Choose a wallet" });
+      await page.goto(`${origin}/admin`);
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
+        "Sign in to use operations",
       );
-      await openNavigation();
-      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
-      const walletPanel = page.locator("#wallet-connection-panel");
-      await expect(walletPanel).toContainText("No compatible Solana wallet found");
+      await audit("operations signed out");
+      await main.getByRole("link", { name: "Sign in", exact: true }).click();
+      await expect(page).toHaveURL(`${origin}/account?next=%2Fadmin`);
+      await main.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      await expect(chooser).toContainText("No compatible Solana wallet found");
+      await chooser.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(chooser).toBeHidden();
       await audit("wallet unavailable");
       // Register a synthetic Wallet Standard wallet after discovery is running.
       // No extension, private key, signing or external network is involved.
@@ -661,6 +705,26 @@ export async function runPublicBrowsingJourneys({
               });
         },
       );
+      // The condition page also lists collector resale inspection requests.
+      await context.route(`${apiOrigin}/verifier/artworks/*/resale`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        if (!verifierAllowed)
+          return route.fulfill({
+            status: 403,
+            headers: adminHeaders,
+            json: { error: "forbidden" },
+          });
+        const kathaId = new URL(route.request().url()).pathname.split("/")[3];
+        return route.fulfill({
+          headers: adminHeaders,
+          json: resaleFixture(walletAddress, kathaId),
+        });
+      });
       await context.route("http://127.0.0.1:8899/**", async (route) => {
         const headers = {
           "Access-Control-Allow-Origin": origin,
@@ -966,86 +1030,83 @@ export async function runPublicBrowsingJourneys({
           transactionCalls: () => transactionCalls,
         };
       });
-      await walletPanel
+      await main.getByRole("button", { name: "Connect wallet", exact: true }).click();
+      await chooser
         .getByRole("button", { name: "Connect Synthetic test wallet" })
         .click();
-      await expect(walletPanel.getByRole("alert")).toContainText(
-        "request was not completed",
+      await expect(chooser.getByRole("alert")).toContainText(
+        "request wasn't completed",
       );
-      await expect(walletPanel).not.toContainText("PRIVATE_WALLET_ERROR");
-      await walletPanel
+      await expect(chooser).not.toContainText("PRIVATE_WALLET_ERROR");
+      await chooser
         .getByRole("button", { name: "Connect Synthetic test wallet" })
         .click();
-      await expect(walletPanel).toContainText("11111111111111111111111111111111");
-      await walletPanel
-        .getByLabel("Wallet account")
-        .selectOption("11111111111111111111111111111112");
-      await expect(walletPanel.getByLabel("Wallet account")).toHaveValue(
-        "11111111111111111111111111111112",
-      );
-      await expect(walletPanel).toContainText("Network: Localnet");
-      await walletPanel
-        .getByRole("button", { name: "Sign in to Katha", exact: true })
+      await expect(chooser).toBeHidden();
+      await expect(main).toContainText("1111…1111");
+      await main.getByRole("button", { name: "Change account", exact: true }).click();
+      await chooser.getByRole("button", { name: /^1111…1112/ }).click();
+      await expect(chooser).toBeHidden();
+      await expect(main).toContainText("1111…1112");
+      await expect(main).toContainText("a local Solana network");
+      await main
+        .getByRole("button", { name: "Sign in with wallet", exact: true })
         .click();
-      await expect(walletPanel.getByRole("alert")).toContainText(
-        "Sign-in was not completed",
-      );
-      await expect(walletPanel).not.toContainText("PRIVATE_AUTH_ERROR");
-      await walletPanel
-        .getByRole("button", { name: "Sign in to Katha", exact: true })
+      await expect(alert("Sign-in was not completed")).toBeVisible();
+      await expect(main).not.toContainText("PRIVATE_AUTH_ERROR");
+      await main
+        .getByRole("button", { name: "Sign in with wallet", exact: true })
         .click();
-      await expect(walletPanel.getByRole("status")).toHaveText("Signed in to Katha");
+      await expect(main).toContainText("Connected and signed in");
+      await expect(main).toContainText(walletAddress);
       await audit("wallet signed in");
-      await walletPanel
-        .getByRole("link", { name: "Administration", exact: true })
+      await main
+        .getByRole("link", { name: "Continue where you left off", exact: true })
         .click();
-      const adminMain = page.getByRole("main");
-      await expect(
-        adminMain.getByRole("heading", { name: "Create an artist profile" }),
-      ).toBeVisible();
+      await expect(page).toHaveURL(`${origin}/admin`);
+      await expect(main.getByRole("heading", { name: "Create artist" })).toBeVisible();
+      await expect(page.locator(".hdr .who .role")).toHaveText("Admin");
       await audit("authorized artist onboarding");
-      await adminMain
-        .getByRole("button", { name: "Create artist profile", exact: true })
-        .click();
-      await expect(adminMain.locator('[name="displayName"]')).toHaveAttribute(
+      const createArtist = main.getByRole("button", {
+        name: "Create artist",
+        exact: true,
+      });
+      await createArtist.click();
+      await expect(main.locator('[name="displayName"]')).toHaveAttribute(
         "aria-invalid",
         "true",
       );
       assert.equal(createCalls, 0);
-      await adminMain.getByLabel("Artist display name").fill("Synthetic Nepali artist");
-      await adminMain.getByLabel("Public profile slug").fill("synthetic-nepali-artist");
-      await adminMain
-        .getByLabel("Biography", { exact: true })
+      await main.locator('[name="displayName"]').fill("Synthetic Nepali artist");
+      await main.locator('[name="slug"]').fill("synthetic-nepali-artist");
+      await main
+        .locator('[name="biography"]')
         .fill("Synthetic cultural documentation from Patan.");
-      await adminMain.getByLabel("Region", { exact: true }).fill("Patan");
-      await adminMain
-        .getByLabel("Art traditions (one per line)")
-        .fill("Paubha\nThangka");
-      await adminMain
-        .getByRole("button", { name: "Create artist profile", exact: true })
-        .click();
-      await expect(adminMain.getByRole("alert")).toContainText("slug already exists");
-      await expect(adminMain).not.toContainText("PRIVATE_ADMIN_SENTINEL");
-      await expect(adminMain.getByLabel("Artist display name")).toHaveValue(
+      await main.locator('[name="region"]').fill("Patan");
+      await main.getByRole("checkbox", { name: "Paubha", exact: true }).check();
+      await main.getByRole("checkbox", { name: "Thangka", exact: true }).check();
+      await createArtist.click();
+      await expect(alert("slug already exists")).toBeVisible();
+      await expect(main).not.toContainText("PRIVATE_ADMIN_SENTINEL");
+      await expect(main.locator('[name="displayName"]')).toHaveValue(
         "Synthetic Nepali artist",
       );
       await audit("artist creation conflict");
-      await adminMain
-        .getByRole("button", { name: "Create artist profile", exact: true })
-        .click();
-      await expect(adminMain).toContainText("Artist profile saved");
+      await createArtist.click();
+      const savedArtistPanel = main.locator('article[aria-labelledby="saved-artist"]');
+      await expect(savedArtistPanel).toContainText("Synthetic Nepali artist");
+      await expect(savedArtistPanel).toContainText("Not verified");
       assert.equal(createCalls, 2);
       assert.equal(savedArtist.creatorWallet, null);
       assert.equal(savedArtist.payoutWallet, null);
-      const approveArtist = adminMain.getByRole("button", {
-        name: "Record artist verification",
+      assert.equal(savedArtist.traditions.join(","), "Paubha,Thangka");
+      const approveArtist = main.getByRole("button", {
+        name: "Record verification",
         exact: true,
       });
       await expect(approveArtist).toBeDisabled();
-      await adminMain.getByLabel("Artist UUID", { exact: true }).fill(savedArtist.id);
-      await adminMain
-        .getByRole("button", { name: "Load artist profile", exact: true })
-        .click();
+      await main.getByLabel("Artist record ID", { exact: true }).fill(savedArtist.id);
+      await main.getByRole("button", { name: "Look up", exact: true }).click();
+      await expect(savedArtistPanel).toContainText(savedArtist.id);
       await expect(approveArtist).toBeDisabled();
       await audit("saved artist review");
       await page.evaluate(() => globalThis.scrollTo(0, 0));
@@ -1053,11 +1114,11 @@ export async function runPublicBrowsingJourneys({
         path: `${artifacts}/admin-review-${width}.png`,
         fullPage: true,
       });
-      await adminMain.getByRole("checkbox").check();
+      await savedArtistPanel.getByRole("checkbox").check();
       await approveArtist.click();
-      await expect(adminMain).toContainText("Artist profile verified");
+      await expect(savedArtistPanel).toContainText("Profile verified");
       await expect(
-        adminMain.getByRole("link", { name: "View public artist profile" }),
+        savedArtistPanel.getByRole("link", { name: "View public profile" }),
       ).toHaveAttribute("href", "/artists/synthetic-nepali-artist");
       assert.equal(approvalCalls, 1);
       await audit("artist verified");
@@ -1067,45 +1128,40 @@ export async function runPublicBrowsingJourneys({
         fullPage: true,
       });
 
-      await adminMain
-        .getByRole("link", { name: "Artwork drafts", exact: true })
-        .click();
-      await expect(adminMain).toContainText("Showing 1–20 unpublished artworks");
-      await expect(adminMain).toContainText("Artist verification pending");
-      await expect(adminMain).toContainText("Lifecycle started");
-      await expect(
-        adminMain.getByRole("button", { name: "Previous draft page" }),
-      ).toBeDisabled();
+      await headerLink("/admin/artworks");
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText("Artworks");
+      const draftPages = main.getByRole("navigation", { name: "Artwork draft pages" });
+      await expect(draftPages).toContainText("Showing 1–20");
+      await expect(main).toContainText("Not verified");
+      await expect(main).toContainText("Lifecycle started");
+      await expect(draftPages.getByRole("button", { name: "Previous" })).toBeDisabled();
       await audit("draft list ready");
-      await adminMain.getByRole("button", { name: "Next draft page" }).click();
-      await expect(adminMain).toContainText("Showing 21–21 unpublished artworks");
-      await expect(adminMain).toContainText("Synthetic second-page draft");
-      await expect(
-        adminMain.getByRole("button", { name: "Next draft page" }),
-      ).toBeDisabled();
+      await draftPages.getByRole("button", { name: "Next" }).click();
+      await expect(draftPages).toContainText("Showing 21–21");
+      await expect(main).toContainText("Synthetic second-page draft");
+      await expect(draftPages.getByRole("button", { name: "Next" })).toBeDisabled();
       await audit("draft list next page");
       await page.evaluate(() => globalThis.scrollTo(0, 0));
       await page.screenshot({
         path: `${artifacts}/draft-list-${width}.png`,
         fullPage: true,
       });
-      await adminMain.getByRole("button", { name: "Previous draft page" }).click();
-      await expect(adminMain).toContainText("Showing 1–20 unpublished artworks");
-      await adminMain.getByRole("link", { name: "Document new artwork" }).click();
-      await expect(
-        adminMain.getByRole("button", { name: "Create artwork draft" }),
-      ).toBeVisible();
+      await draftPages.getByRole("button", { name: "Previous" }).click();
+      await expect(draftPages).toContainText("Showing 1–20");
+      await main.getByRole("link", { name: "New artwork", exact: true }).click();
+      const createArtwork = main.getByRole("button", { name: "Create artwork" });
+      await expect(createArtwork).toBeVisible();
       await audit("draft editor new");
-      await adminMain.getByRole("button", { name: "Create artwork draft" }).click();
-      await expect(adminMain.locator('[name="artistId"]')).toHaveAttribute(
+      await createArtwork.click();
+      await expect(main.locator('[name="artistId"]')).toHaveAttribute(
         "aria-invalid",
         "true",
       );
       assert.equal(draftCreateCalls, 0);
       await audit("draft editor validation");
+      await main.getByRole("radio", { name: "Paubha", exact: true }).check();
       for (const [name, value] of Object.entries({
         artistId: "bbbbbbbb-1111-4111-8111-111111111111",
-        category: "PAUBHA",
         creationYear: "2026",
         title: "Synthetic documented Paubha",
         materials: "Silk\nMineral pigment",
@@ -1113,60 +1169,68 @@ export async function runPublicBrowsingJourneys({
         heightMm: "300",
         widthMm: "200",
       }))
-        await adminMain.locator(`[name="${name}"]`).fill(value);
-      await adminMain.getByRole("button", { name: "Create artwork draft" }).click();
-      await expect(adminMain).toContainText("Artwork documentation saved");
+        await main.locator(`[name="${name}"]`).fill(value);
+      await createArtwork.click();
+      await expect(main).toContainText("Artwork created");
       assert.equal(draftCreateCalls, 1);
       assert.ok(retainedCreationId);
-      await expect(adminMain.locator('[name="artistId"]')).toHaveCount(0);
-      await expect(adminMain).toContainText("KATHA-PAUBHA-000050");
+      assert.equal(savedArtwork.category, "PAUBHA");
+      await expect(main.locator('[name="artistId"]')).toHaveCount(0);
+      await expect(main).toContainText("KATHA-PAUBHA-000050");
       await audit("draft editor created");
-      await adminMain.getByRole("link", { name: "Open saved documentation" }).click();
-      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
+      await main.getByRole("link", { name: "Open documentation" }).click();
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
         "Artwork documentation",
       );
-      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+      await expect(main.locator('[name="story"]')).toHaveValue(
         "Approved synthetic cultural story",
       );
       await audit("draft editor loaded by permanent ID");
-      await adminMain
-        .locator('[name="story"]')
-        .fill("Revised synthetic cultural story");
-      await adminMain
-        .getByRole("button", { name: "Save artwork documentation" })
-        .click();
-      await expect(adminMain.getByRole("alert")).toContainText(
+      const workflows = main.getByRole("navigation", { name: "Artwork workflows" });
+      const tab = (name) => workflows.getByRole("link", { name, exact: true }).click();
+      const documentation = main.locator("#documentation-form");
+      await main.locator('[name="story"]').fill("Revised synthetic cultural story");
+      await expect(main).toContainText("You have unsaved changes");
+      await documentation.getByRole("button", { name: "Save changes" }).click();
+      await expect(alert("Someone may have saved a newer version")).toContainText(
         "draft changed or editing has closed",
       );
       await expect(
-        adminMain.getByRole("button", { name: "Save artwork documentation" }),
-      ).toBeDisabled();
-      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+        documentation.getByRole("button", { name: "Save changes" }),
+      ).toHaveCount(0);
+      await expect(main.locator('[name="story"]')).toHaveValue(
         "Revised synthetic cultural story",
       );
-      await expect(adminMain).not.toContainText("PRIVATE_SAVE_SENTINEL");
+      await expect(main).not.toContainText("PRIVATE_SAVE_SENTINEL");
       await audit("draft editor conflict");
       rejectDraftSave = false;
-      await adminMain.getByRole("button", { name: "Reload saved draft" }).click();
-      await expect(adminMain.locator('[name="story"]')).toHaveValue(
-        "Approved synthetic cultural story",
-      );
-      await adminMain
-        .locator('[name="story"]')
-        .fill("Revised synthetic cultural story");
-      await adminMain
-        .getByRole("button", { name: "Save artwork documentation" })
+      await main
+        .getByRole("button", { name: "Load the saved version to compare" })
         .click();
-      await expect(adminMain).toContainText("Artwork documentation saved");
-      await expect(adminMain.locator('[name="story"]')).toHaveValue(
+      const compare = main.locator('section[aria-labelledby="compare-title"]');
+      await expect(compare).toContainText("Approved synthetic cultural story");
+      await expect(compare.getByRole("radio", { name: /Yours/ })).toBeChecked();
+      await expect(main.locator('[name="story"]')).toHaveValue(
         "Revised synthetic cultural story",
       );
+      await audit("draft editor compare");
+      await documentation.getByRole("button", { name: "Save changes" }).click();
+      await expect(main).toContainText("All changes saved");
+      await expect(main.locator('[name="story"]')).toHaveValue(
+        "Revised synthetic cultural story",
+      );
+      assert.equal(savedArtwork.story, "Revised synthetic cultural story");
       await audit("draft editor saved");
-      await adminMain.getByRole("link", { name: "Manage artwork media" }).click();
-      await expect(adminMain).toContainText("No artwork files yet");
+
+      await tab("Media");
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
+        "Media management",
+      );
+      await expect(main).toContainText("No files yet");
       await audit("media empty");
-      await adminMain.getByRole("button", { name: "Upload artwork file" }).click();
-      await expect(adminMain.locator('[name="file"]')).toHaveAttribute(
+      const upload = main.getByRole("button", { name: "Upload file" });
+      await upload.click();
+      await expect(main.locator('[name="file"]')).toHaveAttribute(
         "aria-invalid",
         "true",
       );
@@ -1176,7 +1240,7 @@ export async function runPublicBrowsingJourneys({
         "Synthetic front photograph",
         "Synthetic detail photograph",
       ]) {
-        await adminMain.locator('[name="file"]').setInputFiles({
+        await main.locator('[name="file"]').setInputFiles({
           name: "synthetic.png",
           mimeType: "image/png",
           buffer: Buffer.from(
@@ -1184,114 +1248,103 @@ export async function runPublicBrowsingJourneys({
             "base64",
           ),
         });
-        await adminMain.locator('[name="caption"]').fill(caption);
-        await adminMain.getByRole("button", { name: "Upload artwork file" }).click();
-        await expect(adminMain).toContainText("Artwork media saved");
-        await expect(adminMain.locator('[name="file"]')).toHaveValue("");
+        await main.locator('[name="caption"]').fill(caption);
+        await upload.click();
+        await expect(main).toContainText("Media saved.");
+        await expect(main.locator('[name="file"]')).toHaveValue("");
       }
       assert.equal(mediaWrites, 2);
-      await expect(adminMain).toContainText("Stored visibility: Private");
+      await expect(main).toContainText("Image 2");
       await audit("media private uploads");
-      await adminMain.getByRole("button", { name: "Move file 2 earlier" }).click();
+      const saveMedia = main.getByRole("button", { name: "Save changes" });
+      await main.getByRole("button", { name: "Move Image 2 up" }).click();
       await expect(
-        adminMain.getByRole("status").filter({ hasText: "File moved" }),
+        main.getByRole("status").filter({ hasText: "Moved to position" }),
       ).toContainText("position 1");
-      await adminMain.getByRole("button", { name: "Save media choices" }).click();
-      await expect(adminMain.getByRole("alert")).toContainText(
-        "could not be confirmed",
-      );
-      await expect(
-        adminMain.getByRole("button", { name: "Save media choices" }),
-      ).toBeDisabled();
-      await expect(adminMain).not.toContainText("PRIVATE_MEDIA_SENTINEL");
+      await saveMedia.first().click();
+      await expect(alert("could not be confirmed")).toBeVisible();
+      await expect(main).toContainText("Further changes are paused");
+      await expect(saveMedia).toBeDisabled();
+      await expect(upload).toBeDisabled();
+      await expect(main).not.toContainText("PRIVATE_MEDIA_SENTINEL");
       await audit("media conflict");
       rejectMediaSave = false;
-      await adminMain.getByRole("button", { name: "Reload media" }).click();
-      await expect(
-        adminMain.getByRole("button", { name: "Save media choices" }),
-      ).toBeEnabled();
-      await adminMain.getByRole("button", { name: "Move file 2 earlier" }).click();
+      await main.getByRole("button", { name: "Reload media" }).click();
+      await expect(main).not.toContainText("Further changes are paused");
+      await expect(upload).toBeEnabled();
+      await main.getByRole("button", { name: "Move Image 2 up" }).click();
       const publicId = mediaPage.items[1].id;
-      await adminMain.locator(`[name="visibility:${publicId}"]`).selectOption("PUBLIC");
-      await adminMain.getByRole("button", { name: "Save media choices" }).click();
-      await expect(
-        adminMain.locator(`[name="approvedPublic:${publicId}"]`),
-      ).toHaveAttribute("aria-invalid", "true");
+      await main.locator(`[name="visibility:${publicId}"][value="PUBLIC"]`).check();
+      await saveMedia.first().click();
+      await expect(main.locator(`[name="approvedPublic:${publicId}"]`)).toHaveAttribute(
+        "aria-invalid",
+        "true",
+      );
       assert.equal(mediaWrites, 2);
-      await adminMain.locator(`[name="approvedPublic:${publicId}"]`).check();
-      await adminMain
+      await main.locator(`[name="approvedPublic:${publicId}"]`).check();
+      await main
         .locator(`[name="altText:${publicId}"]`)
         .fill("Approved synthetic photograph of Nepali artwork");
-      await adminMain.getByRole("button", { name: "Save media choices" }).click();
-      await expect(adminMain).toContainText("Stored visibility: Public");
+      await saveMedia.first().click();
+      await expect(main).toContainText("Public, approved");
       assert.equal(mediaWrites, 3);
       assert.equal(mediaPage.items[0].id, publicId);
       await audit("media approved and reordered");
       mediaPage.editable = false;
-      await adminMain.getByRole("button", { name: "Reload media" }).click();
-      await expect(adminMain).toContainText("Media editing is closed");
-      await expect(
-        adminMain.getByRole("button", { name: "Upload artwork file" }),
-      ).toBeDisabled();
+      await tab("Documentation");
+      await expect(main.locator('[name="story"]')).toHaveValue(
+        "Revised synthetic cultural story",
+      );
+      await tab("Media");
+      await expect(main).toContainText("Media is locked.");
+      await expect(upload).toBeDisabled();
       await audit("media frozen");
       await page.evaluate(() => globalThis.scrollTo(0, 0));
       await page.screenshot({
         path: `${artifacts}/media-admin-${width}.png`,
         fullPage: true,
       });
-      await adminMain
-        .getByRole("link", { name: "Artwork documentation", exact: true })
-        .click();
-      await expect(adminMain.locator('[name="story"]')).toHaveValue(
-        "Revised synthetic cultural story",
-      );
-      await adminMain.getByRole("link", { name: "Register artwork on chain" }).click();
-      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
-        "Artwork registration",
-      );
-      await expect(
-        adminMain.getByRole("button", { name: "Prepare canonical metadata" }),
-      ).toBeEnabled();
+
+      await tab("Registration");
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText("Registration");
+      const prepareDocument = main.getByRole("button", { name: "Prepare document" });
+      await expect(prepareDocument).toBeEnabled();
       await audit("registration without metadata");
-      await adminMain
-        .getByRole("button", { name: "Prepare canonical metadata" })
-        .click();
-      await expect(adminMain).toContainText("Exact saved bytes and SHA-256 verified");
+      await prepareDocument.click();
+      await expect(main).toContainText("Exact saved bytes and fingerprint verified");
       assert.equal(metadataCalls, 1);
-      const registrationPrepare = adminMain.getByRole("button", {
+      const registrationPrepare = main.getByRole("button", {
         name: "Prepare and simulate registration",
       });
+      const registrationConfirm = main.getByRole("checkbox", {
+        name: /I reviewed the permanent identity/,
+      });
+      const reloadRegistration = main.getByRole("button", {
+        name: "Reload registration state",
+      });
       await expect(registrationPrepare).toBeDisabled();
-      await adminMain
-        .getByText("Review exact canonical document", { exact: true })
-        .click();
-      await expect(adminMain.locator("pre")).toContainText(
+      await main.getByText("View full document", { exact: true }).click();
+      await expect(main.locator("pre")).toContainText(
         "Approved synthetic cultural story",
       );
       await audit("registration canonical review");
-      await adminMain.getByRole("checkbox").check();
+      await registrationConfirm.check();
       await registrationPrepare.click();
-      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
-      await expect(adminMain).not.toContainText("PRIVATE_REGISTRATION_ERROR");
+      await expect(alert("Reload saved state")).toBeVisible();
+      await expect(main).not.toContainText("PRIVATE_REGISTRATION_ERROR");
       await audit("registration conflict");
       rejectRegistration = false;
-      await adminMain
-        .getByRole("button", { name: "Reload registration state" })
-        .click();
-      await adminMain.getByRole("checkbox").check();
+      await reloadRegistration.click();
+      await registrationConfirm.check();
       await registrationPrepare.click();
-      await expect(adminMain).toContainText(
-        "Review transaction before wallet approval",
-      );
+      await expect(main).toContainText("Review transaction before wallet approval");
       assert.equal(registrationCalls, 2);
       assert.equal(registrationSimulations, 1);
-      await expect(
-        adminMain.getByRole("button", { name: "Approve in wallet and submit" }),
-      ).toBeVisible();
+      const approve = main.getByRole("button", { name: "Approve in wallet" });
+      const cancelReview = main.getByRole("button", { name: "Cancel", exact: true });
+      await expect(approve).toBeVisible();
       await audit("registration simulated before approval");
-      await adminMain
-        .getByRole("button", { name: "Cancel transaction review" })
-        .click();
+      await cancelReview.click();
       registrationPage.registration = {
         finalized: false,
         unresolved: true,
@@ -1302,11 +1355,9 @@ export async function runPublicBrowsingJourneys({
           indexed: false,
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload registration state" })
-        .click();
-      await expect(adminMain).toContainText("A retained signature is unresolved");
-      await expect(adminMain.getByRole("checkbox")).toBeDisabled();
+      await reloadRegistration.click();
+      await expect(main).toContainText("A saved signature is unresolved");
+      await expect(registrationConfirm).toBeDisabled();
       await audit("registration unresolved receipt");
       registrationPage.registration = {
         finalized: true,
@@ -1318,16 +1369,12 @@ export async function runPublicBrowsingJourneys({
           indexed: false,
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload registration state" })
-        .click();
-      await expect(adminMain).toContainText("Finalized; registration indexing pending");
+      await reloadRegistration.click();
+      await expect(main).toContainText("Finalized, indexing pending");
       await audit("registration finalized indexing delay");
       registrationPage.registration.receipt.indexed = true;
-      await adminMain
-        .getByRole("button", { name: "Reload registration state" })
-        .click();
-      await expect(adminMain).toContainText("Registration event indexed");
+      await reloadRegistration.click();
+      await expect(main).toContainText("Finalized and indexed");
       await audit("registration indexed");
       await page.evaluate(() => globalThis.scrollTo(0, 0));
       await page.screenshot({
@@ -1337,48 +1384,50 @@ export async function runPublicBrowsingJourneys({
       // Verifier-only review requires no administrative draft or media access.
       adminAllowed = false;
       verifierAllowed = true;
-      await adminMain
-        .getByRole("link", { name: "Review artwork authenticity", exact: true })
+      await main
+        .getByRole("link", { name: "Continue to verification", exact: true })
         .click();
-      const authenticityPrepare = adminMain.getByRole("button", {
-        name: "Prepare and simulate verification",
-      });
-      await expect(adminMain).toContainText(
-        "No finalized artwork verification recorded.",
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
+        "Authenticity verification",
       );
+      const authenticityPrepare = main.getByRole("button", {
+        name: "Prepare verification transaction",
+      });
+      const reloadVerification = main.getByRole("button", {
+        name: "Reload verification state",
+      });
+      const digest = main.getByLabel(/^Fingerprint of the evidence you reviewed/);
+      const confirmVerification = async () => {
+        await main
+          .getByRole("checkbox", { name: /inspected this physical artwork/ })
+          .check();
+        await main
+          .getByRole("checkbox", { name: /authorship evidence supports attribution/ })
+          .check();
+      };
+      await expect(main.locator(".bdg").first()).toHaveText("Not verified");
       await expect(authenticityPrepare).toBeDisabled();
       await audit("verification manual review");
-      await adminMain.getByLabel("Reviewed evidence SHA-256").fill("f".repeat(64));
-      await adminMain.getByLabel("I physically inspected", { exact: false }).check();
-      await adminMain
-        .getByLabel("I reviewed the artist attribution", { exact: false })
-        .check();
+      await digest.fill("f".repeat(64));
+      await confirmVerification();
       await expect(authenticityPrepare).toBeDisabled();
-      await expect(adminMain).toContainText("does not match the registered commitment");
+      await expect(main).toContainText("Doesn't match registration");
       await audit("verification evidence mismatch");
-      await adminMain.getByLabel("Reviewed evidence SHA-256").fill("e".repeat(64));
+      await digest.fill("e".repeat(64));
+      await expect(main).toContainText("Matches registration");
       await authenticityPrepare.click();
-      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
-      await expect(adminMain).not.toContainText("PRIVATE_VERIFICATION_ERROR");
+      await expect(alert("Reload saved state")).toBeVisible();
+      await expect(main).not.toContainText("PRIVATE_VERIFICATION_ERROR");
       await audit("verification stale state");
       rejectArtworkVerification = false;
-      await adminMain
-        .getByRole("button", { name: "Reload verification state" })
-        .click();
-      await adminMain.getByLabel("Reviewed evidence SHA-256").fill("e".repeat(64));
-      await adminMain.getByLabel("I physically inspected", { exact: false }).check();
-      await adminMain
-        .getByLabel("I reviewed the artist attribution", { exact: false })
-        .check();
+      await reloadVerification.click();
+      await digest.fill("e".repeat(64));
+      await confirmVerification();
       await authenticityPrepare.click();
-      await expect(
-        adminMain.getByRole("button", { name: "Approve in wallet and submit" }),
-      ).toBeVisible();
+      await expect(approve).toBeVisible();
       assert.equal(verificationCalls, 2);
       await audit("verification simulated before approval");
-      await adminMain
-        .getByRole("button", { name: "Cancel transaction review" })
-        .click();
+      await cancelReview.click();
       verificationPage = {
         ...verificationPage,
         verification: {
@@ -1392,12 +1441,8 @@ export async function runPublicBrowsingJourneys({
           },
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload verification state" })
-        .click();
-      await expect(adminMain).toContainText(
-        "A retained verification signature is unresolved",
-      );
+      await reloadVerification.click();
+      await expect(main).toContainText("A verification is waiting to be reconciled");
       await expect(authenticityPrepare).toBeDisabled();
       await audit("verification unresolved receipt");
       verificationPage.verification = {
@@ -1410,40 +1455,39 @@ export async function runPublicBrowsingJourneys({
           indexed: false,
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload verification state" })
-        .click();
-      await expect(adminMain).toContainText("Artwork verification finalized.");
-      await expect(adminMain).toContainText(
-        "Finalized; verification indexing pending.",
-      );
+      await reloadVerification.click();
+      await expect(main).toContainText("Already verified.");
+      await expect(main).toContainText("Finalized, indexing pending");
       await audit("verification finalized indexing pending");
       verificationPage.verification.receipt.indexed = true;
-      await adminMain
-        .getByRole("button", { name: "Reload verification state" })
-        .click();
-      await expect(adminMain).toContainText("Verification event indexed.");
+      await reloadVerification.click();
+      await expect(main).toContainText("Finalized and indexed");
       await audit("verification indexed");
       await page.screenshot({
         path: `${artifacts}/verification-admin-${width}.png`,
         fullPage: true,
       });
-      await adminMain
-        .getByRole("link", { name: "Open condition inspection", exact: true })
+      await main
+        .getByRole("link", { name: "Continue to condition", exact: true })
         .click();
-      await expect(
-        adminMain.getByRole("heading", {
-          name: "Condition inspection",
-          exact: true,
-        }),
-      ).toBeVisible();
-      const conditionSave = adminMain.getByRole("button", {
-        name: "Save private condition report",
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
+        "Condition inspection",
+      );
+      const prepareReport = main.getByRole("button", {
+        name: "Prepare report",
         exact: true,
       });
-      await expect(conditionSave).toBeDisabled();
+      const reloadInspection = main.getByRole("button", {
+        name: "Reload inspection state",
+        exact: true,
+      });
+      await expect(main).toContainText("Evidence image 1");
       await audit("inspection protected initial scope");
-      await adminMain.getByLabel("Inspection image", { exact: true }).setInputFiles({
+      await prepareReport.click();
+      await expect(alert("need attention")).toBeVisible();
+      await expect(main).toContainText("Choose a grade.");
+      assert.equal(inspectionCalls, 0);
+      await main.getByLabel("Add an evidence image", { exact: true }).setInputFiles({
         name: "synthetic.png",
         mimeType: "image/png",
         buffer: Buffer.from(
@@ -1451,68 +1495,51 @@ export async function runPublicBrowsingJourneys({
           "base64",
         ),
       });
-      await adminMain
+      await main
         .getByRole("button", { name: "Upload private evidence", exact: true })
         .click();
-      await expect(adminMain.getByText("Evidence 2", { exact: false })).toBeVisible();
-      await adminMain
-        .getByLabel("Actual inspection date and time (your local timezone)", {
-          exact: true,
-        })
-        .fill("2026-10-05T10:00");
-      await adminMain
-        .getByLabel("Private condition notes", { exact: true })
+      await expect(main.getByText("Evidence image 2", { exact: false })).toBeVisible();
+      await main.getByRole("radio", { name: "Good", exact: true }).check();
+      await main.getByLabel(/^Inspected at/).fill("2026-10-05T10:00");
+      await main
+        .getByLabel(/^Notes/)
         .fill("Synthetic private browser inspection notes");
-      await adminMain.getByRole("checkbox", { name: /Evidence 2/ }).check();
-      await adminMain
-        .getByRole("checkbox", {
-          name: /I physically inspected this artwork and approve these notes/,
-        })
+      await main.getByRole("checkbox", { name: /Evidence image 2/ }).check();
+      await main
+        .getByRole("checkbox", { name: /I inspected this work in person/ })
         .check();
-      await conditionSave.click();
-      await expect(adminMain).toContainText("Saved private report · Version 2");
-      await adminMain
-        .getByText("Review exact private canonical report", { exact: true })
-        .click();
-      await expect(adminMain).toContainText(
-        "Synthetic private browser inspection notes",
-      );
+      await prepareReport.click();
+      await expect(main).toContainText("Prepared, not yet recorded");
+      await expect(main).toContainText("Version 2");
+      await main.getByText("View private report", { exact: true }).click();
+      await expect(main).toContainText("Synthetic private browser inspection notes");
       await audit("inspection private document review");
-      const conditionPrepare = adminMain.getByRole("button", {
-        name: "Prepare and simulate condition attestation",
+      const conditionPrepare = main.getByRole("button", {
+        name: "Prepare and simulate the report transaction",
         exact: true,
       });
-      const conditionApproval = adminMain.getByRole("checkbox", {
-        name: /I reviewed the exact saved report and hash/,
+      const conditionApproval = main.getByRole("checkbox", {
+        name: /I reviewed the exact saved report/,
       });
       await conditionApproval.check();
       await conditionPrepare.click();
-      await expect(adminMain.getByRole("alert")).toContainText("changed");
-      await expect(adminMain).not.toContainText("PRIVATE_INSPECTION_ERROR");
+      await expect(alert("changed")).toBeVisible();
+      await expect(main).not.toContainText("PRIVATE_INSPECTION_ERROR");
       await audit("inspection stale preparation");
       rejectInspection = false;
-      await adminMain
-        .getByRole("button", { name: "Reload inspection state", exact: true })
-        .click();
+      await reloadInspection.click();
       await conditionApproval.check();
       await conditionPrepare.click();
       await expect(
-        adminMain.getByRole("heading", {
-          name: "Condition attestation transaction review",
+        main.getByRole("heading", {
+          name: "Condition report transaction",
           exact: true,
         }),
       ).toBeVisible();
-      await expect(
-        adminMain.getByRole("button", {
-          name: "Approve in wallet and submit",
-          exact: true,
-        }),
-      ).toBeEnabled();
+      await expect(approve).toBeEnabled();
       assert.equal(inspectionCalls, 2);
       await audit("inspection simulation before wallet approval");
-      await adminMain
-        .getByRole("button", { name: "Cancel transaction review", exact: true })
-        .click();
+      await cancelReview.click();
       inspectionPage = {
         ...inspectionPage,
         unresolved: true,
@@ -1527,14 +1554,10 @@ export async function runPublicBrowsingJourneys({
           },
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload inspection state", exact: true })
-        .click();
-      await expect(adminMain).toContainText(
-        "A retained condition signature is unresolved",
-      );
+      await reloadInspection.click();
+      await expect(main).toContainText("A saved report transaction is unresolved");
       await expect(conditionPrepare).toBeDisabled();
-      await expect(conditionSave).toBeDisabled();
+      await expect(prepareReport).toBeDisabled();
       await audit("inspection unresolved signature");
       inspectionPage = {
         ...inspectionPage,
@@ -1550,67 +1573,60 @@ export async function runPublicBrowsingJourneys({
           },
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload inspection state", exact: true })
-        .click();
-      await expect(adminMain).toContainText("Finalized; condition indexing pending.");
+      await reloadInspection.click();
+      await expect(main).toContainText("Finalized, indexing pending");
       await audit("inspection finalized indexing pending");
       inspectionPage.attestation.receipt.indexed = true;
-      await adminMain
-        .getByRole("button", { name: "Reload inspection state", exact: true })
-        .click();
-      await expect(adminMain).toContainText("Condition event indexed.");
+      await reloadInspection.click();
+      await expect(main).toContainText("Finalized and indexed");
       await audit("inspection indexed");
       await page.screenshot({
         path: `${artifacts}/condition-admin-${width}.png`,
         fullPage: true,
       });
       adminAllowed = true;
-      await adminMain
-        .getByRole("link", { name: "Custody coordination", exact: true })
-        .click();
-      await expect(adminMain).toContainText("katha held · revision 1");
+      await tab("Custody");
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
+        "Custody and fulfillment",
+      );
       await expect(
-        adminMain.getByRole("heading", { name: "Custody coordination", exact: true }),
-      ).toHaveCount(1);
+        main.locator('section[aria-labelledby="custody-current"]'),
+      ).toContainText("Held by Katha");
       await audit("custody administration");
-      await adminMain
-        .getByRole("link", { name: "Mint and publish", exact: true })
-        .click();
-      await expect(adminMain).toContainText("Not minted");
+      await tab("Minting");
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
+        "Minting and publication",
+      );
       await audit("Core mint review");
-      const prepareMint = adminMain.getByRole("button", {
-        name: "Prepare Core mint",
+      const prepareMint = main.getByRole("button", {
+        name: "Review and approve mint",
+        exact: true,
+      });
+      const reloadSaved = main.getByRole("button", {
+        name: "Reload saved state",
         exact: true,
       });
       await expect(prepareMint).toBeDisabled();
-      await adminMain
-        .getByLabel(
-          "I reviewed the public metadata, verified initial inspection and custody, and the configured collection and initial digital owner.",
-        )
+      await main
+        .getByRole("checkbox", { name: /I reviewed the public metadata/ })
         .check();
       await prepareMint.click();
-      await expect(adminMain).toContainText(
-        "Review transaction before wallet approval",
-      );
+      await expect(main).toContainText("Review transaction before wallet approval");
       assert.equal(mintPreparations, 1);
       assert.equal(publications, 0);
       await audit("mint simulation requires separate wallet approval");
-      await adminMain
-        .getByRole("button", { name: "Cancel transaction review", exact: true })
-        .click();
+      await cancelReview.click();
       mintPage.canMint = false;
       mintPage.chain.minted = true;
       mintPage.chain.owner = mintFixtureData.operation.feePayer;
       mintPage.blockedReasons = ["INDEXING_PENDING"];
-      await adminMain
-        .getByRole("button", { name: "Reload saved state", exact: true })
-        .click();
-      const publishArtwork = adminMain.getByRole("button", {
+      await reloadSaved.click();
+      const publishArtwork = main.getByRole("button", {
         name: "Publish artwork",
         exact: true,
       });
-      await expect(publishArtwork).toBeDisabled();
+      await expect(main).toContainText("Publication opens once");
+      await expect(publishArtwork).toHaveCount(0);
       await audit("publication waits for indexing");
       mintPage.canPublish = true;
       mintPage.blockedReasons = [];
@@ -1624,32 +1640,28 @@ export async function runPublicBrowsingJourneys({
           indexed: true,
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload saved state", exact: true })
-        .click();
-      await expect(publishArtwork).toBeDisabled();
-      await adminMain
-        .getByLabel(
-          "I reviewed the finalized asset and approved public artwork documentation for publication.",
-        )
-        .check();
+      await reloadSaved.click();
       await publishArtwork.click();
-      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
-      await expect(publishArtwork).toBeDisabled();
+      const publishDialog = main.getByRole("alertdialog");
+      await expect(
+        publishDialog.getByRole("button", { name: "Publish artwork" }),
+      ).toBeDisabled();
+      await publishDialog
+        .getByRole("checkbox", { name: /I reviewed the finalized asset/ })
+        .check();
+      await publishDialog.getByRole("button", { name: "Publish artwork" }).click();
+      await expect(alert("Reload saved state")).toBeVisible();
       assert.equal(publications, 1);
       await audit("publication conflict requires reload");
       rejectPublication = false;
-      await adminMain
-        .getByRole("button", { name: "Reload saved state", exact: true })
-        .click();
-      await adminMain
-        .getByLabel(
-          "I reviewed the finalized asset and approved public artwork documentation for publication.",
-        )
+      await reloadSaved.click();
+      if (!(await publishDialog.isVisible())) await publishArtwork.click();
+      await publishDialog
+        .getByRole("checkbox", { name: /I reviewed the finalized asset/ })
         .check();
-      await publishArtwork.click();
+      await publishDialog.getByRole("button", { name: "Publish artwork" }).click();
       await expect(
-        adminMain.getByRole("link", { name: "View published artwork", exact: true }),
+        main.getByRole("link", { name: "View public record", exact: true }),
       ).toHaveAttribute("href", `/art/${mintPage.kathaId}`);
       assert.equal(publications, 2);
       await audit("explicit verified publication");
@@ -1658,48 +1670,40 @@ export async function runPublicBrowsingJourneys({
         fullPage: true,
       });
 
-      await adminMain
-        .getByRole("link", { name: "Metadata revisions", exact: true })
-        .click();
-      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
+      await tab("Metadata");
+      await expect(main.getByRole("heading", { level: 1 })).toHaveText(
         "Metadata revisions",
       );
-      await expect(adminMain).toContainText(metadataPage.chain.documentHash);
+      await expect(main).toContainText(metadataPage.chain.documentHash);
       await audit("metadata current commitment review");
-      const revisionSave = adminMain.getByRole("button", {
-        name: "Save public document revision",
+      await main.locator("#metadata-story").fill("Revised public story");
+      await main.getByRole("button", { name: "Compare with current version" }).click();
+      await expect(main.locator("ins").first()).toBeVisible();
+      const revisionSave = main.getByRole("button", {
+        name: "Save immutable revision",
         exact: true,
       });
       await expect(revisionSave).toBeDisabled();
-      await adminMain
-        .getByLabel("Proposed artwork story", { exact: true })
-        .fill("Revised public story");
-      await adminMain
-        .getByRole("checkbox", { name: "I approve these story fields", exact: false })
+      await audit("metadata word comparison");
+      await main
+        .getByRole("checkbox", { name: /I approve this text for public display/ })
         .check();
       await revisionSave.click();
-      await expect(adminMain).toContainText(metadataData.page.metadata.documentHash);
+      await expect(main).toContainText(metadataData.page.metadata.documentHash);
       assert.equal(metadataSaves, 1);
-      const prepareRevision = adminMain.getByRole("button", {
+      const prepareRevision = main.getByRole("button", {
         name: "Prepare metadata revision",
         exact: true,
       });
       await expect(prepareRevision).toBeDisabled();
-      await adminMain
-        .getByRole("checkbox", { name: "I reviewed the saved document", exact: false })
+      await main
+        .getByRole("checkbox", { name: /I reviewed the saved document/ })
         .check();
       await prepareRevision.click();
-      await expect(
-        adminMain.getByRole("button", {
-          name: "Approve in wallet and submit",
-          exact: true,
-        }),
-      ).toBeVisible();
+      await expect(approve).toBeVisible();
       assert.equal(metadataPreparations, 1);
       await audit("atomic metadata revision separate wallet approval");
-      await adminMain
-        .getByRole("button", { name: "Cancel transaction review", exact: true })
-        .click();
+      await cancelReview.click();
       metadataPage = {
         ...metadataPage,
         metadata: { ...metadataPage.metadata, status: "FINALIZED" },
@@ -1722,253 +1726,204 @@ export async function runPublicBrowsingJourneys({
           },
         },
       };
-      await adminMain
-        .getByRole("button", { name: "Reload saved state", exact: true })
-        .click();
+      await reloadSaved.click();
+      await expect(main).toContainText("Finalized and indexed");
       await expect(
-        adminMain.getByRole("button", {
+        main.getByRole("button", {
           name: "Prepare metadata revision",
-          exact: true,
+          disabled: false,
         }),
-      ).toBeDisabled();
+      ).toHaveCount(0);
       await audit("metadata finalized version retained history");
       await page.screenshot({
         path: `${artifacts}/metadata-admin-${width}.png`,
         fullPage: true,
       });
       adminAllowed = false;
-      await adminMain
-        .getByRole("button", { name: "Reload saved state", exact: true })
-        .click();
-      await expect(adminMain.getByRole("alert")).toContainText("administrator session");
-      await expect(adminMain).not.toContainText(
-        metadataPage.metadata.canonicalDocument,
-      );
+      await reloadSaved.click();
+      await expect(alert("administrator session")).toBeVisible();
+      await expect(main).not.toContainText(metadataPage.metadata.canonicalDocument);
       await audit("metadata role revocation clears private review");
       adminAllowed = true;
-      await adminMain
-        .getByRole("link", { name: "Minting and publication", exact: true })
-        .click();
-      await expect(adminMain.getByRole("heading", { level: 1 })).toHaveText(
-        "Minting and publication",
-      );
-      await expect(adminMain).toContainText("Published");
+      await tab("Minting");
+      await expect(main).toContainText("Published");
       adminAllowed = false;
-      await adminMain
-        .getByRole("button", { name: "Reload saved state", exact: true })
-        .click();
-      await expect(adminMain.getByRole("alert")).toContainText("administrator session");
-      await expect(adminMain).not.toContainText(mintPage.metadata.canonicalDocument);
+      await reloadSaved.click();
+      await expect(alert("administrator session")).toBeVisible();
+      await expect(main).not.toContainText(mintPage.metadata.canonicalDocument);
       await audit("mint permission revoked clears review");
       adminAllowed = true;
-      await adminMain
-        .getByRole("link", { name: "Custody coordination", exact: true })
-        .click();
-      await expect(adminMain).toContainText("katha held · revision 1");
-      const fulfillmentDetails = adminMain
-        .locator("details")
-        .filter({ hasText: "delivery · requested" });
-      await fulfillmentDetails.locator("summary").click();
-      await expect(fulfillmentDetails).toContainText("synthetic@example.invalid");
-      const fulfillmentSave = adminMain.getByRole("button", {
-        name: "Save fulfillment status",
+      await tab("Custody");
+      const request = main.locator(
+        `section[aria-labelledby="request-${custodyPage.requests[0].request.id}"]`,
+      );
+      const reloadCustody = main.getByRole("button", {
+        name: "Reload custody state",
         exact: true,
       });
-      await expect(fulfillmentSave).toBeDisabled();
-      await adminMain
-        .getByLabel("Fulfillment status", { exact: true })
-        .selectOption("APPROVED");
-      await adminMain.getByLabel("Courier", { exact: true }).fill("Synthetic courier");
-      await adminMain
-        .getByRole("checkbox", {
-          name: "I confirmed this fulfillment status manually.",
-          exact: false,
-        })
-        .check();
-      await fulfillmentSave.click();
-      await expect(adminMain.getByRole("alert")).toContainText("Reload saved state");
-      await expect(fulfillmentSave).toBeDisabled();
+      await expect(request).toContainText("Delivery request");
+      await expect(request).toContainText("synthetic@example.invalid");
+      const approveRequest = request.getByRole("button", {
+        name: "Approve request",
+        exact: true,
+      });
+      const confirmRequest = () =>
+        request
+          .getByRole("checkbox", { name: /I confirmed this update manually/ })
+          .check();
+      await expect(approveRequest).toBeDisabled();
+      await confirmRequest();
+      await approveRequest.click();
+      await expect(alert("Reload saved state")).toBeVisible();
+      await expect(approveRequest).toBeDisabled();
       await audit("fulfillment conflict");
       rejectFulfillment = false;
-      await adminMain
-        .getByRole("button", { name: "Reload custody state", exact: true })
-        .click();
-      await fulfillmentDetails.locator("summary").click();
-      await adminMain
-        .getByLabel("Fulfillment status", { exact: true })
-        .selectOption("APPROVED");
-      await adminMain.getByLabel("Courier", { exact: true }).fill("Synthetic courier");
-      await adminMain
-        .getByRole("checkbox", {
-          name: "I confirmed this fulfillment status manually.",
-          exact: false,
-        })
-        .check();
-      await fulfillmentSave.click();
+      await reloadCustody.click();
+      await confirmRequest();
+      await approveRequest.click();
       await expect.poll(() => fulfillmentWrites).toBe(2);
-      await expect(adminMain).toContainText("delivery · approved");
-      await expect(adminMain).toContainText("katha held · revision 1");
+      await expect(request.getByLabel(/^Courier/)).toBeVisible();
+      await expect(request.locator(".flow")).toContainText("Approved, current");
+      await expect(
+        main.locator('section[aria-labelledby="custody-current"]'),
+      ).toContainText("Held by Katha");
       assert.equal(custodyPreparations, 0);
       await audit("fulfillment approval separate from custody");
-      await adminMain
+      await main
         .getByLabel("Related fulfillment request", { exact: true })
         .selectOption(custodyPage.requests[0].request.id);
-      await adminMain
+      await main
         .getByLabel("Physical movement", { exact: true })
         .selectOption("DISPATCH_FROM_KATHA");
-      const custodyPrepare = adminMain.getByRole("button", {
-        name: "Prepare custody attestation",
+      const custodyPrepare = main.getByRole("button", {
+        name: "Review custody change",
         exact: true,
       });
       await expect(custodyPrepare).toBeDisabled();
-      await adminMain
-        .getByRole("checkbox", {
-          name: "I confirmed that this physical movement has already occurred",
-          exact: false,
-        })
+      await main
+        .getByRole("checkbox", { name: /this physical movement has already happened/ })
         .check();
       await custodyPrepare.click();
-      await expect(adminMain).toContainText(
-        "Review transaction before wallet approval",
-      );
+      await expect(main).toContainText("Review transaction before wallet approval");
       assert.equal(custodyPreparations, 1);
       await audit("custody transaction review");
       await page.screenshot({
         path: `${artifacts}/custody-admin-${width}.png`,
         fullPage: true,
       });
-      await adminMain
-        .getByRole("button", { name: "Cancel transaction review", exact: true })
-        .click();
+      await cancelReview.click();
       custodyPage.custody.unresolved = true;
-      await adminMain
-        .getByRole("button", { name: "Reload custody state", exact: true })
-        .click();
-      await expect(adminMain).toContainText("A signed custody attempt is unresolved");
+      await reloadCustody.click();
+      await expect(main).toContainText("A signed custody transaction is unresolved");
       await expect(custodyPrepare).toBeDisabled();
       await audit("custody unresolved signature");
       custodyPage.custody.unresolved = false;
       custodyPage.canAttest = false;
-      await adminMain
-        .getByRole("button", { name: "Reload custody state", exact: true })
-        .click();
-      await expect(adminMain).toContainText(
-        "current Registry custody authority must sign",
-      );
+      await reloadCustody.click();
+      await expect(main).toContainText("custody authority signs custody records");
       await expect(custodyPrepare).toBeDisabled();
       await audit("custody administrator without chain authority");
       adminAllowed = false;
-      await adminMain
-        .getByRole("button", { name: "Reload custody state", exact: true })
-        .click();
-      await expect(adminMain.getByRole("alert")).toContainText("administrator session");
-      await expect(adminMain).not.toContainText("synthetic@example.invalid");
-      await expect(adminMain).not.toContainText("Synthetic address");
+      await reloadCustody.click();
+      await expect(alert("administrator session")).toBeVisible();
+      await expect(main).not.toContainText("synthetic@example.invalid");
+      await expect(main).not.toContainText("Synthetic address");
       await audit("custody role revoked clears private details");
-      await adminMain
-        .getByRole("link", { name: "Artwork authenticity", exact: true })
-        .click();
-      await adminMain
-        .getByRole("link", { name: "Open condition inspection", exact: true })
-        .click();
+      await tab("Condition");
+      await expect(main).toContainText("Finalized and indexed");
       verifierAllowed = false;
-      await adminMain
-        .getByRole("button", { name: "Reload inspection state", exact: true })
-        .click();
-      await expect(adminMain).not.toContainText(
+      await reloadInspection.click();
+      await expect(main).not.toContainText(
         "Synthetic private browser inspection notes",
       );
-      await expect(adminMain.getByRole("alert")).toContainText("A verifier session");
+      await expect(alert("A verifier session")).toBeVisible();
       await audit("inspection permission revoked");
       verifierAllowed = true;
-      await adminMain
-        .getByRole("link", { name: "Artwork authenticity", exact: true })
-        .click();
+      await tab("Verification");
+      await expect(main).toContainText("Already verified.");
       verifierAllowed = false;
-      await adminMain
-        .getByRole("button", { name: "Reload verification state" })
-        .click();
-      await expect(adminMain.getByRole("alert")).toContainText("A verifier session");
-      await expect(adminMain).not.toContainText("Synthetic Nepali artwork");
+      await reloadVerification.click();
+      await expect(alert("A verifier session")).toBeVisible();
+      await expect(main).not.toContainText("Synthetic Nepali artwork");
       await audit("verification authority revoked");
       adminAllowed = true;
       verifierAllowed = true;
-      await adminMain
-        .getByRole("link", { name: "Artwork documentation", exact: true })
-        .click();
       freezeDraft = true;
-      await adminMain.getByRole("button", { name: "Reload saved draft" }).click();
-      await expect(adminMain).toContainText("Editing is closed");
-      await expect(
-        adminMain.getByRole("button", { name: "Save artwork documentation" }),
-      ).toBeDisabled();
+      await tab("Documentation");
+      await expect(main).toContainText("Documentation is locked.");
+      await expect(main).toContainText("Locked after lifecycle records exist");
+      await expect(main.getByRole("button", { name: "Save changes" })).toHaveCount(0);
       await audit("draft editor frozen");
       await page.evaluate(() => globalThis.scrollTo(0, 0));
       await page.screenshot({
         path: `${artifacts}/draft-editor-${width}.png`,
         fullPage: true,
       });
-      await adminMain
-        .getByRole("link", { name: "Artwork drafts", exact: true })
-        .click();
-      await expect(adminMain).toContainText("Showing 1–20 unpublished artworks");
+      await headerLink("/admin/artworks");
+      await expect(draftPages).toContainText("Showing 1–20");
       draftMode = "UNAVAILABLE";
-      await adminMain.getByRole("button", { name: "Refresh drafts" }).click();
-      await expect(adminMain.getByRole("alert")).toContainText("could not be loaded");
-      await expect(adminMain).not.toContainText("Synthetic unpublished work");
-      await expect(adminMain).not.toContainText("PRIVATE_DRAFT_SENTINEL");
+      await headerLink("/admin");
+      await headerLink("/admin/artworks");
+      await expect(alert("Artwork records couldn't load")).toBeVisible();
+      await expect(main).not.toContainText("Synthetic unpublished work");
+      await expect(main).not.toContainText("PRIVATE_DRAFT_SENTINEL");
       await audit("draft list unavailable");
       draftMode = "EMPTY";
-      await adminMain.getByRole("button", { name: "Try loading drafts again" }).click();
-      await expect(adminMain).toContainText("No unpublished artworks on this page");
+      await main.getByRole("button", { name: "Try again" }).click();
+      await expect(main).toContainText("No artworks yet");
       await audit("draft list empty");
       draftMode = "DENIED";
-      await adminMain.getByRole("button", { name: "Refresh drafts" }).click();
-      await expect(adminMain.getByRole("alert")).toContainText(
-        "Access is no longer available",
-      );
+      await headerLink("/admin");
+      await headerLink("/admin/artworks");
+      await expect(main).toContainText("This workspace needs an administrator role");
       await audit("draft list permission revoked");
-      await adminMain
-        .getByRole("link", { name: "Artist administration", exact: true })
-        .click();
-      await expect(adminMain).toContainText("Create an artist profile");
-      await walletPanel.getByRole("button", { name: "Sign out", exact: true }).click();
-      await expect(walletPanel.getByRole("status")).toHaveText("Not signed in");
+      await headerLink("/admin");
+      await expect(main.getByRole("heading", { name: "Create artist" })).toBeVisible();
+      await headerLink("/account");
+      await main.getByRole("button", { name: "Sign out", exact: true }).click();
+      await expect(main).toContainText("Not signed in");
       await expect.poll(() => logoutCalls).toBe(1);
-      await expect(adminMain).toContainText("Sign in to administer Katha");
-      await expect(adminMain).not.toContainText("Synthetic Nepali artist");
+      await page.goBack();
+      await expect(page).toHaveURL(`${origin}/admin`);
+      await expect(main).toContainText("Sign in to use operations");
+      await expect(main).not.toContainText("Synthetic Nepali artist");
       await audit("admin signed out");
       adminAllowed = false;
       verifierAllowed = false;
 
-      await walletPanel
-        .getByRole("button", { name: "Sign in to Katha", exact: true })
+      await main.getByRole("link", { name: "Sign in", exact: true }).click();
+      await main
+        .getByRole("button", { name: "Sign in with wallet", exact: true })
         .click();
-      await expect(walletPanel.getByRole("status")).toHaveText("Signed in to Katha");
-      await expect(adminMain).toContainText("no applicable administration permission");
+      await expect(main).toContainText("Connected and signed in");
+      await main
+        .getByRole("link", { name: "Continue where you left off", exact: true })
+        .click();
+      await expect(main).toContainText("You don't have access to operations");
+      await expect(page.locator(".hdr .who .role")).toHaveText("No role");
       await audit("admin permission denied");
-      await page
-        .getByRole("banner")
-        .getByRole("link", { name: "Katha home", exact: true })
-        .click();
-      await openNavigation();
-      await walletPanel
-        .getByLabel("Wallet account")
-        .selectOption("11111111111111111111111111111111");
-      await expect(walletPanel.getByRole("status")).toHaveText("Not signed in");
+      await main.getByRole("link", { name: "Switch wallet", exact: true }).click();
+      await main.getByRole("button", { name: "Change account", exact: true }).click();
+      await chooser.getByRole("button", { name: /^1111…1111/ }).click();
+      await expect(main).toContainText("Your wallet switched accounts.");
+      await expect(main).toContainText("Not signed in");
+      await expect(
+        main.getByRole("button", { name: "Sign in as 1111…1111", exact: true }),
+      ).toBeVisible();
       await expect.poll(() => logoutCalls).toBe(2);
       assert.equal(verifyCalls, 3);
       await audit("wallet connected");
-      await walletPanel.screenshot({ path: `${artifacts}/wallet-${width}.png` });
-      await walletPanel.getByRole("button", { name: "Disconnect wallet" }).click();
+      await main
+        .locator('section[aria-labelledby="account-wallet-title"]')
+        .screenshot({ path: `${artifacts}/wallet-${width}.png` });
+      await main.getByRole("button", { name: "Disconnect", exact: true }).click();
+      await main.getByRole("button", { name: "Connect wallet", exact: true }).click();
       await expect(
-        walletPanel.getByRole("button", { name: "Connect Synthetic test wallet" }),
+        chooser.getByRole("button", { name: "Connect Synthetic test wallet" }),
       ).toBeVisible();
-      await walletPanel
-        .getByRole("button", { name: "Connect Synthetic test wallet" })
-        .click();
       await page.evaluate(() => globalThis.__kathaWalletTest.unregister());
-      await expect(walletPanel).toContainText("No compatible Solana wallet found");
+      await expect(chooser).toContainText("No compatible Solana wallet found");
+      await chooser.getByRole("button", { name: "Close", exact: true }).click();
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.signCalls()),
         3,
@@ -1977,10 +1932,11 @@ export async function runPublicBrowsingJourneys({
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
         0,
       );
-      await page.getByRole("button", { name: "Connect wallet", exact: true }).click();
       // Restart keyboard traversal from a fresh document after wallet controls.
-      await page.reload();
-      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await page.goto(origin);
+      await expect(page.getByRole("heading", { level: 1 })).toContainText(
+        "RWAs on Solana.",
+      );
       await audit("home");
       await page.screenshot({ path: `${artifacts}/home-${width}.png`, fullPage: true });
 
@@ -1996,59 +1952,60 @@ export async function runPublicBrowsingJourneys({
         "solid",
       );
       await page.keyboard.press("Enter");
-      await expect(page.getByRole("main")).toBeFocused();
+      await expect(main).toBeFocused();
 
-      const nav = page.getByRole("navigation", { name: "Primary", exact: true });
-      for (const [name, id] of [
-        ["Our purpose", "purpose"],
-        ["Traditions", "traditions"],
+      for (const [href, id] of [
+        ["/#traditions", "traditions"],
+        ["/#collecting", "collecting"],
       ]) {
-        await openNavigation();
-        const link = nav.getByRole("link", { name, exact: true });
-        await link.focus();
-        await page.keyboard.press("Enter");
+        await headerLink(href);
         await expect(page).toHaveURL(new RegExp(`#${id}$`));
         await expect(page.locator(`#${id}`)).toBeFocused();
       }
-      await openNavigation();
-      const explore = nav.getByRole("link", { name: "Explore", exact: true });
+      const menu = page.locator(".menubtn");
+      if (await menu.isVisible()) {
+        if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+      }
+      const explore = page.locator('.hdr a[href="/explore"]:visible');
       assert.ok((await explore.boundingBox()).height >= 44);
       await explore.click();
       await expect(page).toHaveURL(`${origin}/explore`);
       await audit("catalogue");
       await page
-        .getByRole("navigation", { name: "Artwork categories" })
+        .getByRole("navigation", { name: "Filter by tradition" })
         .getByRole("link", { name: "Paubha", exact: true })
         .click();
       await expect(page).toHaveURL(`${origin}/explore?category=PAUBHA`);
       await expect(
-        page.getByRole("link", { name: "Paubha", exact: true }),
+        page
+          .getByRole("navigation", { name: "Filter by tradition" })
+          .getByRole("link", { name: "Paubha", exact: true }),
       ).toHaveAttribute("aria-current", "page");
-      await page.locator('main a[href="/art/KATHA-PAUBHA-000001"]').click();
+      await page.locator('main a[href="/art/KATHA-PAUBHA-000001"]').first().click();
       await expect(page).toHaveURL(`${origin}/art/KATHA-PAUBHA-000001`);
       await expect(page.locator("#artwork-title")).toBeVisible();
-      const identity = page.locator(
-        'section[aria-labelledby="artwork-physical-identity"]',
-      );
+      const identity = page.locator("#identify");
       await expect(
-        identity.getByRole("heading", { name: "Physical identity and NFC" }),
+        identity.getByRole("heading", { name: "Identifying this painting" }),
       ).toBeVisible();
-      await expect(identity).toContainText("A basic NFC tag can be cloned");
-      await expect(
-        identity.getByRole("link", { name: "KATHA-PAUBHA-000001", exact: true }),
-      ).toHaveAttribute("href", "/art/KATHA-PAUBHA-000001");
-      for (const [name, id] of [
-        ["About the work", "artwork-details"],
-        ["recorded manual verification", "artwork-authenticity"],
-        ["latest available condition inspection", "artwork-condition"],
-        ["provenance and blockchain references", "artwork-provenance"],
-      ]) {
-        await identity.getByRole("link", { name, exact: true }).click();
+      await expect(identity).toContainText("A basic tag can be copied");
+      await expect(identity).toContainText("KATHA-PAUBHA-000001");
+      await identity.getByRole("link", { name: "evidence below", exact: true }).click();
+      await expect(page).toHaveURL(`${origin}/art/KATHA-PAUBHA-000001#evidence`);
+      await expect(page.locator("#evidence")).toBeInViewport();
+      for (const id of ["ev-verification", "ev-condition", "ev-custody", "ev-chain"]) {
+        await page.locator(`a.srow[href="#${id}"]`).click();
         await expect(page).toHaveURL(`${origin}/art/KATHA-PAUBHA-000001#${id}`);
+        await expect(page.locator(`#${id}`)).toBeVisible();
         await expect(page.locator(`#${id}`)).toBeInViewport();
+        await expect(page.locator(`#${id}-tab`)).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
       }
-      await expect(page.locator("#provenance")).toContainText("Primary purchase");
-      await expect(page.locator("#provenance")).toContainText("Secondary purchase");
+      await page.getByRole("tab", { name: "History", exact: true }).click();
+      await expect(page.locator("#provenance")).toContainText("Primary sale");
+      await expect(page.locator("#provenance")).toContainText("Secondary sale");
       await expect(
         page.getByRole("img", {
           name: "Approved synthetic resale inspection photograph",
@@ -2078,10 +2035,9 @@ export async function runPublicBrowsingJourneys({
       await page.locator('main a[href="/artists/synthetic-artist"]').first().click();
       await expect(page.locator("#artist-name")).toBeVisible();
       await audit("artist");
-      await openNavigation();
-      await nav.getByRole("link", { name: "Traditions", exact: true }).click();
-      await expect(page.locator("#traditions")).toBeFocused();
+      await headerLink("/#traditions");
       await expect(page).toHaveURL(`${origin}/#traditions`);
+      await expect(page.locator("#traditions")).toBeFocused();
       assert.deepEqual(
         pageErrors,
         [],
@@ -2105,7 +2061,7 @@ export async function runPublicBrowsingJourneys({
       });
       assert.ok(
         await page
-          .locator(".button-primary")
+          .locator(".btn")
           .first()
           .evaluate((element) =>
             globalThis
@@ -2115,29 +2071,31 @@ export async function runPublicBrowsingJourneys({
           ),
       );
       for (const [category, message] of [
-        ["THANGKA", "No published artworks"],
-        ["MANDALA", "Artworks are unavailable right now"],
+        ["THANGKA", "No Thangka works yet"],
+        ["MANDALA", "Artworks couldn't load"],
       ]) {
         await page.goto(`${origin}/explore?category=${category}`);
         // The existing empty catalogue describes the currently matched query.
-        await expect(page.getByRole("main")).toContainText(message);
+        await expect(main).toContainText(message);
         await audit(`catalogue ${category}`);
       }
 
       await page.goto(`${origin}/art/KATHA-PAUBHA-999999`);
-      await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
+      await expect(
+        page.getByRole("heading", { name: "Nothing is recorded here" }),
+      ).toBeVisible();
       await expect(page.locator('meta[name="robots"]').first()).toHaveAttribute(
         "content",
         /noindex/,
       );
       await audit("unknown artwork");
-      await page.getByRole("link", { name: "Return home" }).click();
+      await page.getByRole("link", { name: "Go to the home page" }).click();
       await expect(page.locator("#purpose")).toBeVisible();
 
       setArtworkOutage(true);
       await page.goto(`${origin}/art/KATHA-PAUBHA-000001`);
       await expect(
-        page.getByRole("heading", { name: "We couldn’t load this page" }),
+        page.getByRole("heading", { name: "Katha is temporarily unavailable" }),
       ).toBeVisible();
       await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
       assert.ok(
@@ -2148,19 +2106,16 @@ export async function runPublicBrowsingJourneys({
       await page.getByRole("button", { name: "Try again" }).click();
       await expect(page.locator("#artwork-title")).toBeVisible();
       await audit("recovered artwork API");
-      await openNavigation();
-      await nav.getByRole("link", { name: "Home", exact: true }).click();
+      await page.getByRole("banner").getByRole("link", { name: "Katha home" }).click();
       await expect(page.locator("#purpose")).toBeVisible();
 
       for (const [mode, message] of [
-        ["EMPTY", "No published artworks are available yet."],
-        ["UNAVAILABLE", "Featured artworks are temporarily unavailable."],
+        ["EMPTY", "No works are published yet"],
+        ["UNAVAILABLE", "Featured works didn't load"],
       ]) {
         setHomeMode(mode);
         await page.goto(origin);
-        await expect(
-          page.getByRole("main").getByText(message, { exact: false }),
-        ).toBeVisible();
+        await expect(main.getByText(message, { exact: false })).toBeVisible();
         await audit(`home ${mode}`);
       }
       setHomeMode("READY");
@@ -2181,26 +2136,24 @@ export async function runPublicBrowsingJourneys({
         "indexing-delay",
         "indexed",
       ]) {
-        await page.getByRole("main").evaluate((main, html) => {
-          let target = main.querySelector("#synthetic-transaction-review");
+        await main.evaluate((element, html) => {
+          let target = element.querySelector("#synthetic-transaction-review");
           if (!target) {
             target = globalThis.document.createElement("div");
             target.id = "synthetic-transaction-review";
-            main.append(target);
+            element.append(target);
           }
-          target.innerHTML = `<section><h2>Wallet operations</h2>${html}</section>`;
+          target.innerHTML = `<section class="wrap"><h2>Wallet operations</h2>${html}</section>`;
         }, renderTransactionReviewPhase(phase));
         const panel = page.locator("#synthetic-transaction-review");
         await expect(
-          panel.getByRole("heading", { name: "Transaction review" }),
+          panel.getByRole("heading", { name: "Transaction", exact: true }),
         ).toBeVisible();
-        const approve = panel.getByRole("button", {
-          name: "Approve in wallet and submit",
-        });
-        await expect(approve).toHaveCount(phase === "review" ? 1 : 0);
+        const approveReview = panel.getByRole("button", { name: "Approve in wallet" });
+        await expect(approveReview).toHaveCount(phase === "review" ? 1 : 0);
         if (phase === "review") {
-          await approve.focus();
-          await expect(approve).toBeFocused();
+          await approveReview.focus();
+          await expect(approveReview).toBeFocused();
         }
         await audit(`transaction ${phase}`);
         if (phase === "review")

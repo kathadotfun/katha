@@ -1,6 +1,6 @@
 # Cultural homepage and featured artworks
 
-The `/` route introduces Katha with **Real World Assets, rooted in Nepali culture.**
+The `/` route introduces Katha with **Nepal's cultural art. RWAs on Solana.**
 It connects visitors to the public catalogue, artist profiles and permanent artwork
 records, with cultural background and an explanation of authorship, manual
 verification, digital ownership and separate physical custody. The canonical URL
@@ -45,9 +45,11 @@ and [Art of Mandala](https://rubinmuseum.org/highlights/mandala/) references.
 The artist's own documented meaning and cultural context remain the source for
 an individual work. Museum imagery is not copied or embedded.
 
-The existing approved Katha emblem, warm ivory, muted red and editorial typography
-remain in use. The X banner is not an artwork or homepage hero. `/#purpose` and
-`/#traditions` continue to resolve to focusable headings from the shared navigation.
+The page follows the [design system](design-system.md): madder red hero with the
+stepped Dhaka mark, paper sections, Eczar headings and a Devanagari कथा closing
+band. The hero drawing is decorative and stops animating under reduced motion. The
+X banner is not an artwork or homepage hero. `/#purpose`, `/#traditions` and
+`/#collecting` resolve to focusable headings; the header links to the last two.
 
 ## Verification
 
@@ -67,7 +69,7 @@ Synthetic production HTTP checks exercise populated, empty and unavailable homep
 states and canonical metadata alongside existing artwork, catalogue and artist routes.
 
 For manual browser review, run the migrated API and web services. Inspect `/` at
-narrow and wide widths, keyboard navigation to both anchor headings, artwork/artist
+narrow and wide widths, keyboard navigation to the anchor headings, artwork/artist
 links, uncropped photographs, long titles, photo failure, and empty/unavailable
 catalogue states. Draft-only fixtures do not populate published works. No publication
 gate should be bypassed to obtain a screenshot. Screenshots and reports stay local.

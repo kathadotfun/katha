@@ -1,12 +1,23 @@
+import Link from "next/link";
+import type { ArtworkCategory } from "@katha/shared";
 import { artworkCategoryLabels } from "../lib/artwork-page";
 import {
   explorationPageSize,
-  explorationPhotoUrl,
   explorationUrl,
   type ExplorationState,
   type ExplorationQuery,
 } from "../lib/artwork-exploration";
-import { ArtworkPhoto } from "./artwork-photo";
+import { ArtworkCard } from "./artwork-card";
+import { Pagination } from "./ui/pagination";
+import { Badge, Icon } from "./ui/status";
+import { RetryButton } from "./ui/retry-button";
+
+const categories: readonly (readonly [string, ArtworkCategory | undefined])[] = [
+  ["All works", undefined],
+  ...(Object.entries(artworkCategoryLabels) as [ArtworkCategory, string][]).map(
+    ([category, label]) => [label, category] as const,
+  ),
+];
 
 export function ArtworkExploration({
   state,
@@ -17,181 +28,178 @@ export function ArtworkExploration({
 }) {
   const query: ExplorationQuery =
     state.kind === "INVALID_QUERY" ? { offset: 0 } : state.query;
+  // Discovery has no artist lookup by ID, so the chip names the artist from results.
+  const artistName =
+    state.kind === "READY" && query.artistId
+      ? (state.page.items[0]?.artist.displayName ?? "Selected artist")
+      : query.artistId
+        ? "Selected artist"
+        : null;
+  const filtered = Boolean(query.category || query.artistId);
+  const describe = (count: number) =>
+    (query.category ? `${artworkCategoryLabels[query.category]} ` : "") +
+    (count === 1 ? "work" : "works") +
+    (artistName ? ` by ${artistName}` : "");
+  const scope = describe(2);
   return (
-    <section
-      className="page-container py-[var(--section-space)]"
-      aria-labelledby="explore-title"
-    >
-      <header className="max-w-reading">
-        <p className="eyebrow text-brand">Nepali art · Real World Assets</p>
-        <h1 id="explore-title" className="mt-6 text-display">
-          Explore the artworks
-        </h1>
-        <p className="mt-6 text-lead text-muted">
-          Discover documented Mandala, Paubha and Thangka works, the artists behind
-          them, and the stories they preserve.
-        </p>
-        <p className="mt-4 text-sm text-muted">
-          Publication records Katha&apos;s manual verification. It does not establish a
-          live condition assessment or availability for sale.
-        </p>
-      </header>
-      <nav aria-label="Artwork categories" className="mt-10 border-y border-line py-4">
-        <ul className="flex flex-wrap gap-x-8 gap-y-2">
-          <li>
-            <a
-              className="text-link exploration-category inline-flex min-h-11 items-center"
-              href="/explore"
-              aria-current={!query.category ? "page" : undefined}
-            >
-              All artworks
-            </a>
-          </li>
-          {Object.entries(artworkCategoryLabels).map(([category, label]) => (
-            <li key={category}>
-              <a
-                className="text-link exploration-category inline-flex min-h-11 items-center"
-                href={`/explore?category=${category}`}
-                aria-current={query.category === category ? "page" : undefined}
-              >
-                {label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      {state.kind === "INVALID_QUERY" ? (
-        <div className="mt-10 max-w-reading">
-          <h2 className="text-section">These filters aren&apos;t supported</h2>
-          <p className="mt-4">
-            Choose a category above or{" "}
-            <a href="/explore" className="underline">
-              reset the filters
-            </a>
-            .
+    <div className="app-main">
+      <div className="wrap">
+        <div className="flex flex-col gap-3.5">
+          <h1 id="explore-title" className="h1">
+            Artworks
+          </h1>
+          <p className="lead">
+            Every work published on Katha, each with a permanent ID and a public record.
           </p>
         </div>
-      ) : state.kind === "UNAVAILABLE" ? (
-        <div className="mt-10 max-w-reading">
-          <h2 className="text-section">Artworks are unavailable right now</h2>
-          <p role="alert" className="mt-4">
-            We couldn&apos;t load the catalogue. Your filters are preserved.
-          </p>
-          <a className="button-primary mt-6 inline-flex" href={explorationUrl(query)}>
-            Try again
-          </a>
-        </div>
-      ) : (
-        <>
-          <p className="mt-8 text-sm text-muted">
-            {query.category ? artworkCategoryLabels[query.category] : "All art forms"} ·
-            Page {query.offset / explorationPageSize + 1}
-            {state.page.items.length
-              ? ` · ${state.page.items.length} ${state.page.items.length === 1 ? "work" : "works"} on this page`
-              : ""}
-          </p>
-          {state.page.items.length ? (
-            <ul className="mt-8 grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
-              {state.page.items.map((artwork) => {
-                const photo = explorationPhotoUrl(apiOrigin, artwork.heroImage);
-                return (
-                  <li key={artwork.kathaId} className="min-w-0">
-                    {photo && artwork.heroImage ? (
-                      <ArtworkPhoto
-                        src={photo}
-                        alt={artwork.heroImage.altText}
-                        caption={`${artworkCategoryLabels[artwork.category]} · ${artwork.creationYear}`}
-                      />
-                    ) : (
-                      <div className="artwork-photo">
-                        <p className="p-6 text-center text-muted">
-                          Artwork photography is not available yet.
-                        </p>
-                      </div>
-                    )}
-                    <h2 className="mt-5 break-words text-2xl">
-                      <a className="text-link" href={`/art/${artwork.kathaId}`}>
-                        {artwork.title}
-                      </a>
-                    </h2>
-                    <p className="mt-3 break-words text-muted">
-                      Created by{" "}
-                      <a className="text-link" href={`/artists/${artwork.artist.slug}`}>
-                        {artwork.artist.displayName}
-                      </a>
-                    </p>
-                    {!photo && (
-                      <p className="mt-2 text-sm text-muted">
-                        {artworkCategoryLabels[artwork.category]} ·{" "}
-                        {artwork.creationYear}
-                      </p>
-                    )}
-                    <p className="mt-2 break-all font-mono text-xs text-muted">
-                      {artwork.kathaId}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="mt-10 max-w-reading">
-              <h2 className="text-section">
-                {query.offset
-                  ? "No artworks on this page"
-                  : "No published artworks yet"}
-              </h2>
-              <p className="mt-4 text-muted">
-                {query.offset
-                  ? "The catalogue may have changed since your last visit."
-                  : query.category
-                    ? `No ${artworkCategoryLabels[query.category]} works are available in the public catalogue yet.`
-                    : "Documented artworks will appear here after verification, minting and publication."}
-              </p>
-              <a
-                className="mt-6 inline-block underline"
-                href={explorationUrl({ ...query, offset: 0 })}
-              >
-                {query.offset ? "Return to the first page" : "Reload this category"}
-              </a>
-            </div>
-          )}
-          <nav
-            aria-label="Artwork pages"
-            className="mt-12 flex flex-wrap gap-8 border-t border-line pt-6"
-          >
-            {query.offset > 0 && (
-              <a
-                className="text-link exploration-category inline-flex min-h-11 items-center"
-                href={explorationUrl({
-                  ...query,
-                  offset: query.offset - explorationPageSize,
-                })}
-              >
-                Previous artworks
-              </a>
-            )}
-            {state.page.pagination.hasMore &&
-              query.offset + explorationPageSize <= 100000 && (
-                <a
-                  className="text-link exploration-category inline-flex min-h-11 items-center"
+
+        <div className="mt-10 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-t-[1.5px] border-b border-t-(--rule-strong) border-b-[rgba(113,51,45,0.14)] py-5">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+            <nav aria-label="Filter by tradition" className="seg">
+              {categories.map(([label, category]) => (
+                <Link
+                  key={label}
+                  className="cut-s"
                   href={explorationUrl({
-                    ...query,
-                    offset: query.offset + explorationPageSize,
+                    offset: 0,
+                    ...(category ? { category } : {}),
+                    ...(query.artistId ? { artistId: query.artistId } : {}),
                   })}
+                  aria-current={query.category === category ? "page" : undefined}
                 >
-                  Next artworks
-                </a>
-              )}
-            {state.page.pagination.hasMore &&
-              query.offset + explorationPageSize > 100000 && (
-                <p>
-                  More artworks exist beyond the public pagination limit. Choose an art
-                  form to narrow the catalogue.
-                </p>
-              )}
-          </nav>
-        </>
-      )}
-    </section>
+                  {label}
+                </Link>
+              ))}
+            </nav>
+            {artistName && (
+              <div className="filter-chip cut-s">
+                <span>Artist: {artistName}</span>
+                <Link
+                  href={explorationUrl({
+                    offset: 0,
+                    ...(query.category ? { category: query.category } : {}),
+                  })}
+                  aria-label="Remove artist filter"
+                >
+                  <Icon name="close" />
+                </Link>
+              </div>
+            )}
+            {filtered && (
+              <Link className="lnk inline-flex min-h-11 items-center" href="/explore">
+                Reset filters
+              </Link>
+            )}
+          </div>
+          {state.kind === "READY" && state.page.items.length > 0 && (
+            <p className="sm mut m-0" aria-live="polite">
+              Showing{" "}
+              {state.page.items.length === 1
+                ? query.offset + 1
+                : `${query.offset + 1}–${query.offset + state.page.items.length}`}{" "}
+              {describe(state.page.items.length)}
+            </p>
+          )}
+        </div>
+
+        {state.kind === "INVALID_QUERY" ? (
+          <div className="panel cut panel-empty mt-10">
+            <h2 className="h2">These filters aren&apos;t supported</h2>
+            <p className="p max-w-[36rem]">
+              Choose a tradition above, or reset your filters to see every published
+              work.
+            </p>
+            <Link className="btn btn-p cut-s mt-2.5" href="/explore">
+              Reset filters
+            </Link>
+          </div>
+        ) : state.kind === "UNAVAILABLE" ? (
+          <div className="panel cut panel-empty mt-10" role="alert">
+            <Badge tone="err" icon="error">
+              Catalogue unavailable
+            </Badge>
+            <h2 className="h2">Artworks couldn&apos;t load</h2>
+            <p className="p max-w-[36rem]">
+              The Katha catalogue didn&apos;t respond. Your filters are kept, so you can
+              try again in a moment.
+            </p>
+            <RetryButton className="btn btn-p cut-s mt-2.5" />
+          </div>
+        ) : state.page.items.length ? (
+          <>
+            <div className="grid-cards mt-10">
+              {state.page.items.map((artwork) => (
+                <ArtworkCard
+                  key={artwork.kathaId}
+                  artwork={artwork}
+                  apiOrigin={apiOrigin}
+                />
+              ))}
+            </div>
+            <div className="mt-[72px]">
+              <ExplorationPages state={state} query={query} />
+            </div>
+          </>
+        ) : query.offset ? (
+          <div className="panel cut panel-empty mt-10">
+            <h2 className="h2">No artworks on this page</h2>
+            <p className="p max-w-[36rem]">
+              The catalogue may have changed since your last visit.
+            </p>
+            <Link
+              className="btn btn-p cut-s mt-2.5"
+              href={explorationUrl({ ...query, offset: 0 })}
+            >
+              Return to the first page
+            </Link>
+          </div>
+        ) : (
+          <div className="panel cut panel-empty mt-10">
+            <h2 className="h2">No {scope} yet</h2>
+            <p className="p max-w-[36rem]">
+              {filtered
+                ? "Try another tradition, or reset your filters to see every published work."
+                : "Works appear here once Katha has verified, minted and published them."}
+            </p>
+            {filtered && (
+              <Link className="btn btn-p cut-s mt-2.5" href="/explore">
+                Reset filters
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ExplorationPages({
+  state,
+  query,
+}: {
+  state: Extract<ExplorationState, { kind: "READY" }>;
+  query: ExplorationQuery;
+}) {
+  const more = state.page.pagination.hasMore;
+  const withinLimit = query.offset + explorationPageSize <= 100000;
+  return (
+    <Pagination
+      page={query.offset / explorationPageSize + 1}
+      previousHref={
+        query.offset > 0
+          ? explorationUrl({ ...query, offset: query.offset - explorationPageSize })
+          : null
+      }
+      nextHref={
+        more && withinLimit
+          ? explorationUrl({ ...query, offset: query.offset + explorationPageSize })
+          : null
+      }
+      limitNote={
+        more && !withinLimit
+          ? "More artworks exist beyond the public page limit. Choose a tradition to narrow the catalogue."
+          : null
+      }
+    />
   );
 }

@@ -1,12 +1,23 @@
+import Link from "next/link";
 import type { PublicArtistDetail } from "@katha/shared";
-import { artworkCategoryLabels } from "../lib/artwork-page";
-import { explorationPageSize, explorationPhotoUrl } from "../lib/artwork-exploration";
+import { explorationPageSize, explorationUrl } from "../lib/artwork-exploration";
 import { artistWorksUrl, type ArtistWorks } from "../lib/artist-page";
+import { utcDate } from "../lib/format";
+import { ArtworkCard } from "./artwork-card";
 import { ArtworkPhoto } from "./artwork-photo";
-const dates = new Intl.DateTimeFormat("en-GB", {
-  dateStyle: "medium",
-  timeZone: "UTC",
-});
+import { KathaMark } from "./ui/katha-mark";
+import { Pagination } from "./ui/pagination";
+import { Badge, Icon } from "./ui/status";
+import { RetryButton } from "./ui/retry-button";
+
+function linkLabel(href: string) {
+  try {
+    return new URL(href).hostname.replace(/^www\./, "");
+  } catch {
+    return href;
+  }
+}
+
 export function ArtistProfile({
   artist,
   works,
@@ -17,195 +28,236 @@ export function ArtistProfile({
   apiOrigin: string;
 }) {
   return (
-    <article
-      className="page-container break-words py-[var(--section-space)]"
-      aria-labelledby="artist-name"
-    >
-      <header className="grid items-start gap-10 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="min-w-0 max-w-reading">
-          <p className="eyebrow text-brand">
-            The artist · Nepali art &amp; Real World Assets
-          </p>
-          <h1 id="artist-name" className="mt-6 break-words text-display">
-            {artist.displayName}
-          </h1>
-          <p className="mt-6 text-lead text-muted">{artist.region}</p>
-          <section aria-labelledby="artist-traditions" className="mt-8">
-            <h2 id="artist-traditions" className="text-xl">
-              Art traditions
-            </h2>
-            <ul className="mt-3 space-y-2">
+    <article aria-labelledby="artist-name">
+      <section
+        className="weave dk bg-madder-deep text-paper"
+        style={{ padding: "clamp(40px, 6vw, 88px) 0" }}
+      >
+        <div
+          className="wrap flex flex-wrap items-end"
+          style={{ gap: "32px clamp(32px, 5vw, 72px)" }}
+        >
+          {artist.profileImageUrl ? (
+            <div
+              className="ph cut bg-madder"
+              style={{
+                flex: "0 1 300px",
+                width: 300,
+                maxWidth: "100%",
+                aspectRatio: "4 / 5",
+              }}
+            >
+              <ArtworkPhoto
+                src={artist.profileImageUrl}
+                alt={`Portrait of ${artist.displayName}, approved by the artist`}
+                primary
+              />
+            </div>
+          ) : (
+            <div
+              className="cut flex items-center justify-center bg-madder-dark"
+              aria-hidden="true"
+              style={{
+                flex: "0 1 300px",
+                width: 300,
+                maxWidth: "100%",
+                aspectRatio: "4 / 5",
+              }}
+            >
+              <KathaMark size={96} variant="outline" />
+            </div>
+          )}
+          <div className="flex min-w-0 flex-col gap-4" style={{ flex: "1 1 420px" }}>
+            <p className="sm m-0 text-on-red-muted">Artist</p>
+            <h1
+              id="artist-name"
+              className="serif m-0 font-semibold"
+              style={{
+                fontSize: "clamp(40px, 5.6vw, 80px)",
+                lineHeight: 1,
+                letterSpacing: "-0.015em",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {artist.displayName}
+            </h1>
+            <p className="m-0 text-[19px] text-on-red">{artist.region}</p>
+            <ul
+              aria-label="Art traditions"
+              className="m-0 flex list-none flex-wrap gap-2 p-0"
+            >
               {artist.traditions.map((tradition, index) => (
-                <li key={index}>{tradition}</li>
+                <li key={index} className="chip-light cut-s">
+                  {tradition}
+                </li>
               ))}
             </ul>
-          </section>
-          <p className="mt-8 text-sm text-muted">
-            Artist profile manually verified by Katha on{" "}
-            <time dateTime={artist.verifiedAt}>
-              {dates.format(new Date(artist.verifiedAt))} UTC
-            </time>
-            . This records profile verification, not independent proof of every
-            artwork&apos;s authenticity.
-          </p>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-2">
+              <Badge tone="ok">Profile verified</Badge>
+              <span className="sm text-on-red-muted">
+                Checked manually by Katha on{" "}
+                <time dateTime={artist.verifiedAt}>{utcDate(artist.verifiedAt)}</time>
+              </span>
+            </div>
+            {artist.publicLinks.length > 0 && (
+              <ul
+                aria-label="Public links"
+                className="mt-2 mb-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0"
+              >
+                {artist.publicLinks.map((href, index) => (
+                  <li key={index}>
+                    <a
+                      className="lnk-d inline-flex min-h-11 items-center gap-1.5"
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {linkLabel(href)}
+                      <Icon name="external" size={14} />
+                      <span className="sr-only">, artist link, opens in a new tab</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-        <div className="min-w-0 max-w-sm">
-          {artist.profileImageUrl ? (
-            <ArtworkPhoto
-              src={artist.profileImageUrl}
-              alt={`Portrait of ${artist.displayName}`}
-              caption="Artist portrait"
-              primary
-            />
-          ) : (
-            <p className="border-t border-line pt-6 text-muted">
-              Artist portrait is not available yet.
-            </p>
-          )}
-        </div>
-      </header>
+      </section>
+
       <section
         aria-labelledby="artist-biography"
-        className="mt-[var(--section-space)] max-w-reading"
+        className="bg-paper"
+        style={{ padding: "clamp(56px, 7vw, 96px) 0 0" }}
       >
-        <h2 id="artist-biography" className="text-section">
-          The artist&apos;s story
-        </h2>
-        <p className="mt-6 whitespace-pre-wrap text-lead">{artist.biography}</p>
+        <div
+          className="wrap flex flex-wrap items-start"
+          style={{ gap: "32px clamp(32px, 5vw, 80px)" }}
+        >
+          <div className="flex min-w-0 flex-col gap-4" style={{ flex: "2 1 520px" }}>
+            <h2 id="artist-biography" className="h2">
+              Biography
+            </h2>
+            <p className="reading p m-0">{artist.biography}</p>
+          </div>
+          <aside
+            className="panel cut flex min-w-0 flex-col gap-2.5"
+            style={{ flex: "1 1 280px" }}
+          >
+            <p className="serif m-0 text-xl font-semibold text-madder">
+              Attribution stays with the artist
+            </p>
+            <p className="p sm">
+              Every work by {artist.displayName} stays credited to them permanently,
+              whoever owns it later. Buying a work doesn&apos;t transfer its copyright.
+            </p>
+            <p className="xs mut m-0">
+              Profile verification records a manual check of the artist, not independent
+              proof of every artwork&apos;s authenticity.
+            </p>
+          </aside>
+        </div>
       </section>
-      {artist.publicLinks.length > 0 && (
-        <section aria-labelledby="artist-links" className="mt-10 max-w-reading">
-          <h2 id="artist-links" className="text-xl">
-            Public artist links
-          </h2>
-          <ul className="mt-4 space-y-3">
-            {artist.publicLinks.map((href, index) => (
-              <li key={index}>
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-link break-all"
-                >
-                  {new URL(href).hostname}
-                  <span className="sr-only">
-                    {" "}
-                    — artist link {index + 1}, opens in a new tab
-                  </span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+
       <section
         id="artist-works"
         aria-labelledby="artist-artworks"
-        className="mt-[var(--section-space)]"
+        className="bg-paper"
+        style={{ padding: "clamp(56px, 7vw, 96px) 0 clamp(72px, 8vw, 112px)" }}
       >
-        <h2 id="artist-artworks" className="text-section">
-          Artworks by {artist.displayName}
-        </h2>
-        <p className="mt-6 max-w-reading text-muted">
-          Authorship remains with the artist when collectors change. Owning a work does
-          not automatically transfer copyright or move the physical artwork.
-        </p>
-        {works.kind === "INVALID_QUERY" ? (
-          <p className="mt-6">
-            This artwork page number is unsupported.{" "}
-            <a className="underline" href={artistWorksUrl(artist.slug, 0)}>
-              Return to the first page
-            </a>
-            .
-          </p>
-        ) : works.kind === "UNAVAILABLE" ? (
-          <div className="mt-6">
-            <p role="alert">
-              Published artworks are unavailable right now. The artist profile remains
-              available.
-            </p>
-            <a
-              className="text-link mt-4 inline-block"
-              href={artistWorksUrl(artist.slug, works.offset)}
-            >
-              Try loading the artworks again
-            </a>
-          </div>
-        ) : (
-          <>
-            <p className="mt-6 text-sm text-muted">
-              Page {works.offset / explorationPageSize + 1} · {works.page.items.length}{" "}
-              {works.page.items.length === 1 ? "work" : "works"} on this page
-            </p>
-            {works.page.items.length ? (
-              <ul className="mt-8 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
-                {works.page.items.map((artwork) => {
-                  const src = explorationPhotoUrl(apiOrigin, artwork.heroImage);
-                  return (
-                    <li key={artwork.kathaId} className="min-w-0">
-                      {src && artwork.heroImage ? (
-                        <ArtworkPhoto
-                          src={src}
-                          alt={artwork.heroImage.altText}
-                          caption={`${artworkCategoryLabels[artwork.category]} · ${artwork.creationYear}`}
-                        />
-                      ) : (
-                        <div className="artwork-photo">
-                          <p className="p-6 text-center text-muted">
-                            Artwork photography is not available yet.
-                          </p>
-                        </div>
-                      )}
-                      <h3 className="mt-5 break-words text-2xl">
-                        <a className="text-link" href={`/art/${artwork.kathaId}`}>
-                          {artwork.title}
-                        </a>
-                      </h3>
-                      <p className="mt-3 break-all font-mono text-xs text-muted">
-                        {artwork.kathaId}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="mt-8 text-muted">
-                {works.offset
-                  ? "No published artworks on this page. The catalogue may have changed."
-                  : "No published artworks are available for this artist yet. This does not mean the artist has created no works."}
-              </p>
+        <div className="wrap">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b-[1.5px] border-(--rule-strong) pb-5">
+            <h2 id="artist-artworks" className="h2">
+              Published works
+            </h2>
+            {works.kind === "READY" && works.page.items.length > 0 && (
+              <Link
+                className="lnk py-2"
+                href={explorationUrl({ offset: 0, artistId: artist.id })}
+              >
+                See all in Explore
+              </Link>
             )}
-            <nav
-              aria-label="Artist artwork pages"
-              className="mt-8 flex flex-wrap gap-8 border-t border-line pt-6"
-            >
-              {works.offset > 0 && (
-                <a
-                  className="text-link"
-                  href={artistWorksUrl(artist.slug, works.offset - explorationPageSize)}
-                >
-                  Previous artworks
-                </a>
-              )}
-              {works.page.pagination.hasMore &&
-                works.offset + explorationPageSize <= 100000 && (
-                  <a
-                    className="text-link"
-                    href={artistWorksUrl(
-                      artist.slug,
-                      works.offset + explorationPageSize,
-                    )}
-                  >
-                    Next artworks
-                  </a>
-                )}
-              {works.page.pagination.hasMore &&
-                works.offset + explorationPageSize > 100000 && (
-                  <p>More artworks exist beyond the public pagination limit.</p>
-                )}
-            </nav>
-          </>
-        )}
+          </div>
+          {works.kind === "INVALID_QUERY" ? (
+            <div className="panel cut panel-empty mt-10">
+              <p className="empty-title">This page number isn&apos;t supported</p>
+              <Link
+                className="btn btn-p cut-s mt-2"
+                href={artistWorksUrl(artist.slug, 0)}
+              >
+                Return to the first page
+              </Link>
+            </div>
+          ) : works.kind === "UNAVAILABLE" ? (
+            <div className="panel cut panel-empty mt-10" role="alert">
+              <Badge tone="err" icon="error">
+                Catalogue unavailable
+              </Badge>
+              <p className="empty-title">Works couldn&apos;t load</p>
+              <p className="p max-w-xl">
+                The profile loaded, but the catalogue didn&apos;t respond. Try again in
+                a moment.
+              </p>
+              <RetryButton className="btn btn-p cut-s mt-2" />
+            </div>
+          ) : works.page.items.length ? (
+            <>
+              <div className="grid-cards mt-10">
+                {works.page.items.map((artwork) => (
+                  <ArtworkCard
+                    key={artwork.kathaId}
+                    artwork={artwork}
+                    apiOrigin={apiOrigin}
+                    heading="h3"
+                    showArtist={false}
+                  />
+                ))}
+              </div>
+              <div className="mt-16">
+                <Pagination
+                  label="Artist artwork pages"
+                  page={works.offset / explorationPageSize + 1}
+                  previousHref={
+                    works.offset > 0
+                      ? artistWorksUrl(artist.slug, works.offset - explorationPageSize)
+                      : null
+                  }
+                  nextHref={
+                    works.page.pagination.hasMore &&
+                    works.offset + explorationPageSize <= 100000
+                      ? artistWorksUrl(artist.slug, works.offset + explorationPageSize)
+                      : null
+                  }
+                />
+              </div>
+            </>
+          ) : works.offset ? (
+            <div className="panel cut panel-empty mt-10">
+              <p className="empty-title">No published works on this page</p>
+              <p className="p max-w-xl">
+                The catalogue may have changed since your last visit.
+              </p>
+              <Link
+                className="btn btn-p cut-s mt-2"
+                href={artistWorksUrl(artist.slug, 0)}
+              >
+                Return to the first page
+              </Link>
+            </div>
+          ) : (
+            <div className="panel cut panel-empty mt-10">
+              <p className="empty-title">No published works yet</p>
+              <p className="p max-w-xl">
+                {artist.displayName}&apos;s works are still being documented and
+                inspected. They&apos;ll appear here once Katha publishes them. This
+                doesn&apos;t mean the artist has created no works.
+              </p>
+              <Link className="btn btn-p cut-s mt-2" href="/explore">
+                Explore other artworks
+              </Link>
+            </div>
+          )}
+        </div>
       </section>
     </article>
   );

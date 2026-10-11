@@ -180,14 +180,17 @@ owner and canonical address of every account before preparing a purchase.
 
 1. Operator opens `/account`, connects the expected wallet and signs in. Read the
    challenge domain, Devnet cluster and account. If another extension prompts,
-   cancel and resolve wallet selection.
+   cancel and resolve wallet selection. The session lives only in the open tab:
+   move between pages with the header and page links. Typing a URL or reloading
+   starts signed out; use the page's **Sign in** link, sign in again, then
+   **Continue where you left off**.
 2. Open `/admin`. Create an artist with approved name, slug, biography, region,
-   traditions and links. Save its UUID. Creator wallet may be absent; set the
+   traditions and links. Save its record ID. Creator wallet may be absent; set the
    artist-approved payout wallet for sales.
-3. Load and manually verify the artist after the actual review. This is an API/
+3. Look up and manually verify the artist after the actual review. This is an API/
    database action, not the Registry artwork verification transaction.
 4. Open `/admin/artworks/new`. Retain the creation UUID before saving. Enter the
-   artist UUID, category, year, title, dimensions in millimetres, materials,
+   artist record ID, tradition, year, title, dimensions in millimetres, materials,
    technique, origin, story, meaning, context and process. Compute the lowercase
    SHA-256 of the exact approved authorship evidence bytes locally, for example
    `sha256sum /path/to/private/evidence-file`. Keep those bytes outside Git.
@@ -260,19 +263,17 @@ Earlier commitments and attribution must remain preserved.
 Assign the tag after publication and before the first purchase to check stability
 across both sales. Return to this checkpoint after each ownership change.
 
-NFC administration currently uses authenticated API operations; there is no NFC
-browser administration form. In the operator's own signed-in browser, reuse a
-successful authenticated API request locally (for example via DevTools **Copy as
-fetch**). Its Authorization header is a credential: do not share/export/save it.
-Change the URL/method/body to the documented admin operation and inspect only the
-public assignment result. Keep the bearer out of URLs and out of the tag.
+Assign tags from the **NFC tag** panel at the bottom of the artwork's
+documentation page (`/admin/artworks/{id}`): enter a new lowercase UUID as the tag
+reference and choose **Assign tag**. **Look up binding** reads an existing tag,
+and the panel offers retirement with a confirmation. The API has no "list this
+artwork's tags" read, so the panel shows tags assigned or looked up in the current
+session. The underlying operations are:
 
 ```text
-POST /admin/artworks/{id}/nfc-tags
-Content-Type: application/json
-Body: {"tagId":"<new-lowercase-uuid>"}
-
-GET /admin/nfc-tags/{tagId}
+POST /admin/artworks/{id}/nfc-tags        {"tagId":"<new-lowercase-uuid>"}
+GET  /admin/nfc-tags/{tagId}
+POST /admin/nfc-tags/{tagId}/retire       {}
 ```
 
 1. Generate and retain one tag UUID. Confirm ACTIVE and the intended Katha ID.
@@ -340,7 +341,7 @@ simulated movement belong to a separately labeled rehearsal.
    physical dispatch occurs, sign/finalize the eligible transition to IN_TRANSIT,
    then separately save the request as DISPATCHED. Set private tracking details
    before dispatch closes their edit window.
-3. After actual receipt, A chooses **Report physical receipt** on the delivery
+3. After actual receipt, A chooses **I've received the painting** on the delivery
    page. This private collector claim does not itself attest Registry custody.
 4. Operator verifies receipt, signs/finalizes COLLECTOR_HELD with A as custodian,
    then separately saves request status RECEIVED. Core owner stays A throughout.

@@ -1,6 +1,6 @@
 # Purchase quote display
 
-Open a canonical artwork page and choose **Review purchase quote**. The route is
+Open a canonical artwork page and choose **Review purchase**. The route is
 `/art/{kathaId}/purchase`; valid permanent IDs are required and search indexing is
 disabled. Connect and sign in through `/account`, then select **Refresh purchase
 quote**. Loading never prompts the wallet to sign or prepares a purchase operation.

@@ -25,7 +25,7 @@ const messages = {
   FORBIDDEN: "This wallet no longer has permission. Check access again.",
   CONFLICT:
     "The slug already exists or this artist was already verified. Review the existing profile before trying again.",
-  NOT_FOUND: "Artist not found. Check the artist UUID.",
+  NOT_FOUND: "Artist not found. Check the artist record ID.",
   INVALID_REQUEST: "The server rejected these fields. Check the profile details.",
   UNAVAILABLE:
     "The request could not be confirmed. For creation, keep the same slug when retrying; for verification, reload the profile first.",

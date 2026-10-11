@@ -128,3 +128,27 @@ test("hero photography uses actual MIME extensions and fixed public storage only
     null,
   );
 });
+test("artist filter accepts canonical artist IDs only and scopes every result", async () => {
+  const artistId = artworkFixture.artist.id;
+  assert.deepEqual(parseExplorationQuery({ artistId }), { offset: 0, artistId });
+  for (const params of [
+    { artistId: artistId.toUpperCase() },
+    { artistId: "not-an-id" },
+    { artistId: [artistId, artistId] },
+  ])
+    assert.equal(parseExplorationQuery(params), null);
+  assert.equal(
+    explorationUrl({ category: "PAUBHA", artistId, offset: 12 }),
+    `/explore?category=PAUBHA&artistId=${artistId}&offset=12`,
+  );
+  const ready = await loadExploration({ artistId }, async (query) => {
+    assert.deepEqual(query, { artistId, limit: "12", offset: "0" });
+    return page;
+  });
+  assert.equal(ready.kind, "READY");
+  const otherArtist = await loadExploration(
+    { artistId: "bbbbbbbb-1111-4111-8111-111111111111" },
+    async () => page,
+  );
+  assert.equal(otherArtist.kind, "UNAVAILABLE");
+});

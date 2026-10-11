@@ -9,9 +9,15 @@ import {
   lockedDraftListSnapshot,
   type ArtworkDraftList,
 } from "../lib/artwork-draft-list";
+import { artworkCategoryLabels } from "../lib/artwork-page";
+import { localDateTime } from "../lib/format";
+import { signInHref } from "../lib/return-path";
+import { Badge, Icon } from "./ui/status";
+
 const emptySubscribe = () => () => {};
 const serverAuth = () => signedOutSnapshot;
 const serverList = () => lockedDraftListSnapshot;
+
 export function ArtworkDraftListPanel() {
   const session = useWalletSession();
   const auth = useSyncExternalStore(
@@ -34,136 +40,217 @@ export function ArtworkDraftListPanel() {
     list?.getSnapshot ?? serverList,
     serverList,
   );
-  if (!auth.session)
-    return (
-      <p className="mt-10" role="status">
-        Connect your wallet and sign in to Katha in the header to view artwork drafts.
-      </p>
-    );
   const page = state.page;
-  const busy = state.status === "loading";
+  const busy =
+    state.status === "loading" || (Boolean(auth.session) && state.status === "locked");
   return (
-    <section className="mt-10" aria-labelledby="draft-list-title" aria-busy={busy}>
-      <h2 id="draft-list-title" className="text-2xl">
-        Unpublished artworks
-      </h2>
-      {state.status === "ready" && (
-        <Link href="/admin/artworks/new" className="text-link mt-5 inline-block">
-          Document new artwork
-        </Link>
-      )}
-      <p className="mt-3 text-sm text-muted">
-        {auth.session.cluster === "devnet" ? "Devnet" : "Localnet"} test environment ·
-        Administrative records
-      </p>
-      {state.status === "loading" && (
-        <p role="status" className="mt-5">
-          Loading artwork drafts…
-        </p>
-      )}
-      {state.status === "locked" && (
-        <p role="status" className="mt-5">
-          Artwork draft access has not been confirmed.
-        </p>
-      )}
-      {state.error && (
-        <p role="alert" className="mt-5">
-          {state.error}
-        </p>
-      )}
-      <button
-        type="button"
-        className="text-link mt-5"
-        disabled={!list || busy}
-        onClick={() => void list?.refresh()}
-      >
-        {state.status === "unavailable" || state.status === "denied"
-          ? "Try loading drafts again"
-          : "Refresh drafts"}
-      </button>
-      {page && (
+    <>
+      <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
+        <div className="flex flex-col gap-2.5">
+          <h1 className="h1 h1-ops">Artworks</h1>
+          <p className="p text-lg">
+            Every artwork record before publication, from first draft onward.
+          </p>
+        </div>
+        {state.status !== "denied" && auth.session && (
+          <Link className="btn btn-p cut-s" href="/admin/artworks/new">
+            <Icon name="plus" />
+            New artwork
+          </Link>
+        )}
+      </div>
+
+      {!auth.session ? (
+        <div className="panel cut panel-empty mt-8">
+          <p className="empty-title">Sign in to open the workspace</p>
+          <p className="p max-w-[38rem]">
+            The artwork workspace needs a signed-in administrator wallet.
+          </p>
+          <Link className="btn btn-p cut-s mt-2" href={signInHref("/admin/artworks")}>
+            Sign in
+          </Link>
+        </div>
+      ) : busy ? (
+        <div className="tblbox cut mt-8 flex flex-col gap-3.5 p-5" aria-busy="true">
+          <p role="status" className="sr-only">
+            Loading artwork records
+          </p>
+          {[1, 2, 3, 4, 5, 6].map((key) => (
+            <div key={key} aria-hidden="true" className="flex gap-4">
+              <div className="skel h-[22px] flex-[3]" />
+              <div className="skel h-[22px] flex-[2]" />
+              <div className="skel h-[22px] flex-1" />
+              <div className="skel h-[22px] flex-[2]" />
+              <div className="skel h-[22px] flex-1" />
+            </div>
+          ))}
+        </div>
+      ) : state.status === "denied" ? (
+        <div className="panel cut panel-empty mt-8">
+          <Badge tone="err" icon="lock">
+            Permission denied
+          </Badge>
+          <p className="empty-title">This workspace needs an administrator role</p>
+          <p className="p max-w-[38rem]">
+            {state.error ??
+              "Your wallet can verify and inspect artworks, but can't open drafts."}{" "}
+            Use the verifier lookup to open a specific work.
+          </p>
+          <Link className="btn btn-p cut-s mt-2" href="/admin">
+            Go to verifier lookup
+          </Link>
+        </div>
+      ) : state.status === "unavailable" ? (
+        <div className="panel cut panel-empty mt-8" role="alert">
+          <Badge tone="err" marker={false}>
+            Service unavailable
+          </Badge>
+          <p className="empty-title">Artwork records couldn&apos;t load</p>
+          <p className="p max-w-[38rem]">
+            Katha&apos;s records service didn&apos;t respond. No changes were lost. Try
+            again in a moment.
+          </p>
+          <button
+            type="button"
+            className="btn btn-p cut-s mt-2"
+            onClick={() => void list?.refresh()}
+          >
+            Try again
+          </button>
+        </div>
+      ) : page && page.items.length === 0 ? (
+        <div className="panel cut panel-empty mt-8">
+          <p className="empty-title">
+            {page.pagination.offset ? "No artworks on this page" : "No artworks yet"}
+          </p>
+          <p className="p max-w-[38rem]">
+            Create the first record once its artist profile exists. Katha issues the
+            permanent ID when you save it.
+          </p>
+          <Link className="btn btn-p cut-s mt-2" href="/admin/artworks/new">
+            New artwork
+          </Link>
+        </div>
+      ) : page ? (
         <>
-          <p role="status" className="mt-6">
-            {page.items.length
-              ? `Showing ${page.pagination.offset + 1}–${page.pagination.offset + page.items.length} unpublished artworks.`
-              : "No unpublished artworks on this page. Drafts appear here after artwork documentation is created."}
+          <div
+            className="tblbox cut mt-8"
+            role="region"
+            aria-label="Artwork records, scrolls sideways on small screens"
+            tabIndex={0}
+          >
+            <table className="tbl tbl-wide">
+              <caption className="sr-only">Artwork records</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Title</th>
+                  <th scope="col">Katha ID</th>
+                  <th scope="col">Tradition</th>
+                  <th scope="col">Year</th>
+                  <th scope="col">Artist</th>
+                  <th scope="col">Artist profile</th>
+                  <th scope="col">Workflow</th>
+                  <th scope="col">Updated</th>
+                  <th scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {page.items.map((item) => (
+                  <tr key={item.kathaId}>
+                    <td className="max-w-[260px]">
+                      <Link
+                        href={`/admin/artworks/${item.kathaId}`}
+                        className="font-semibold text-madder no-underline hover:underline wrap-anywhere"
+                      >
+                        {item.title}
+                      </Link>
+                    </td>
+                    <td className="id whitespace-nowrap">{item.kathaId}</td>
+                    <td>{artworkCategoryLabels[item.category]}</td>
+                    <td>{item.creationYear}</td>
+                    <td>{item.artist.displayName}</td>
+                    <td>
+                      <Badge
+                        tone={
+                          item.artist.verificationStatus === "VERIFIED" ? "ok" : "warn"
+                        }
+                        marker={false}
+                      >
+                        {item.artist.verificationStatus === "VERIFIED"
+                          ? "Verified"
+                          : "Not verified"}
+                      </Badge>
+                    </td>
+                    <td>
+                      <Badge
+                        tone={item.workflowStatus === "DOCUMENTING" ? "neu" : "info"}
+                      >
+                        {item.workflowStatus === "DOCUMENTING"
+                          ? "Documenting"
+                          : "Lifecycle started"}
+                      </Badge>
+                    </td>
+                    <td className="mut whitespace-nowrap">
+                      {localDateTime(item.updatedAt)}
+                    </td>
+                    <td>
+                      <Link
+                        className="btn btn-o btn-sm"
+                        href={`/admin/artworks/${item.kathaId}`}
+                        aria-label={`Open ${item.title}`}
+                      >
+                        Open
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="xs mut mt-3 mb-0">
+            &ldquo;Lifecycle started&rdquo; means stored documents or workflow records
+            exist; it doesn&apos;t confirm a blockchain transaction.
+            &ldquo;Documenting&rdquo; doesn&apos;t prove a work is unregistered on
+            chain.
           </p>
-          <p className="mt-3 max-w-reading text-sm text-muted">
-            “Lifecycle started” means stored documents or workflow records exist. It
-            does not confirm a successful blockchain transaction. “Documenting” does not
-            prove an artwork is unregistered on-chain.
-          </p>
-          <ul className="mt-6 grid gap-6 lg:grid-cols-2">
-            {page.items.map((item) => (
-              <li key={item.kathaId} className="min-w-0 border-t border-line py-6">
-                <p className="text-sm font-mono break-all">{item.kathaId}</p>
-                <h3 className="mt-3 text-2xl break-words">
-                  <Link href={`/admin/artworks/${item.kathaId}`} className="text-link">
-                    {item.title}
-                  </Link>
-                </h3>
-                <p className="mt-3">
-                  {item.artist.displayName} ·{" "}
-                  {item.category === "PAUBHA"
-                    ? "Paubha"
-                    : item.category === "THANGKA"
-                      ? "Thangka"
-                      : "Mandala"}{" "}
-                  · {item.creationYear}
-                </p>
-                <dl className="artwork-facts mt-4">
-                  <div>
-                    <dt>Artist profile</dt>
-                    <dd>
-                      {item.artist.verificationStatus === "VERIFIED"
-                        ? "Verified artist"
-                        : "Artist verification pending"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Artwork onboarding</dt>
-                    <dd>
-                      {item.workflowStatus === "DOCUMENTING"
-                        ? "Documenting"
-                        : "Lifecycle started"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Publication</dt>
-                    <dd>Unpublished</dd>
-                  </div>
-                  <div>
-                    <dt>Last documentation update</dt>
-                    <dd>{item.updatedAt}</dd>
-                  </div>
-                </dl>
-              </li>
-            ))}
-          </ul>
-          <nav aria-label="Artwork draft pages" className="mt-6 flex flex-wrap gap-6">
-            <button
-              type="button"
-              className="text-link"
-              disabled={busy || page.pagination.offset === 0}
-              onClick={() => void list?.previous()}
-            >
-              Previous draft page
-            </button>
-            <button
-              type="button"
-              className="text-link"
-              disabled={
-                busy ||
-                !page.pagination.hasMore ||
-                page.pagination.offset + page.pagination.limit > HTTP_LIMITS.offset
-              }
-              onClick={() => void list?.next()}
-            >
-              Next draft page
-            </button>
+          <nav
+            aria-label="Artwork draft pages"
+            className="mt-6 flex flex-wrap items-center justify-between gap-4"
+          >
+            <p className="sm mut m-0" role="status">
+              Showing {page.pagination.offset + 1}–
+              {page.pagination.offset + page.items.length}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-o btn-sm"
+                disabled={busy || page.pagination.offset === 0}
+                onClick={() => void list?.previous()}
+              >
+                Previous
+              </button>
+              <span className="pg cut-s" aria-current="page">
+                {page.pagination.offset / page.pagination.limit + 1}
+              </span>
+              <button
+                type="button"
+                className="btn btn-o btn-sm"
+                disabled={
+                  busy ||
+                  !page.pagination.hasMore ||
+                  page.pagination.offset + page.pagination.limit > HTTP_LIMITS.offset
+                }
+                onClick={() => void list?.next()}
+              >
+                Next
+              </button>
+            </div>
           </nav>
         </>
-      )}
-    </section>
+      ) : null}
+    </>
   );
 }

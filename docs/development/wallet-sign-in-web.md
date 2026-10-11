@@ -1,6 +1,6 @@
 # Wallet sign-in and session handling
 
-Connect a compatible Wallet Standard wallet, then choose **Sign in to Katha** in
+Connect a compatible Wallet Standard wallet, then choose **Sign in with wallet** in
 the header panel. Connection shares an address; sign-in proves control of that
 address by signing a message. Neither action approves a transaction or grants an
 administrative role. The panel displays the configured Localnet/Devnet test network.

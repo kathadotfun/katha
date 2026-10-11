@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useWalletConnection, useWalletSession } from "./wallet-provider";
 import { signedOutSnapshot } from "../lib/wallet-session";
 import { disconnectedWalletSnapshot } from "../lib/wallet-connection";
@@ -9,11 +9,20 @@ import {
   lockedAccountSnapshot,
   type CollectorAccount,
 } from "../lib/collector-account";
+import { localDateTime, localTime, shortAddress } from "../lib/format";
+import { WalletChooser } from "./wallet-chooser";
+import { Badge, Notice } from "./ui/status";
+import { CopyButton } from "./ui/copy-button";
+
 const emptySubscribe = () => () => {};
 const serverAuth = () => signedOutSnapshot;
 const serverWallet = () => disconnectedWalletSnapshot;
 const serverAccount = () => lockedAccountSnapshot;
-export function CollectorAccountPanel() {
+
+type Ended =
+  { kind: "expired"; at: string } | { kind: "changed"; from: string; to: string };
+
+export function CollectorAccountPanel({ next }: { next?: string | null }) {
   const session = useWalletSession();
   const connection = useWalletConnection();
   const auth = useSyncExternalStore(
@@ -27,6 +36,11 @@ export function CollectorAccountPanel() {
     serverWallet,
   );
   const [account, setAccount] = useState<CollectorAccount | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ended, setEnded] = useState<Ended | null>(null);
+  const previous = useRef<{ address: string; expiresAt: string } | null>(null);
+  const userSignedOut = useRef(false);
   useEffect(() => {
     if (!session) return;
     const controller = createCollectorAccount(session);
@@ -42,7 +56,30 @@ export function CollectorAccountPanel() {
     serverAccount,
   );
   const connected = wallet.connected;
-  const cluster = connection?.cluster;
+  // The session controller clears authority itself; this only explains why.
+  useEffect(() => {
+    if (auth.session) {
+      previous.current = {
+        address: auth.session.walletAddress,
+        expiresAt: auth.session.expiresAt,
+      };
+      userSignedOut.current = false;
+      setEnded(null);
+      return;
+    }
+    const before = previous.current;
+    if (!before) return;
+    previous.current = null;
+    if (userSignedOut.current) {
+      userSignedOut.current = false;
+      return;
+    }
+    if (connected && connected.address !== before.address)
+      setEnded({ kind: "changed", from: before.address, to: connected.address });
+    else if (Date.parse(before.expiresAt) <= Date.now())
+      setEnded({ kind: "expired", at: before.expiresAt });
+  }, [auth.session, connected]);
+
   // Hide private results immediately even before an effect reacts to an identity change.
   const result =
     auth.session &&
@@ -53,186 +90,328 @@ export function CollectorAccountPanel() {
     state.account.session.expiresAt === auth.session.expiresAt
       ? state.account
       : null;
+  const busy = ["pending", "connecting", "disconnecting", "reconnecting"].includes(
+    wallet.status,
+  );
+  const network =
+    connection?.cluster === "devnet" ? "Solana Devnet" : "a local Solana network";
+  const signedIn = auth.status === "signed-in" && auth.session && connected;
+  const waiting = auth.status === "signing-in";
+  function signOut() {
+    userSignedOut.current = true;
+    session?.signOut();
+  }
+  async function disconnect() {
+    setError(null);
+    userSignedOut.current = true;
+    try {
+      await connection?.disconnect();
+    } catch {
+      setError("The wallet request wasn't completed. Check your wallet and try again.");
+    }
+  }
+
   return (
-    <div className="mt-12 grid gap-12 lg:grid-cols-2">
-      <section
-        aria-labelledby="account-wallet-title"
-        className="min-w-0 border-t border-line pt-6"
-      >
-        <h2 id="account-wallet-title" className="text-2xl">
-          Wallet &amp; session
-        </h2>
-        <p className="mt-3 text-sm text-muted">
-          {cluster
-            ? cluster === "devnet"
-              ? "Devnet · Test environment"
-              : "Localnet · Test environment"
-            : "Loading wallet connection…"}
-        </p>
-        {connected ? (
-          <>
-            <dl className="mt-6 space-y-5">
-              <div>
-                <dt className="eyebrow text-muted">Wallet</dt>
-                <dd className="mt-1">{connected.walletName}</dd>
+    <>
+      {ended?.kind === "expired" && (
+        <Notice tone="warn" icon="clock" role="alert" className="mt-8">
+          <p>
+            <strong>Your session expired at {localTime(ended.at)}.</strong> Private
+            details like delivery requests were hidden. Sign in again to see them.
+          </p>
+        </Notice>
+      )}
+      {ended?.kind === "changed" && (
+        <Notice tone="info" role="alert" className="mt-8">
+          <p>
+            <strong>Your wallet switched accounts.</strong> You&apos;re signed out of{" "}
+            {shortAddress(ended.from)} and its private details were cleared. Sign in to
+            use {shortAddress(ended.to)}.
+          </p>
+        </Notice>
+      )}
+      {auth.error && (
+        <Notice tone="err" className="mt-8">
+          <p>{auth.error}</p>
+        </Notice>
+      )}
+      {error && (
+        <Notice tone="err" className="mt-8">
+          <p>{error}</p>
+        </Notice>
+      )}
+      <div className="mt-10 flex flex-wrap items-start gap-8">
+        <section
+          aria-labelledby="account-wallet-title"
+          className="panel cut min-w-0"
+          style={{ flex: "999 1 560px", padding: "clamp(20px, 3vw, 40px)" }}
+        >
+          {signedIn ? (
+            <div className="flex flex-col gap-[18px]">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+                <h2 id="account-wallet-title" className="h3">
+                  Signed in
+                </h2>
+                <Badge tone="ok" role="status">
+                  Connected and signed in
+                </Badge>
               </div>
-              <div>
-                <dt className="eyebrow text-muted">Public address</dt>
-                <dd className="mt-2 break-all font-mono text-sm">
-                  {connected.address}
-                </dd>
-              </div>
-              <div>
-                <dt className="eyebrow text-muted">Katha session</dt>
-                <dd className="mt-1">
-                  <span role="status">
-                    {auth.status === "signed-in"
-                      ? "Signed in"
-                      : auth.status === "signing-in"
-                        ? "Waiting for wallet approval…"
-                        : "Not signed in"}
-                  </span>
-                </dd>
-              </div>
-              {auth.session && (
-                <div>
-                  <dt className="eyebrow text-muted">Session expires</dt>
-                  <dd className="mt-1 break-all">
-                    <time dateTime={auth.session.expiresAt}>
-                      {auth.session.expiresAt}
+              <dl className="m-0">
+                <div className="kv">
+                  <dt>Wallet</dt>
+                  <dd>{connected.walletName}</dd>
+                </div>
+                <div className="kv">
+                  <dt>Public address</dt>
+                  <dd className="id">
+                    {connected.address}
+                    <CopyButton value={connected.address} label="Copy public address" />
+                  </dd>
+                </div>
+                <div className="kv">
+                  <dt>Network</dt>
+                  <dd>
+                    {connection?.cluster === "devnet" ? "Solana Devnet" : "Localnet"}
+                  </dd>
+                </div>
+                <div className="kv">
+                  <dt>Wallet connection</dt>
+                  <dd>Connected</dd>
+                </div>
+                <div className="kv">
+                  <dt>Katha sign-in</dt>
+                  <dd>
+                    Signed in. Session expires{" "}
+                    <time dateTime={auth.session!.expiresAt}>
+                      {localDateTime(auth.session!.expiresAt)}
                     </time>
                   </dd>
                 </div>
-              )}
-            </dl>
-            <div className="mt-6 flex flex-wrap gap-4">
-              {auth.status === "signed-out" && connected.supportsMessageSigning && (
+                <div className="kv">
+                  <dt>Collection</dt>
+                  <dd aria-busy={state.status === "loading"}>
+                    {result ? (
+                      <>
+                        {result.indexedArtworkCount}{" "}
+                        {result.indexedArtworkCount === 1 ? "artwork" : "artworks"}{" "}
+                        indexed, as of{" "}
+                        <time dateTime={result.evaluatedAt}>
+                          {localTime(result.evaluatedAt)}
+                        </time>
+                      </>
+                    ) : state.status === "unavailable" ? (
+                      <span role="alert">
+                        Your collection count couldn&apos;t load.{" "}
+                        <button
+                          type="button"
+                          className="lnk"
+                          onClick={() => void account?.refresh()}
+                        >
+                          Try again
+                        </button>
+                      </span>
+                    ) : (
+                      <span role="status">Loading your collection count…</span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+              <p className="xs mut m-0">
+                The count is Katha&apos;s indexed observation of published works, not a
+                live wallet balance. Token balances aren&apos;t shown here.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
+                {next ? (
+                  <Link className="btn btn-p cut-s" href={next}>
+                    Continue where you left off
+                  </Link>
+                ) : (
+                  <Link className="btn btn-p cut-s" href="/collection">
+                    View my collection
+                  </Link>
+                )}
                 <button
                   type="button"
-                  className="button-primary"
-                  disabled={!session}
-                  onClick={() => void session?.signIn()}
+                  className="btn btn-o"
+                  disabled={busy}
+                  onClick={() => setChoosing(true)}
                 >
-                  Sign in to Katha
+                  Change account
                 </button>
-              )}
-              {auth.status !== "signed-out" && (
-                <button
-                  type="button"
-                  className="site-nav-link"
-                  onClick={() => session?.signOut()}
-                >
-                  {auth.status === "signing-in" ? "Cancel sign-in" : "Sign out"}
+                <button type="button" className="lnk ml-2" onClick={signOut}>
+                  Sign out
                 </button>
-              )}
+              </div>
             </div>
-            {!connected.supportsMessageSigning && (
-              <p className="mt-4 text-muted">
-                This wallet account cannot sign login messages. Choose a compatible
-                account in the header.
-              </p>
-            )}
-          </>
-        ) : (
-          <p role="status" className="mt-6">
-            Connect your Solana wallet using “Connect wallet” in the header to begin.
-          </p>
-        )}
-        <p className="mt-5 text-sm text-muted">
-          Connecting shares your public address. Signing in approves a login message,
-          not an artwork purchase.
-        </p>
-        {auth.error && (
-          <p role="alert" className="mt-4">
-            {auth.error}
-          </p>
-        )}
-      </section>
-      <section
-        aria-labelledby="account-summary-title"
-        aria-busy={state.status === "loading"}
-        className="min-w-0 border-t border-line pt-6"
-      >
-        <h2 id="account-summary-title" className="text-2xl">
-          Your collecting overview
-        </h2>
-        {!auth.session ? (
-          <p role="status" className="mt-6">
-            Sign in to see your published indexed artwork count.
-          </p>
-        ) : (
-          <>
-            {state.status === "loading" && (
-              <div role="status" className="mt-6">
-                <div aria-hidden="true" className="h-12 w-24 bg-line" />
-                <p className="mt-3">Loading your account…</p>
-              </div>
-            )}
-            {state.status === "unavailable" && (
-              <p role="alert" className="mt-6">
-                Your account could not be loaded. Check the API connection and try
-                again.
-              </p>
-            )}
-            {result && (
-              <div className="mt-6">
-                <p className="text-5xl font-display">{result.indexedArtworkCount}</p>
-                <p className="mt-2">Published indexed artworks</p>
-                <p className="mt-3 text-sm text-muted">
-                  {result.indexedArtworkCount === 0
-                    ? "No published artworks are indexed for this wallet yet."
-                    : "This count reflects the indexer’s published ownership records."}
-                </p>
-                <p className="mt-3 break-all text-sm text-muted">
-                  Evaluated{" "}
-                  <time dateTime={result.evaluatedAt}>{result.evaluatedAt}</time>
-                </p>
-              </div>
-            )}
-            <button
-              type="button"
-              className="site-nav-link mt-5"
-              disabled={!account || state.status === "loading"}
-              onClick={() => void account?.refresh()}
-            >
-              {state.status === "unavailable" ? "Try again" : "Refresh account"}
-            </button>
-          </>
-        )}
-        <p className="mt-5 text-sm text-muted">
-          Indexing can lag behind Core ownership. This count is an observation, not a
-          live wallet balance.
-        </p>
-        <Link
-          href="/collection"
-          className="text-link mt-5 inline-flex min-h-11 items-center"
+          ) : (
+            <ol className="m-0 list-none p-0">
+              <li className="acct-step">
+                <span
+                  className={`acct-num cut-s ${connected ? "n-done" : "n-now"}`}
+                  aria-hidden="true"
+                >
+                  1
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
+                    <h2 id="account-wallet-title" className="h3">
+                      Connect your wallet
+                    </h2>
+                    <Badge tone={connected ? "ok" : "neu"} marker={false} role="status">
+                      {connected
+                        ? "Connected"
+                        : busy
+                          ? "Waiting for wallet"
+                          : "Not connected"}
+                    </Badge>
+                  </div>
+                  {connected ? (
+                    <>
+                      <p className="p">
+                        {connected.walletName},{" "}
+                        <span className="id">{shortAddress(connected.address)}</span>,
+                        on {network}.
+                      </p>
+                      {!connected.supportsV0 && !connected.supportsV1 && (
+                        <p className="p sm">
+                          This account doesn&apos;t support versioned Solana
+                          transactions, so it can&apos;t approve purchases or listings.
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-x-5 gap-y-3">
+                        <button
+                          type="button"
+                          className="lnk"
+                          disabled={busy}
+                          onClick={() => setChoosing(true)}
+                        >
+                          Change account
+                        </button>
+                        <button
+                          type="button"
+                          className="lnk"
+                          disabled={busy}
+                          onClick={() => void disconnect()}
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="p">
+                        Connecting shares your public address with Katha. It can&apos;t
+                        move anything from your wallet.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-p cut-s mt-1.5 self-start"
+                        disabled={!connection}
+                        onClick={() => setChoosing(true)}
+                      >
+                        Connect wallet
+                      </button>
+                    </>
+                  )}
+                </div>
+              </li>
+              <li className="acct-step">
+                <span
+                  className={`acct-num cut-s${connected ? " n-now" : ""}`}
+                  aria-hidden="true"
+                >
+                  2
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
+                    <h2 className="h3">Sign in to Katha</h2>
+                    <Badge
+                      tone={!connected ? "neu" : waiting ? "info" : "warn"}
+                      marker={false}
+                    >
+                      {!connected
+                        ? "After connecting"
+                        : waiting
+                          ? "Waiting for approval"
+                          : "Not signed in"}
+                    </Badge>
+                  </div>
+                  <p className="p">
+                    {!connected
+                      ? "After connecting, your wallet asks you to sign a short message. Signing is free and moves no funds."
+                      : waiting
+                        ? `Approve the sign-in message in ${connected.walletName}. It only proves this address is yours.`
+                        : "Your wallet will ask you to sign a short message. Signing is free and moves no funds."}
+                  </p>
+                  {connected && !connected.supportsMessageSigning && (
+                    <p className="p sm">
+                      This wallet account can&apos;t sign messages, so it can&apos;t
+                      sign in. Choose another account or wallet.
+                    </p>
+                  )}
+                  {connected && connected.supportsMessageSigning && !waiting && (
+                    <button
+                      type="button"
+                      className="btn btn-p cut-s mt-1.5 self-start"
+                      disabled={!session || busy}
+                      onClick={() => void session?.signIn()}
+                    >
+                      {ended?.kind === "changed"
+                        ? `Sign in as ${shortAddress(connected.address)}`
+                        : "Sign in with wallet"}
+                    </button>
+                  )}
+                  {waiting && connected && (
+                    <div
+                      role="status"
+                      className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-3"
+                    >
+                      <Badge tone="info" marker={false} className="wait">
+                        Waiting for {connected.walletName}
+                      </Badge>
+                      <button type="button" className="lnk" onClick={signOut}>
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </li>
+            </ol>
+          )}
+        </section>
+        <aside
+          className="flex min-w-0 flex-col gap-5 pt-2"
+          style={{ flex: "1 1 300px" }}
         >
-          View my collection
-        </Link>
-        <Link
-          href="/explore"
-          className="text-link mt-5 inline-flex min-h-11 items-center"
-        >
-          Explore Nepali art
-        </Link>
-      </section>
-      <section
-        aria-labelledby="account-payment-title"
-        className="border-t border-line pt-6 lg:col-span-2"
-      >
-        <p className="eyebrow text-brand">Development simulation</p>
-        <h2 id="account-payment-title" className="mt-3 text-2xl">
-          Test-token payments
-        </h2>
-        <p className="mt-4 max-w-reading text-muted">
-          Katha’s localnet and Devnet marketplace uses a configured six-decimal test
-          token to demonstrate purchases and resale. It has no real-money value.
-        </p>
-        <p className="mt-3 max-w-reading text-sm text-muted">
-          Token balances are not loaded on this page. Test payments do not represent
-          production USDC or fiat settlement.
-        </p>
-      </section>
-    </div>
+          <div className="flex flex-col gap-1.5">
+            <h2 className="h3 h3-aside">Connecting</h2>
+            <p className="p sm">
+              Shares your public address so Katha can show which artworks you own.
+              It&apos;s read-only.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h2 className="h3 h3-aside">Signing in</h2>
+            <p className="p sm">
+              Proves the address is yours by signing a message. It&apos;s free, moves no
+              funds, and unlocks private details like delivery requests.
+            </p>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h2 className="h3 h3-aside">Signing out</h2>
+            <p className="p sm">
+              Private details disappear from this device at once. They also disappear if
+              your session expires or your wallet switches accounts.
+            </p>
+          </div>
+        </aside>
+      </div>
+      <WalletChooser
+        open={choosing}
+        onClose={() => setChoosing(false)}
+        connection={connection}
+        wallet={wallet}
+      />
+    </>
   );
 }

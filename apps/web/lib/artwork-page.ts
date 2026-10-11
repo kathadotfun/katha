@@ -1,6 +1,7 @@
 import {
   kathaIdSchema,
   type ArtworkCategory,
+  type ArtworkListingResponse,
   type PublicArtworkDetail,
 } from "@katha/shared";
 import { PublicApiError, publicApiOrigin } from "./public-api.ts";
@@ -108,4 +109,36 @@ export function artworkOriginLabel(origin: PublicArtworkDetail["origin"]): strin
   ]
     .filter((part) => part && part.trim())
     .join(", ");
+}
+
+export type PublicListingState =
+  { kind: "UNAVAILABLE" } | { kind: "READY"; listing: ArtworkListingResponse };
+
+// A listing observation for another asset must never present this work as for sale.
+export async function loadPublicListing(
+  artwork: PublicArtworkDetail,
+  read: (id: string) => Promise<ArtworkListingResponse>,
+): Promise<PublicListingState> {
+  try {
+    const listing = await read(artwork.kathaId);
+    if (
+      listing.kathaId !== artwork.kathaId ||
+      listing.asset !== artwork.chain.coreAssetAddress ||
+      listing.cluster !== artwork.chain.cluster.toLowerCase()
+    )
+      return { kind: "UNAVAILABLE" };
+    return { kind: "READY", listing };
+  } catch {
+    return { kind: "UNAVAILABLE" };
+  }
+}
+
+export function activeListing(state: PublicListingState | undefined) {
+  if (state?.kind !== "READY") return null;
+  const { listing, chainTime } = state.listing;
+  return listing?.status === "ACTIVE" &&
+    listing.active &&
+    BigInt(listing.expiresAt) > BigInt(chainTime)
+    ? listing
+    : null;
 }

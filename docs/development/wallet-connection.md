@@ -1,7 +1,8 @@
 # Wallet Standard connection
 
-The header's **Connect wallet** control discovers wallets through the Kit Wallet
-Standard plugin. Connection is an explicit user action. It shares a public account
+The account page's **Connect wallet** button opens a wallet chooser that discovers
+wallets through the Kit Wallet Standard plugin. The header links to the account
+page as "Sign in" or the short connected address. Connection is an explicit user action. It shares a public account
 address; it does not authenticate a session, grant an admin role, sign a message,
 prepare a transaction or send funds. Public browsing continues without a wallet.
 
@@ -66,19 +67,22 @@ itself does not contact an RPC or require a funded wallet. A wallet needs to adv
 `solana:localnet` to appear in localnet mode; otherwise select the explicitly configured
 Devnet demonstration. This changes wallet discovery, not the API or program deployment.
 
-1. Open Connect wallet. A loading state waits for discovery; an empty list explicitly
-   says no compatible wallet was found. Katha does not install or auto-open wallets.
+1. Open `/account` and choose Connect wallet. A loading state waits for discovery;
+   an empty list explicitly says no compatible wallet was found. Katha does not
+   install or auto-open wallets.
 2. Choose a discovered wallet and approve or reject its connection request in your
    wallet. Pending controls are disabled. Wallet-specific errors are replaced with
    a safe retry message; their contents are never printed or displayed.
-3. Once connected, inspect the wallet name and full public address. If the wallet
-   authorizes multiple compatible accounts, choose one through the labelled select.
-4. Disconnect through the same panel. A revoked account or unregistered wallet also
-   removes its displayed identity. Refreshing requires a fresh explicit connection.
+3. Once connected, the account page shows the wallet name and short address. If the
+   wallet authorizes several compatible accounts, Change account lists them in the
+   chooser.
+4. Disconnect from the account page. A revoked account or unregistered wallet also
+   removes its displayed identity. A full page load requires a fresh explicit
+   connection, so internal links navigate client-side.
 
-The panel is an inline disclosure with an expanded-state button, labelled heading,
-status/alert feedback and native buttons/select controls. It does not hide browsing
-behind a modal. Wallet addresses wrap at narrow widths. No signer, session token or
+The chooser is a native modal `dialog` with a labelled heading, a Close button,
+Escape support and alert feedback. It opens only on request; browsing never waits
+for it. Wallet addresses wrap at narrow widths. No signer, session token or
 private key is serialized, stored in browser storage, logged or included in Git.
 
 The boundary checks version support by set membership (`has(0)` / `has(1)`) rather
@@ -108,7 +112,7 @@ no-wallet state, rejected approval/retry, connection, account selection, disconn
 reconnection, wallet unregistration and refresh are tested at 320/768/1440 pixels.
 Connection alone makes no signing calls. Extended session tests explicitly sign
 synthetic messages and assert zero transaction-signing calls.
-Full-page accessibility scans include open unavailable and connected panels.
+Full-page accessibility scans cover the unavailable, connected and signed-in states.
 
 The browser fixture is test-only and uses public synthetic addresses. No real
 extension approval, chain transaction or private key is used. Message signatures

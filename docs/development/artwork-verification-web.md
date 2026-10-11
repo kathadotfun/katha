@@ -27,7 +27,7 @@ checks consistency of the reviewed bytes; the verifier performs authentication.
 Review the displayed identity and exact public metadata. The browser independently
 checks canonical bytes, SHA-256 and document identity. Confirm physical inspection
 and authorship review separately. Both confirmations and the matching digest are
-required before **Prepare and simulate verification**. Preparation retains the
+required before **Prepare verification transaction**. Preparation retains the
 manual authenticity confirmation and evidence digest in the private operation intent;
 it does not save raw evidence or create a condition report.
 
@@ -42,7 +42,7 @@ reload, with no automatic replacement or signing.
 The shared transaction controller binds the decoded Registry instruction to the
 reviewed evidence digest and permanent artwork PDA. It checks the verification PDA,
 config, signer, system program and exact account roles, then simulates and displays
-the fee, accounts and lifetime. **Approve in wallet and submit** is a separate action.
+the fee, accounts and lifetime. **Approve in wallet** is a separate action.
 See [transaction lifecycles](transaction-lifecycle-web.md). Solana's
 [simulation contract](https://solana.com/docs/rpc/http/simulatetransaction) permits
 unsigned simulation when signature verification is disabled; simulation does not

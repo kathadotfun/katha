@@ -1,21 +1,30 @@
 import type { Metadata } from "next";
 import { CollectorAccountPanel } from "../../components/collector-account";
+import { safeReturnPath } from "../../lib/return-path";
 // Read public wallet network/origin configuration at request time.
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "My account — Katha",
+  title: "Account — Katha",
   robots: { index: false, follow: false },
 };
-export default function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string | string[] }>;
+}) {
+  const next = safeReturnPath((await searchParams).next);
   return (
-    <div className="page-container py-16 sm:py-24">
-      <p className="eyebrow text-brand">Your Katha account</p>
-      <h1 className="mt-4 text-section">A place for your collecting journey.</h1>
-      <p className="mt-5 max-w-reading text-lead text-muted">
-        Collect Nepali cultural art as Real World Assets, with the artist’s story and
-        authorship preserved.
-      </p>
-      <CollectorAccountPanel />
+    <div className="app-main">
+      <div className="wrap">
+        <div className="flex flex-col gap-3.5">
+          <h1 className="h1">Account</h1>
+          <p className="lead">
+            Your wallet connection and your Katha sign-in. They&apos;re separate steps,
+            so you always know what you&apos;ve shared.
+          </p>
+        </div>
+        <CollectorAccountPanel next={next} />
+      </div>
     </div>
   );
 }
