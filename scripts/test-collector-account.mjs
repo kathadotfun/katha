@@ -193,7 +193,15 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         });
       });
       // Header links stay client-side, so the in-memory wallet session survives.
+      // The sticky header hides while reading; scrolling up brings it back, as for a reader.
+      async function revealHeader() {
+        const header = page.locator(".hdr");
+        if ((await header.getAttribute("data-hidden")) !== "true") return;
+        await page.mouse.wheel(0, -200);
+        await expect(header).not.toHaveAttribute("data-hidden", "true");
+      }
       async function openAccount() {
+        await revealHeader();
         const menu = page.locator(".menubtn");
         if (await menu.isVisible()) {
           await menu.click();

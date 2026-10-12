@@ -4,6 +4,7 @@ import { WalletProvider } from "../components/wallet-provider";
 import { walletClusterSchema } from "@katha/shared";
 import { SiteHeader } from "../components/site-header";
 import { SiteFooter } from "../components/site-footer";
+import { BackToTop } from "../components/back-to-top";
 import type { Metadata } from "next";
 import { Eczar, Mukta } from "next/font/google";
 import { connection } from "next/server";
@@ -23,9 +24,9 @@ const mukta = Mukta({
 });
 
 export const metadata: Metadata = {
-  title: "Katha — Nepali Art & Real World Assets",
+  title: "Katha — Nepali Art as Real-World Assets",
   description:
-    "Nepali cultural art as RWAs: physical Mandala, Paubha and Thangka paintings connected to verifiable records of their artists, owners and history.",
+    "Tokenizing Nepali art: physical Mandala, Paubha and Thangka paintings backed 1:1 by onchain assets on Solana, with verified artists, custody and history.",
 };
 
 export default async function RootLayout({
@@ -62,6 +63,7 @@ export default async function RootLayout({
           {children}
         </main>
         <SiteFooter cluster={cluster} />
+        <BackToTop />
       </body>
     </html>
   );

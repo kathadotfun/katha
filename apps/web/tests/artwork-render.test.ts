@@ -773,14 +773,20 @@ function home(featured: unknown, cluster = "devnet") {
   );
 }
 
-test("homepage presents cultural purpose, real photographs, attribution and permanent routes", () => {
+test("homepage presents the RWA backing, real photographs, attribution and permanent routes", () => {
   const html = home({ kind: "READY", items: [summary] });
   for (const content of [
-    "Nepal's cultural art.",
+    "Tokenizing Nepali art as",
     "RWAs on Solana.",
-    "Preserving Nepali culture on chain",
-    "An RWA, or real-world asset, is a physical object connected to a verifiable digital record",
+    "Nepali art is valuable but illiquid",
+    "Katha turns each verified painting into a tradeable onchain asset",
+    "One painting. One onchain asset.",
+    "Metaplex Core asset",
+    "Collected like graded cards.",
+    "Delivery of the painting on request",
     'id="purpose"',
+    'id="rwa"',
+    'href="#rwa"',
     'id="traditions"',
     'id="collecting"',
     'href="/explore?category=MANDALA"',

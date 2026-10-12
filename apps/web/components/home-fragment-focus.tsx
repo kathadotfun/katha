@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const targets = new Set(["#purpose", "#traditions", "#collecting"]);
+const targets = new Set(["#purpose", "#rwa", "#traditions", "#collecting"]);
 
 export function HomeFragmentFocus() {
   useEffect(() => {

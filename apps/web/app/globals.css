@@ -256,10 +256,50 @@
 
   /* Headers */
   .hdr {
-    position: relative;
-    z-index: 5;
+    position: sticky;
+    top: 0;
+    z-index: 20;
     background-color: var(--color-madder);
     color: var(--color-paper);
+    transition: transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  /* Focus inside keeps the header on screen so keyboard users never lose it. */
+  .hdr[data-hidden="true"]:not(:focus-within) {
+    transform: translateY(-100%);
+  }
+  .to-top {
+    position: fixed;
+    right: max(16px, env(safe-area-inset-right));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    z-index: 15;
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    background: var(--color-copper);
+    color: var(--color-ink);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease,
+      visibility 0.2s;
+  }
+  .to-top:hover {
+    background: var(--color-copper-light);
+  }
+  /* The cut corners clip outer outlines, so the ring sits inside like .btn. */
+  .to-top:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: -6px;
+  }
+  .to-top[data-shown="false"] {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(8px);
   }
   .hdr-ops {
     background-color: var(--color-ink);
@@ -2016,6 +2056,164 @@
     font-weight: 500;
     line-height: 1;
   }
+  .rwa-eyebrow {
+    align-self: flex-start;
+    margin: 0;
+    padding: 6px 12px;
+    border: 1px solid rgba(214, 166, 113, 0.55);
+    color: var(--color-copper-light);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .rwa-specs {
+    display: grid;
+    max-width: 760px;
+    grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+    gap: 20px 28px;
+    margin: clamp(48px, 5vw, 64px) 0 0;
+    padding-top: 24px;
+    border-top: 1px solid rgba(243, 232, 216, 0.18);
+  }
+  .rwa-specs dt {
+    color: var(--color-copper);
+    font-family: var(--font-serif);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1.1;
+  }
+  .rwa-specs dd {
+    margin: 6px 0 0;
+    color: var(--color-on-red);
+    font-size: 15px;
+    line-height: 1.45;
+  }
+  .rwa-chain {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+    margin: clamp(48px, 5vw, 72px) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rwa-chain li {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 24px 28px 24px 0;
+    border-top: 1.5px solid var(--color-copper);
+  }
+  /* Joint markers show the three records are linked, not independent claims. */
+  .rwa-chain li + li::before {
+    position: absolute;
+    top: -7px;
+    left: -7px;
+    width: 12px;
+    height: 12px;
+    background: var(--color-copper);
+    content: "";
+    transform: rotate(45deg);
+  }
+  .rwa-chain-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    color: var(--color-copper-light);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .rwa-own {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+    gap: 40px clamp(40px, 6vw, 96px);
+    align-items: start;
+    margin-top: clamp(40px, 5vw, 64px);
+  }
+  .rwa-checks {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 22px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 17px;
+    line-height: 1.45;
+  }
+  .rwa-checks li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .rwa-checks .ic {
+    flex: none;
+    margin-top: 3px;
+  }
+  .rwa-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .rwa-stack li {
+    padding: 8px 14px;
+    border: 1px solid rgba(243, 232, 216, 0.28);
+    color: var(--color-paper);
+    font-size: 15px;
+    font-weight: 500;
+  }
+  .rwa-cmp {
+    margin-top: clamp(40px, 5vw, 64px);
+    border-top: 1.5px solid var(--color-madder);
+  }
+  .rwa-cmp > div {
+    display: grid;
+    grid-template-columns: minmax(96px, 0.6fr) 1fr 1.2fr;
+    gap: 4px 24px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--rule-strong);
+    font-size: 17px;
+    line-height: 1.45;
+  }
+  .rwa-cmp [role="rowheader"] {
+    color: var(--color-madder);
+    font-family: var(--font-serif);
+    font-weight: 600;
+  }
+  .rwa-cmp > div > :nth-child(2) {
+    color: var(--color-text-3);
+  }
+  .rwa-cmp > div > :nth-child(3) {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  .rwa-cmp .rwa-cmp-head {
+    color: var(--color-text-3);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .rwa-cmp .rwa-cmp-head [role="columnheader"]:last-child {
+    color: var(--color-madder);
+  }
+  @media (max-width: 640px) {
+    .rwa-cmp > div {
+      grid-template-columns: 1fr 1fr;
+    }
+    .rwa-cmp [role="rowheader"],
+    .rwa-cmp .rwa-cmp-head [role="columnheader"]:first-child {
+      grid-column: 1 / -1;
+    }
+    .rwa-cmp .rwa-cmp-head [role="columnheader"]:first-child {
+      display: none;
+    }
+  }
   @media (max-width: 1200px) {
     .hero-art {
       right: -250px;
@@ -2115,6 +2313,8 @@
     animation: none;
   }
   .btn,
+  .hdr,
+  .to-top,
   details.read summary .chev {
     transition: none;
   }
@@ -2129,7 +2329,8 @@
   .tag,
   .pg,
   .seg a,
-  .seg button {
+  .seg button,
+  .to-top {
     border: 1px solid ButtonText;
   }
 }

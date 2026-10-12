@@ -6,9 +6,9 @@ import { serverApi, serverApiOrigin } from "../lib/server-api";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Katha — Nepal's cultural art as RWAs on Solana",
+  title: "Katha — Tokenizing Nepali art as RWAs on Solana",
   description:
-    "Preserving Nepali culture on chain: Mandala, Paubha and Thangka paintings linked to permanent records of their artists, owners and history.",
+    "Bringing illiquid Nepali art onchain: Mandala, Paubha and Thangka paintings backed 1:1 by Solana assets, verified, inspected and tradeable like graded collectibles.",
   alternates: { canonical: "https://katha.fun/" },
 };
 

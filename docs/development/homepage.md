@@ -1,9 +1,12 @@
-# Cultural homepage and featured artworks
+# RWA homepage and featured artworks
 
-The `/` route introduces Katha with **Nepal's cultural art. RWAs on Solana.**
-It connects visitors to the public catalogue, artist profiles and permanent artwork
-records, with cultural background and an explanation of authorship, manual
-verification, digital ownership and separate physical custody. The canonical URL
+The `/` route introduces Katha with **Tokenizing Nepali art as RWAs on Solana.**
+It positions each verified painting as a real-world asset: illiquid Nepali art made
+tradeable, backed 1:1 by one Metaplex Core asset. Short sections cover what backs
+the asset (painting, Katha ID and NFC tag, Core asset), what the holder gets, the
+onchain stack, a graded trading-card comparison, featured works, the three
+traditions and how collecting works. Copy stays short and avoids numeric fee or
+market claims; fee rates are development settings and appear only where quoted. The canonical URL
 is `https://katha.fun/`; the English title and description identify the Devnet scope.
 This route does not announce a hosted launch or offer a purchase workflow.
 
@@ -48,8 +51,9 @@ an individual work. Museum imagery is not copied or embedded.
 The page follows the [design system](design-system.md): madder red hero with the
 stepped Dhaka mark, paper sections, Eczar headings and a Devanagari कथा closing
 band. The hero drawing is decorative and stops animating under reduced motion. The
-X banner is not an artwork or homepage hero. `/#purpose`, `/#traditions` and
-`/#collecting` resolve to focusable headings; the header links to the last two.
+X banner is not an artwork or homepage hero. `/#purpose`, `/#rwa`, `/#traditions`
+and `/#collecting` resolve to focusable headings; the header links to `/#rwa` and
+`/#collecting`, and the footer also links to `/#traditions`.
 
 ## Verification
 

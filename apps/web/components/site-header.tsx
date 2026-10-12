@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { RefObject } from "react";
 import { signedOutSnapshot } from "../lib/wallet-session";
 import { useWalletSession } from "./wallet-provider";
 import { KathaMark } from "./ui/katha-mark";
@@ -50,6 +51,74 @@ function useRole(enabled: boolean): Role {
   return role && role.key === key ? role.value : null;
 }
 
+// The sticky header leaves the reader's way while they scroll down or pause, and
+// returns on any upward scroll. It always shows near the top, under the pointer
+// and (through CSS :focus-within) while it holds keyboard focus.
+const revealIdleMs = 1500;
+function useAutoHide(header: RefObject<HTMLElement | null>) {
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => {
+    const element = header.current;
+    if (!element) return;
+    let last = window.scrollY;
+    let idle: number | undefined;
+    let hovered = false;
+    const pastHeader = () => window.scrollY > element.offsetHeight;
+    const hideLater = () => {
+      window.clearTimeout(idle);
+      idle = window.setTimeout(() => {
+        if (!hovered && pastHeader()) setHidden(true);
+      }, revealIdleMs);
+    };
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (!pastHeader()) {
+        window.clearTimeout(idle);
+        setHidden(false);
+        last = y;
+        return;
+      }
+      if (Math.abs(y - last) < 4) return;
+      const up = y < last;
+      last = y;
+      setHidden(!up);
+      if (up) hideLater();
+      else window.clearTimeout(idle);
+    };
+    // Keyboard focus moving into the page must not sit under a revealed header.
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        !element.contains(target) &&
+        target.matches(":focus-visible") &&
+        pastHeader()
+      )
+        setHidden(true);
+    };
+    const onEnter = () => {
+      hovered = true;
+      window.clearTimeout(idle);
+    };
+    const onLeave = () => {
+      hovered = false;
+      if (pastHeader()) hideLater();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    document.addEventListener("focusin", onFocusIn);
+    element.addEventListener("pointerenter", onEnter);
+    element.addEventListener("pointerleave", onLeave);
+    return () => {
+      window.clearTimeout(idle);
+      window.removeEventListener("scroll", onScroll);
+      document.removeEventListener("focusin", onFocusIn);
+      element.removeEventListener("pointerenter", onEnter);
+      element.removeEventListener("pointerleave", onLeave);
+    };
+  }, [header]);
+  return hidden;
+}
+
 export function SiteHeader() {
   const pathname = usePathname() ?? "/";
   const variant = headerVariant(pathname);
@@ -60,6 +129,9 @@ export function SiteHeader() {
   // Navigating closes the in-flow menu.
   const open = menu.open && menu.path === pathname;
   const button = useRef<HTMLButtonElement>(null);
+  const header = useRef<HTMLElement>(null);
+  // An open menu stays on screen until the reader closes it or navigates.
+  const hidden = useAutoHide(header) && !open;
   const { address } = useSignedInAddress();
   const role = useRole(variant === "ops");
   const close = () => setMenu({ open: false, path: pathname });
@@ -92,7 +164,7 @@ export function SiteHeader() {
           ]
         : [
             { href: "/explore", label: "Artworks", current: artworksCurrent },
-            { href: "/#traditions", label: "Traditions", current: false },
+            { href: "/#rwa", label: "Why RWAs", current: false },
             { href: "/#collecting", label: "How collecting works", current: false },
           ];
   const mobileAccount =
@@ -110,6 +182,8 @@ export function SiteHeader() {
 
   return (
     <header
+      ref={header}
+      data-hidden={hidden}
       className={`hdr weave dk${variant === "ops" ? " hdr-ops" : ""}${variant === "home" ? " hdr-home" : ""}`}
       onKeyDown={(event) => {
         // An in-flow disclosure, not a modal: Escape returns focus to its button.

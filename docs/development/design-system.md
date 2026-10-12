@@ -6,8 +6,9 @@ Verification, condition, custody and provenance follow, each with a labelled
 source. English is the MVP interface language. Use the owned domain `katha.fun`
 and the official X handle `@kathadotfun` where relevant.
 
-The homepage headline reads “Nepal's cultural art. RWAs on Solana.” Supporting copy
-names Mandala, Paubha and Thangka. Preserve specific traditions and artists' own
+The homepage headline reads “Tokenizing Nepali art as RWAs on Solana.” Supporting copy
+frames verified paintings as tradeable real-world assets backed 1:1 by onchain
+assets, and names Mandala, Paubha and Thangka. Preserve specific traditions and artists' own
 explanations; don't treat them as interchangeable decoration. Madder red, warm
 paper, copper and the stepped Dhaka diamond establish the identity. Avoid generic
 crypto imagery, invented cultural motifs, invented statistics and any claim that

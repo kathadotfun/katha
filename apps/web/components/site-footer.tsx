@@ -42,7 +42,8 @@ export function SiteFooter({ cluster }: { cluster: "localnet" | "devnet" }) {
                 </span>
               </Link>
               <p className="m-0 text-base">
-                Mandala, Paubha and Thangka paintings, recorded on Solana.
+                Tokenizing Nepali art: physical paintings as real-world assets on
+                Solana.
               </p>
             </div>
             <nav aria-label="Footer" className="flex flex-wrap gap-x-18 gap-y-10">
@@ -52,6 +53,9 @@ export function SiteFooter({ cluster }: { cluster: "localnet" | "devnet" }) {
                 </p>
                 <Link className="flink" href="/explore">
                   Artworks
+                </Link>
+                <Link className="flink" href="/#rwa">
+                  Why RWAs
                 </Link>
                 <Link className="flink" href="/#traditions">
                   Traditions

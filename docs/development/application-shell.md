@@ -8,12 +8,12 @@ The [design system](design-system.md) describes colours, type and components.
 
 `SiteHeader` picks one of four variants from the path (`lib/site-routes.ts`):
 
-| Variant    | Paths                                            | Navigation                                       |
-| ---------- | ------------------------------------------------ | ------------------------------------------------ |
-| Home       | `/`                                              | Artworks, Traditions, How collecting works, chip |
-| Public     | Other public pages                               | Same as home                                     |
-| Collector  | `/account`, `/collection…`, `/art/{id}/purchase` | Artworks, My collection, account chip            |
-| Operations | `/admin…`                                        | Administration, Artworks, role and wallet chip   |
+| Variant    | Paths                                            | Navigation                                     |
+| ---------- | ------------------------------------------------ | ---------------------------------------------- |
+| Home       | `/`                                              | Artworks, Why RWAs, How collecting works, chip |
+| Public     | Other public pages                               | Same as home                                   |
+| Collector  | `/account`, `/collection…`, `/art/{id}/purchase` | Artworks, My collection, account chip          |
+| Operations | `/admin…`                                        | Administration, Artworks, role and wallet chip |
 
 The account chip reads "Sign in" or the short wallet address (accessible name
 "Account, signed in as …"). In operations it also shows the role reported by the
@@ -26,10 +26,10 @@ page load signs the wallet out. Pages that need a session link to
 left off". `lib/return-path.ts` only accepts same-site `/art`, `/collection` and
 `/admin` paths.
 
-On the home page, Traditions and How collecting works are native fragment links so
-the browser moves focus to the section. From other pages they navigate to
-`/#traditions` or `/#collecting`, and `HomeFragmentFocus` focuses the section after
-the page mounts.
+On the home page, Why RWAs and How collecting works are native fragment links so
+the browser moves focus to the section. From other pages they navigate to `/#rwa`
+or `/#collecting`, and `HomeFragmentFocus` focuses the section after the page
+mounts. The home footer also links to `/#traditions`.
 
 ## Footers
 

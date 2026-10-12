@@ -108,7 +108,15 @@ export async function runPublicBrowsingJourneys({
       const pageErrors = [];
       page.on("pageerror", (error) => pageErrors.push(error.message));
       // Header links stay client-side so the in-memory wallet session survives.
+      // The sticky header hides while reading; scrolling up brings it back, as for a reader.
+      async function revealHeader() {
+        const header = page.locator(".hdr");
+        if ((await header.getAttribute("data-hidden")) !== "true") return;
+        await page.mouse.wheel(0, -200);
+        await expect(header).not.toHaveAttribute("data-hidden", "true");
+      }
       async function headerLink(href) {
+        await revealHeader();
         // Home-page section links are native fragments (#id), elsewhere /#id.
         const target = (scope) =>
           `${scope} a[href="${href}"], ${scope} a[href="${href.replace(/^\/#/, "#")}"]`;
@@ -2015,13 +2023,32 @@ export async function runPublicBrowsingJourneys({
       await expect(main).toBeFocused();
 
       for (const [href, id] of [
-        ["/#traditions", "traditions"],
+        ["/#rwa", "rwa"],
         ["/#collecting", "collecting"],
       ]) {
         await headerLink(href);
         await expect(page).toHaveURL(new RegExp(`#${id}$`));
         await expect(page.locator(`#${id}`)).toBeFocused();
       }
+      // Scrolled down, the header hides; scrolling up shows it until the reader pauses.
+      const header = page.locator(".hdr");
+      await expect(header).toHaveAttribute("data-hidden", "true");
+      await page.mouse.move(width / 2, 600);
+      await page.mouse.wheel(0, -200);
+      await expect(header).toHaveAttribute("data-hidden", "false");
+      await expect(header).toBeInViewport();
+      await expect(header).toHaveAttribute("data-hidden", "true", { timeout: 5000 });
+      await expect(header).not.toBeInViewport();
+      const toTop = page.getByRole("button", { name: "Back to top", exact: true });
+      await expect(toTop).toBeVisible();
+      assert.ok((await toTop.boundingBox()).height >= 44);
+      await audit("home scrolled");
+      await toTop.click();
+      await expect.poll(() => page.evaluate(() => globalThis.scrollY)).toBe(0);
+      await expect(header).toHaveAttribute("data-hidden", "false");
+      await expect(main).toBeFocused();
+      await expect(toTop).toBeHidden();
+      await revealHeader();
       const menu = page.locator(".menubtn");
       if (await menu.isVisible()) {
         if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
@@ -2095,9 +2122,9 @@ export async function runPublicBrowsingJourneys({
       await page.locator('main a[href="/artists/synthetic-artist"]').first().click();
       await expect(page.locator("#artist-name")).toBeVisible();
       await audit("artist");
-      await headerLink("/#traditions");
-      await expect(page).toHaveURL(`${origin}/#traditions`);
-      await expect(page.locator("#traditions")).toBeFocused();
+      await headerLink("/#rwa");
+      await expect(page).toHaveURL(`${origin}/#rwa`);
+      await expect(page.locator("#rwa")).toBeFocused();
       assert.deepEqual(
         pageErrors,
         [],
@@ -2166,6 +2193,7 @@ export async function runPublicBrowsingJourneys({
       await page.getByRole("button", { name: "Try again" }).click();
       await expect(page.locator("#artwork-title")).toBeVisible();
       await audit("recovered artwork API");
+      await revealHeader();
       await page.getByRole("banner").getByRole("link", { name: "Katha home" }).click();
       await expect(page.locator("#purpose")).toBeVisible();
 

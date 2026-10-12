@@ -187,7 +187,7 @@ const traditions = [
     title: "Mandala",
     nepali: "मण्डल",
     description:
-      "Sanskrit for circle. A map of a sacred space: rings around a square palace with four gates, read from the outside in as a guide for meditation.",
+      "A sacred map: rings around a palace with four gates, read from the outside in.",
     Drawing: MandalaDrawing,
   },
   {
@@ -195,7 +195,7 @@ const traditions = [
     title: "Paubha",
     nepali: "पौभा",
     description:
-      "The devotional scroll painting of the Newar artists of the Kathmandu Valley, painted on prepared cotton with mineral pigments and gold.",
+      "Devotional scroll painting of the Newar artists of the Kathmandu Valley, in mineral pigments and gold.",
     Drawing: PaubhaDrawing,
   },
   {
@@ -203,53 +203,173 @@ const traditions = [
     title: "Thangka",
     nepali: "थाङ्का",
     description:
-      "A Himalayan Buddhist scroll painting, mounted in silk brocade to be rolled, carried and hung. Its figures follow set proportions passed from teacher to student.",
+      "Himalayan Buddhist scroll painting, mounted in silk brocade to be rolled and carried.",
     Drawing: ThangkaDrawing,
   },
 ] as const;
 
-const record = [
-  [
-    "Artist",
-    "Credited permanently. Attribution stays with the artist after every sale.",
-  ],
-  [
-    "Digital ownership",
-    "The unique asset for this artwork, held in its owner's wallet.",
-  ],
-  [
-    "Physical custody",
-    "Who holds and safeguards the painting, and when that was last recorded.",
-  ],
-  [
-    "Verification",
-    "A manual check of the work and its authorship, recorded with its date.",
-  ],
-  ["Condition", "A dated inspection, graded from excellent to damaged."],
-  [
-    "History",
-    "Registration, inspections, custody changes, minting and every transfer, in order.",
-  ],
+// Claims here must match shipped behavior: fee rates are development settings,
+// so the resale royalty is named without a percentage.
+const specs = [
+  ["1:1", "One painting, one onchain asset"],
+  ["Inspected", "Authenticity and condition, hashed onchain"],
+  ["Tradeable", "Resold onchain, settled in one transaction"],
+  ["Royalties", "The artist is paid on every resale"],
+] as const;
+
+const backing = [
+  {
+    label: "The painting",
+    title: "Physical artwork",
+    text: "Authenticated, condition-graded and held in recorded custody.",
+  },
+  {
+    label: "The link",
+    title: "Katha ID + NFC tag",
+    text: "A permanent ID. The tag opens the public record; it doesn't prove authenticity on its own.",
+  },
+  {
+    label: "The token",
+    title: "Metaplex Core asset",
+    text: "Held in your wallet, with metadata and inspections committed by hash.",
+  },
+] as const;
+
+const holderGets = [
+  "The onchain asset, in your own wallet",
+  "Delivery of the painting on request, or Katha's care",
+  "Onchain resale to the next collector, condition-checked",
+  "The artist's name and full history, attached forever",
+] as const;
+
+const stack = [
+  "Solana",
+  "Metaplex Core",
+  "Anchor programs",
+  "SHA-256 commitments",
+  "SPL token settlement",
+  "Wallet Standard",
+  "NFC",
+] as const;
+
+// The comparison names the model Katha borrows; it makes no claim about other platforms' terms.
+const cardComparison = [
+  ["Asset", "Mass-printed card", "One-of-one handmade painting"],
+  ["Grade", "Grading company score", "Dated condition inspection"],
+  ["Certificate", "Slab serial number", "Permanent Katha ID and NFC tag"],
+  ["Custody", "Vault", "Katha's care or the owner's, recorded"],
+  ["Redeem", "Ship the card", "Request delivery of the painting"],
+  ["Trade", "Onchain marketplace", "Onchain resale, condition-checked"],
+  ["Creator", "—", "Credited forever, paid on resale"],
 ] as const;
 
 const steps = [
+  ["Check the record", "Inspection, custody and full history, public before you buy."],
   [
-    "Explore the record",
-    "Read the story, check the latest inspection and follow the full history of the work.",
+    "Buy onchain",
+    "One transaction settles every payout and moves the asset to your wallet.",
   ],
+  ["Hold or ship", "Leave the painting in Katha's care or request delivery."],
   [
-    "Review purchase",
-    "Check the exact total, where the proceeds go and who holds the painting, then approve in your wallet.",
-  ],
-  [
-    "Own the digital asset",
-    "Once the purchase is confirmed, the artwork's asset is in your wallet. The artist stays credited.",
-  ],
-  [
-    "Request delivery",
-    "Have the painting shipped to you, or leave it in Katha's care. Delivery is arranged separately from the purchase.",
+    "Trade it on",
+    "List it for the next collector; works you hold are inspected first. The artist earns again.",
   ],
 ] as const;
+
+function FeaturedWorks({
+  featured,
+  apiOrigin,
+}: {
+  featured: FeaturedArtworks;
+  apiOrigin: string;
+}) {
+  return (
+    <div className="wrap">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3">
+        <h2 id="featured-artworks" className="h-section text-madder">
+          Featured works
+        </h2>
+        <Link className="lnk py-2 text-[17px]" href="/explore">
+          See all artworks
+        </Link>
+      </div>
+      {featured.kind === "READY" && featured.items.length > 0 ? (
+        <div
+          className="grid-cards"
+          style={{ marginTop: "clamp(40px, 4vw, 56px)", gap: "48px 32px" }}
+        >
+          {featured.items.map((artwork) => (
+            <ArtworkCard
+              key={artwork.kathaId}
+              artwork={artwork}
+              apiOrigin={apiOrigin}
+              heading="h3"
+              large
+            />
+          ))}
+        </div>
+      ) : (
+        <div
+          className="cut flex flex-wrap items-center bg-paper"
+          role={featured.kind === "UNAVAILABLE" ? "status" : undefined}
+          style={{
+            marginTop: "clamp(40px, 4vw, 56px)",
+            padding: "clamp(32px, 5vw, 64px)",
+            gap: "32px 56px",
+          }}
+        >
+          <KathaMark
+            size={88}
+            variant={featured.kind === "UNAVAILABLE" ? "ink-dashed" : "ink-outline"}
+          />
+          <div
+            className="flex max-w-[580px] flex-col gap-3.5"
+            style={{ flex: "1 1 360px" }}
+          >
+            {featured.kind === "UNAVAILABLE" ? (
+              <>
+                <h3 className="serif m-0 text-3xl leading-[1.15] font-semibold text-madder">
+                  Featured works didn&apos;t load
+                </h3>
+                <p className="m-0 text-[17px] leading-[1.6] text-text-2">
+                  The Katha catalogue didn&apos;t respond. Try again in a moment, or
+                  browse all artworks.
+                </p>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-7 gap-y-3.5">
+                  <RetryButton className="btn btn-lg btn-p cut-s" />
+                  <Link className="lnk py-2" href="/explore">
+                    Explore artworks
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="serif m-0 text-3xl leading-[1.15] font-semibold text-madder">
+                  No works are published yet
+                </h3>
+                <p className="m-0 text-[17px] leading-[1.6] text-text-2">
+                  Artists and their works are still being documented and inspected.
+                  Follow @kathadotfun to see the first works as they&apos;re published.
+                </p>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-7 gap-y-3.5">
+                  <a
+                    className="btn btn-lg btn-p cut-s"
+                    href="https://x.com/kathadotfun"
+                  >
+                    Follow @kathadotfun
+                  </a>
+                  <a className="lnk py-2" href="#traditions">
+                    Read about the traditions
+                  </a>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function KathaHomepage({
   featured,
@@ -265,113 +385,99 @@ export function KathaHomepage({
       <HomeFragmentFocus />
       <section className="hero" aria-labelledby="purpose">
         <div className="wrap hero-inner">
-          <h1 id="purpose" tabIndex={-1} className="h1-hero max-w-[760px]">
-            <span className="block">Nepal&apos;s cultural art.</span>
+          <p className="rwa-eyebrow">Real-world assets · Solana</p>
+          <h1 id="purpose" tabIndex={-1} className="h1-hero mt-5 max-w-[760px]">
+            <span className="block">Tokenizing Nepali art as</span>
             <span className="block">RWAs on Solana.</span>
           </h1>
           <p className="lead-red mt-7">
-            Preserving Nepali culture on chain: every Mandala, Paubha and Thangka
-            painting linked to a permanent record of its artist, owner and history.
+            Nepali art is valuable but illiquid: hard to verify, harder to resell. Katha
+            turns each verified painting into a tradeable onchain asset, backed 1:1 by
+            the real work.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-x-7 gap-y-4">
             <Link className="btn btn-lg btn-l cut-s" href="/explore">
               Explore artworks
             </Link>
-            <a className="lnk-d py-2.5 text-[17px] font-medium" href="#collecting">
-              How collecting works
+            <a className="lnk-d py-2.5 text-[17px] font-medium" href="#rwa">
+              How the RWA works
             </a>
           </div>
-          <p className="mt-8 mb-0 text-base text-on-red-muted">
-            Or start with a tradition:{" "}
-            <Link className="lnk-d" href="/explore?category=MANDALA">
-              Mandala
-            </Link>
-            ,{" "}
-            <Link className="lnk-d" href="/explore?category=PAUBHA">
-              Paubha
-            </Link>{" "}
-            or{" "}
-            <Link className="lnk-d" href="/explore?category=THANGKA">
-              Thangka
-            </Link>
-            .
-          </p>
+          <dl className="rwa-specs">
+            {specs.map(([term, description]) => (
+              <div key={term}>
+                <dt>{term}</dt>
+                <dd>{description}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
         <HeroArt />
       </section>
 
       <Band from="#71332D" to="#5E2A25" id="band-a" />
 
-      <section aria-labelledby="record-heading" className="sec bg-madder-deep">
-        <div
-          className="wrap grid items-start"
-          style={{
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(440px, 100%), 1fr))",
-            gap: "clamp(48px, 6vw, 96px)",
-          }}
-        >
-          <div className="flex max-w-[520px] flex-col gap-6">
-            <h2 id="record-heading" className="h-section">
-              A painting you can hold, with a record anyone can check.
+      <section aria-labelledby="rwa" className="sec bg-madder-deep">
+        <div className="wrap">
+          <div className="split">
+            <h2 id="rwa" tabIndex={-1} className="h-section">
+              One painting. One onchain asset.
             </h2>
-            <p className="m-0 text-[19px] leading-[1.6] text-on-red">
-              An RWA, or real-world asset, is a physical object connected to a
-              verifiable digital record. On Katha, the object is a painting, and its
-              public record is open to anyone. You don&apos;t need a wallet to read it.
+            <p className="m-0 max-w-[30rem] text-[19px] leading-[1.6] text-on-red">
+              An RWA is only as good as what backs it. Every link below is public, and
+              you don&apos;t need a wallet to check it.
             </p>
-            <div className="mt-4 flex items-start gap-4 border-t border-[rgba(243,232,216,0.16)] pt-7">
-              <Icon name="nfc" size={28} className="mt-0.5 text-copper" />
-              <p className="m-0 text-[16.5px] leading-[1.6] text-on-red-muted">
-                <strong className="font-semibold text-paper">
-                  Found a Katha tag on a painting?
-                </strong>{" "}
-                Tap it with your phone to open the work&apos;s public record. The tag
-                leads to the record; it doesn&apos;t prove authenticity on its own.
+          </div>
+          <ol className="rwa-chain" aria-label="What backs a Katha asset">
+            {backing.map(({ label, title, text }, index) => (
+              <li key={title}>
+                <p className="rwa-chain-label">
+                  {index === 1 ? (
+                    <Icon name="nfc" size={20} className="text-copper" />
+                  ) : (
+                    <KathaMark size={18} variant="footer" />
+                  )}
+                  {label}
+                </p>
+                <h3 className="serif m-0 text-[26px] leading-[1.15] font-semibold text-paper">
+                  {title}
+                </h3>
+                <p className="m-0 text-[16px] leading-[1.55] text-on-red">{text}</p>
+              </li>
+            ))}
+          </ol>
+          <div className="rwa-own">
+            <div
+              className="cut bg-paper text-ink"
+              style={{ padding: "clamp(24px, 3vw, 40px)" }}
+            >
+              <h3 className="serif m-0 text-2xl leading-tight font-semibold text-madder">
+                What the holder gets
+              </h3>
+              <ul className="rwa-checks">
+                {holderGets.map((item) => (
+                  <li key={item}>
+                    <Icon name="check" size={18} className="text-madder" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-5 mb-0 text-[14.5px] leading-normal text-text-3">
+                Ownership isn&apos;t copyright. Buying a work doesn&apos;t transfer its
+                copyright.
               </p>
             </div>
-          </div>
-          <div
-            className="cut bg-paper text-ink"
-            style={{ padding: "clamp(28px, 3.4vw, 44px)" }}
-          >
-            <div className="flex items-center gap-3.5 pb-5">
-              <KathaMark size={28} variant="paper" />
-              <h3 className="serif m-0 text-2xl leading-tight font-semibold text-madder">
-                What a Katha record holds
-              </h3>
-            </div>
-            <dl className="rec-dl m-0">
-              {record.map(([term, description]) => (
-                <div key={term}>
-                  <dt>{term}</dt>
-                  <dd>{description}</dd>
-                </div>
-              ))}
-            </dl>
-            <div
-              className="mt-2 grid border-t-[1.5px] border-madder pt-[22px]"
-              style={{
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))",
-                gap: "18px 28px",
-              }}
-            >
-              <div>
-                <p className="serif m-0 text-[17px] font-semibold text-madder">
-                  Kept on Solana
-                </p>
-                <p className="mt-1 mb-0 text-[15px] leading-normal text-text-2">
-                  Ownership, every transfer, and a fingerprint of each document so any
-                  change can be detected.
-                </p>
-              </div>
-              <div>
-                <p className="serif m-0 text-[17px] font-semibold text-madder">
-                  Kept off chain
-                </p>
-                <p className="mt-1 mb-0 text-[15px] leading-normal text-text-2">
-                  Photographs, artwork stories and private inspection reports.
-                </p>
-              </div>
+            <div className="flex flex-col gap-4">
+              <p className="rwa-chain-label">Under the hood</p>
+              <ul className="rwa-stack" aria-label="Onchain stack">
+                {stack.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+              <p className="m-0 max-w-[26rem] text-[15.5px] leading-[1.6] text-on-red-muted">
+                Ownership and every transfer live on Solana. Photographs and private
+                inspection reports stay off chain, fingerprinted so any change shows.
+              </p>
             </div>
           </div>
         </div>
@@ -379,15 +485,58 @@ export function KathaHomepage({
 
       <Band from="#5E2A25" to="#F3E8D8" id="band-b" />
 
+      <section aria-labelledby="cards" className="sec bg-paper text-ink">
+        <div className="wrap">
+          <div className="split">
+            <h2 id="cards" className="h-section text-madder">
+              Collected like graded cards.
+            </h2>
+            <p className="m-0 max-w-[34rem] text-[19px] leading-[1.6] text-text-2">
+              Tokenized Pokémon cards proved the model: grade it, vault it, trade it
+              onchain, redeem the real thing. Katha brings that liquidity to one-of-one
+              paintings.
+            </p>
+          </div>
+          <div
+            className="rwa-cmp"
+            role="table"
+            aria-label="Graded card RWA compared with a Katha painting"
+          >
+            <div role="row" className="rwa-cmp-head">
+              <span role="columnheader">
+                <span className="sr-only">Feature</span>
+              </span>
+              <span role="columnheader">Graded card RWA</span>
+              <span role="columnheader">Katha painting</span>
+            </div>
+            {cardComparison.map(([feature, card, katha]) => (
+              <div role="row" key={feature}>
+                <span role="rowheader">{feature}</span>
+                <span role="cell">{card}</span>
+                <span role="cell">{katha}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="featured"
+        aria-labelledby="featured-artworks"
+        className="sec bg-paper-2 text-ink"
+      >
+        <FeaturedWorks featured={featured} apiOrigin={apiOrigin} />
+      </section>
+
       <section aria-labelledby="traditions" className="sec bg-paper text-ink">
         <div className="wrap">
           <div className="split">
             <h2 id="traditions" tabIndex={-1} className="h-section text-madder">
-              Three painting traditions, each its own discipline.
+              Three traditions. One-of-one works.
             </h2>
             <p className="m-0 max-w-[34rem] text-[19px] leading-[1.6] text-text-2">
-              Katha begins with Mandala, Paubha and Thangka. They share a region and a
-              long history, but each has its own purpose, form and method.
+              Katha starts with three of Nepal&apos;s painting traditions, each with its
+              own purpose, form and method.
             </p>
           </div>
           <div className="grid-cards" style={{ marginTop: "clamp(48px, 5vw, 72px)" }}>
@@ -433,99 +582,7 @@ export function KathaHomepage({
         </div>
       </section>
 
-      <section
-        id="featured"
-        aria-labelledby="featured-artworks"
-        className="sec bg-paper-2 text-ink"
-      >
-        <div className="wrap">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-8 gap-y-3">
-            <h2 id="featured-artworks" className="h-section text-madder">
-              Featured works
-            </h2>
-            <Link className="lnk py-2 text-[17px]" href="/explore">
-              See all artworks
-            </Link>
-          </div>
-          {featured.kind === "READY" && featured.items.length > 0 ? (
-            <div
-              className="grid-cards"
-              style={{ marginTop: "clamp(40px, 4vw, 56px)", gap: "48px 32px" }}
-            >
-              {featured.items.map((artwork) => (
-                <ArtworkCard
-                  key={artwork.kathaId}
-                  artwork={artwork}
-                  apiOrigin={apiOrigin}
-                  heading="h3"
-                  large
-                />
-              ))}
-            </div>
-          ) : (
-            <div
-              className="cut flex flex-wrap items-center bg-paper"
-              role={featured.kind === "UNAVAILABLE" ? "status" : undefined}
-              style={{
-                marginTop: "clamp(40px, 4vw, 56px)",
-                padding: "clamp(32px, 5vw, 64px)",
-                gap: "32px 56px",
-              }}
-            >
-              <KathaMark
-                size={88}
-                variant={featured.kind === "UNAVAILABLE" ? "ink-dashed" : "ink-outline"}
-              />
-              <div
-                className="flex max-w-[580px] flex-col gap-3.5"
-                style={{ flex: "1 1 360px" }}
-              >
-                {featured.kind === "UNAVAILABLE" ? (
-                  <>
-                    <h3 className="serif m-0 text-3xl leading-[1.15] font-semibold text-madder">
-                      Featured works didn&apos;t load
-                    </h3>
-                    <p className="m-0 text-[17px] leading-[1.6] text-text-2">
-                      The Katha catalogue didn&apos;t respond. Try again in a moment, or
-                      browse all artworks.
-                    </p>
-                    <div className="mt-2.5 flex flex-wrap items-center gap-x-7 gap-y-3.5">
-                      <RetryButton className="btn btn-lg btn-p cut-s" />
-                      <Link className="lnk py-2" href="/explore">
-                        Explore artworks
-                      </Link>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="serif m-0 text-3xl leading-[1.15] font-semibold text-madder">
-                      No works are published yet
-                    </h3>
-                    <p className="m-0 text-[17px] leading-[1.6] text-text-2">
-                      Artists and their works are still being documented and inspected.
-                      Follow @kathadotfun to see the first works as they&apos;re
-                      published.
-                    </p>
-                    <div className="mt-2.5 flex flex-wrap items-center gap-x-7 gap-y-3.5">
-                      <a
-                        className="btn btn-lg btn-p cut-s"
-                        href="https://x.com/kathadotfun"
-                      >
-                        Follow @kathadotfun
-                      </a>
-                      <a className="lnk py-2" href="#traditions">
-                        Read about the traditions
-                      </a>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </section>
-
-      <Band from="#EBDDC9" to="#71332D" id="band-c" />
+      <Band from="#F3E8D8" to="#71332D" id="band-c" />
 
       <section aria-labelledby="collecting" className="sec weave bg-madder">
         <div className="wrap">
@@ -563,15 +620,9 @@ export function KathaHomepage({
             }}
           >
             <p className="m-0 text-[15.5px] leading-[1.6] text-on-red-muted">
-              <strong className="font-semibold text-paper">Selling later?</strong> If
-              you keep the painting yourself, it needs a recent condition inspection
-              before you can list it.
-            </p>
-            <p className="m-0 text-[15.5px] leading-[1.6] text-on-red-muted">
-              <strong className="font-semibold text-paper">
-                Ownership isn&apos;t copyright.
-              </strong>{" "}
-              Buying a work doesn&apos;t transfer its copyright.
+              <strong className="font-semibold text-paper">Delivery is manual.</strong>{" "}
+              Inspection and shipping are coordinated by people, separately from the
+              onchain purchase.
             </p>
             <p className="m-0 text-[15.5px] leading-[1.6] text-on-red-muted">
               <strong className="font-semibold text-paper">Test network.</strong>{" "}
@@ -614,8 +665,8 @@ export function KathaHomepage({
               Katha means story.
             </h2>
             <p className="m-0 text-[19px] leading-[1.6] text-on-red">
-              Every work here comes with one: who made it, where it has been and who
-              looks after it now.
+              Every asset carries one: who made it, where it has been and who holds it
+              now.
             </p>
             <div className="mt-3.5">
               <Link className="btn btn-lg btn-l cut-s" href="/explore">
