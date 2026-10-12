@@ -607,7 +607,7 @@ test("exploration presents artwork, attribution and real category/pagination lin
     query: { category: "PAUBHA", offset: 12 },
     page: {
       items: [summary],
-      pagination: { limit: 12, offset: 12, hasMore: true },
+      pagination: { limit: 12, offset: 12, hasMore: true, total: 14 },
     },
   });
   for (const content of [
@@ -619,7 +619,8 @@ test("exploration presents artwork, attribution and real category/pagination lin
     "/explore?category=PAUBHA&amp;offset=24",
     'href="/explore?category=PAUBHA"',
     'aria-current="page"',
-    "Showing 13 Paubha work",
+    "Showing 13 of 14 Paubha works",
+    "Page 2 of 2",
     "Reset filters",
   ])
     assert.ok(html.includes(content), content);
@@ -632,7 +633,10 @@ test("artist-filtered exploration names the artist from real results and can be 
   const html = explore({
     kind: "READY",
     query: { artistId: artworkFixture.artist.id, offset: 0 },
-    page: { items: [summary], pagination: { limit: 12, offset: 0, hasMore: false } },
+    page: {
+      items: [summary],
+      pagination: { limit: 12, offset: 0, hasMore: false, total: 1 },
+    },
   });
   assert.ok(html.includes(`Artist: ${artworkFixture.artist.displayName}`));
   assert.ok(html.includes('aria-label="Remove artist filter"'));
@@ -649,7 +653,10 @@ test("empty, missing-image, invalid-query and unavailable exploration remain exp
       {
         kind: "READY",
         query: { offset: 0 },
-        page: { items: [], pagination: { limit: 12, offset: 0, hasMore: false } },
+        page: {
+          items: [],
+          pagination: { limit: 12, offset: 0, hasMore: false, total: 0 },
+        },
       },
       "No works yet",
     ],
@@ -657,7 +664,10 @@ test("empty, missing-image, invalid-query and unavailable exploration remain exp
       {
         kind: "READY",
         query: { offset: 12 },
-        page: { items: [], pagination: { limit: 12, offset: 12, hasMore: false } },
+        page: {
+          items: [],
+          pagination: { limit: 12, offset: 12, hasMore: false, total: 0 },
+        },
       },
       "Return to the first page",
     ],
@@ -667,7 +677,7 @@ test("empty, missing-image, invalid-query and unavailable exploration remain exp
         query: { offset: 0 },
         page: {
           items: [{ ...summary, title: "<script>unsafe</script>", heroImage: null }],
-          pagination: { limit: 12, offset: 0, hasMore: false },
+          pagination: { limit: 12, offset: 0, hasMore: false, total: 1 },
         },
       },
       "Photo not available yet",
@@ -699,7 +709,10 @@ test("artist profiles show approved biography, traditions, region and permanent 
     works: {
       kind: "READY",
       offset: 0,
-      page: { items: [summary], pagination: { limit: 12, offset: 0, hasMore: true } },
+      page: {
+        items: [summary],
+        pagination: { limit: 12, offset: 0, hasMore: true, total: 13 },
+      },
     },
   });
   for (const content of [
@@ -728,7 +741,10 @@ test("artist artwork failures, emptiness and invalid page queries preserve biogr
       {
         kind: "READY",
         offset: 0,
-        page: { items: [], pagination: { limit: 12, offset: 0, hasMore: false } },
+        page: {
+          items: [],
+          pagination: { limit: 12, offset: 0, hasMore: false, total: 0 },
+        },
       },
       "doesn't mean the artist has created no works",
     ],
@@ -870,4 +886,28 @@ test("two purchases retain artist attribution, separate custody and versioned ap
   assert.equal((timeline.match(/Secondary sale/g) ?? []).length, 1);
   assert.ok(html.includes("Approved synthetic resale inspection photograph"));
   assert.ok(!html.includes("shippingAddress"));
+});
+
+test("tag problem pages explain unknown, retired, unpublished and unavailable tags without naming a work", async () => {
+  const { TagStatus } = await import(await viewModule("../components/tag-status.tsx"));
+  const tagId = "6f1c2b3a-1111-4111-8111-111111111111";
+  for (const [state, title] of [
+    ["UNKNOWN", "isn’t linked to a Katha artwork"],
+    ["RETIRED", "This tag has been retired"],
+    ["UNPUBLISHED", "This artwork isn’t published yet"],
+    ["UNAVAILABLE", "couldn’t check this tag right now"],
+  ] as const) {
+    const html = renderToStaticMarkup(
+      createElement(TagStatus, {
+        tagId,
+        state,
+        checkedAt: "2026-10-12T08:20:00.000Z",
+      }),
+    );
+    assert.ok(html.includes(title), state);
+    assert.ok(html.includes(tagId));
+    assert.ok(html.includes("doesn’t prove authenticity"));
+    assert.ok(!html.includes("KATHA-"), state);
+    assert.equal(html.includes(`href="/tags/${tagId}"`), state === "UNAVAILABLE");
+  }
 });

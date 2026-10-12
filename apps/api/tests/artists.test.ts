@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import type { ArtistRecord, ArtistStore } from "@katha/db";
-import { artistResponseSchema, type WalletSession } from "@katha/shared";
+import {
+  artistResponseSchema,
+  artistSearchResponseSchema,
+  type WalletSession,
+} from "@katha/shared";
 import { createArtists } from "../src/artists.js";
 import { createAuthorization } from "../src/authorization.js";
 import { createApi } from "../src/app.js";
@@ -36,6 +40,10 @@ function fixture() {
   Object.assign(record, { privateEvidence: "SYNTHETIC_PRIVATE_EVIDENCE" });
   const store: ArtistStore = {
     read: vi.fn<ArtistStore["read"]>(async () => record),
+    search: vi.fn<ArtistStore["search"]>(async () => ({
+      total: 1,
+      rows: [{ total: 1, ...record }],
+    })),
     create: vi.fn<ArtistStore["create"]>(async () => record),
     verify: vi.fn<ArtistStore["verify"]>(async (_id, wallet) => ({
       status: "verified",
@@ -256,4 +264,47 @@ it("protects unverified profile review and omits private fields", async () => {
       })
     ).status,
   ).toBe(400);
+});
+
+it("searches saved artists by name or slug for administrators and verifiers only", async () => {
+  const f = fixture();
+  const get = (path: string, token?: string) =>
+    f.app.request(path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  for (const [path, token, status] of [
+    ["/admin/artists?query=syn", undefined, 401],
+    ["/admin/artists?query=syn", "stranger", 403],
+    ["/admin/artists?query=syn", "verifier", 403],
+    ["/verifier/artists?query=syn", "admin", 403],
+  ] as const)
+    expect((await get(path, token)).status).toBe(status);
+  expect(f.store.search).not.toHaveBeenCalled();
+  for (const [path, token] of [
+    ["/admin/artists?query=%20Syn%20&limit=5", "admin"],
+    ["/verifier/artists?query=%20Syn%20&limit=5", "verifier"],
+  ] as const) {
+    const result = await get(path, token);
+    expect(result.status).toBe(200);
+    expect(result.headers.get("Cache-Control")).toBe("no-store");
+    const body = artistSearchResponseSchema.parse(await result.json());
+    expect(body.items[0]).toEqual({
+      id: f.record.id,
+      slug: f.record.slug,
+      displayName: f.record.displayName,
+      region: f.record.region,
+      verificationStatus: "UNVERIFIED",
+    });
+    expect(body.pagination).toEqual({ limit: 5, offset: 0, hasMore: false, total: 1 });
+    // Search results carry identity fields only, never wallets or private columns.
+    expect(JSON.stringify(body)).not.toContain("SYNTHETIC_PRIVATE_EVIDENCE");
+  }
+  expect(f.store.search).toHaveBeenCalledWith({ query: "Syn", limit: 5, offset: 0 });
+  for (const query of [
+    "",
+    "query=",
+    "query=%20%20",
+    `query=${"a".repeat(161)}`,
+    "query=a&role=x",
+  ])
+    expect((await get(`/admin/artists?${query}`, "admin")).status).toBe(400);
+  expect(f.store.search).toHaveBeenCalledTimes(2);
 });

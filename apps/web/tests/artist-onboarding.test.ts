@@ -50,6 +50,27 @@ function fixture(admin = true, verifier = true) {
       return artist;
     },
     readArtist: async () => artist,
+    searches: [] as string[],
+    searchArtists: async function (
+      this: { searches: string[] },
+      query: string,
+      _page: unknown,
+      role: "admin" | "verifier",
+    ) {
+      this.searches.push(`${role}:${query}`);
+      return {
+        items: [
+          {
+            id: artist.id,
+            slug: artist.slug,
+            displayName: artist.displayName,
+            region: artist.region,
+            verificationStatus: artist.verificationStatus,
+          },
+        ],
+        pagination: { limit: 20, offset: 0, hasMore: false, total: 1 },
+      };
+    },
     verifyArtist: async () => {
       writes++;
       return {
@@ -223,4 +244,31 @@ test("authenticated client uses exact routes and private headers, validates bind
         !error.message.includes("PRIVATE_SENTINEL"),
     );
   }
+});
+
+test("name or slug search is open to both roles, uses the caller's namespace and resets on sign-out", async () => {
+  for (const [admin, verifier, role] of [
+    [true, false, "admin"],
+    [false, true, "verifier"],
+    [true, true, "admin"],
+  ] as const) {
+    const f = fixture(admin, verifier);
+    const flow = createArtistOnboarding(f.methods);
+    await flow.check();
+    await flow.search("  ");
+    assert.equal(f.methods.searches.length, 0);
+    await flow.search(" Synthetic ");
+    assert.deepEqual(f.methods.searches, [`${role}:Synthetic`]);
+    assert.equal(flow.getSnapshot().search?.query, "Synthetic");
+    assert.equal(flow.getSnapshot().search?.results.items[0]?.id, artist.id);
+    f.emit();
+    assert.equal(flow.getSnapshot().search, null);
+    flow.dispose();
+  }
+  const denied = fixture(false, false);
+  const flow = createArtistOnboarding(denied.methods);
+  await flow.check();
+  await flow.search("Synthetic");
+  assert.equal(denied.methods.searches.length, 0);
+  flow.dispose();
 });

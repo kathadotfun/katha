@@ -17,6 +17,7 @@ have `Cache-Control: no-store`; inputs use strict shared Zod contracts.
 | Method | Path                                | Body / result                                                            |
 | ------ | ----------------------------------- | ------------------------------------------------------------------------ |
 | POST   | `/admin/artworks/:kathaId/nfc-tags` | `{ "tagId": "aaaaaaaa-1111-4111-8111-111111111111" }`; assignment record |
+| GET    | `/admin/artworks/:kathaId/nfc-tags` | `{ kathaId, items }`: every binding for the artwork, newest first        |
 | GET    | `/admin/nfc-tags/:tagId`            | Active or retired assignment record                                      |
 | POST   | `/admin/nfc-tags/:tagId/retire`     | `{}`; terminal retired assignment record                                 |
 
@@ -32,9 +33,12 @@ artwork IDs, actor wallet IDs, wallet addresses, evidence and fulfillment data.
 Request logs omit tag identifiers and request bodies.
 
 Administration can assign a tag to an existing draft before publication; this
-neither publishes that draft nor exposes it through the public catalogue. There is
-no frontend administration form yet. Tag records
-are not written to Solana, and no wallet transaction is prepared or signed.
+neither publishes that draft nor exposes it through the public catalogue. The
+**NFC tag** panel on the artwork's documentation page lists the artwork's tags
+(active and retired), assigns a new tag, looks up any tag and retires the active
+one after confirmation. The list returns at most 100 bindings and 404 for an
+unknown artwork. Tag records are not written to Solana, and no wallet transaction
+is prepared or signed.
 
 ## Public resolution
 
@@ -43,13 +47,23 @@ without a response body. Its shared path schema accepts only canonical lowercase
 UUIDs; the strict empty query contract rejects `url`, `next`, `origin` and all other
 query fields. No caller-supplied redirect destination is accepted.
 
-| Result                                               | HTTP behavior                                         |
-| ---------------------------------------------------- | ----------------------------------------------------- |
-| Active tag bound to an eligible public artwork       | 302 `Location: <app-origin>/art/<permanent-katha-id>` |
-| Unknown tag or binding that is not publicly eligible | 404 `NOT_FOUND`                                       |
-| Retired tag bound to an eligible public artwork      | 410 `NFC_TAG_RETIRED`, no artwork ID or redirect      |
-| Invalid identifier/query                             | 400 `INVALID_REQUEST`                                 |
-| Storage failure or corrupt identity                  | Sanitized 500 `INTERNAL_ERROR`, no redirect           |
+| Result                                               | HTTP behavior                                          |
+| ---------------------------------------------------- | ------------------------------------------------------ |
+| Active tag bound to an eligible public artwork       | 302 `Location: <app-origin>/art/<katha-id>?source=nfc` |
+| Unknown tag or binding that is not publicly eligible | 404 `NOT_FOUND`                                        |
+| Retired tag bound to an eligible public artwork      | 410 `NFC_TAG_RETIRED`, no artwork ID or redirect       |
+| Either failure, request `Accept: text/html`          | 302 `Location: <app-origin>/tags/<tag-id>`             |
+| Invalid identifier/query                             | 400 `INVALID_REQUEST`                                  |
+| Storage failure or corrupt identity                  | Sanitized 500 `INTERNAL_ERROR`, no redirect            |
+
+`?source=nfc` only lets the artwork page word the visit as a tag arrival; anyone
+can add it, and it proves nothing. A phone tap opens a browser, so an unusable tag
+redirects browsers to the web page `/tags/<tag-id>` instead of showing JSON. That
+page reads `GET /nfc/:tagId/status` and explains an unknown, retired or
+not-yet-published tag (an active published tag redirects to its record). The
+status response is `{ tagId, state, kathaId }`, where `state` is `ACTIVE`,
+`RETIRED`, `UNPUBLISHED` or `UNKNOWN` and `kathaId` is present only for `ACTIVE`;
+it never names an unpublished or retired binding's artwork.
 
 All resolver responses have `Cache-Control: no-store`, including failures. A
 **temporary** redirect lets later scans observe retirement or publication changes.
@@ -63,7 +77,7 @@ LAN origin for a phone demonstration. The owned canonical public origin is
 resolver lives at the configured API origin (default `http://localhost:3001`). For
 example, an API request to
 `http://localhost:3001/nfc/aaaaaaaa-1111-4111-8111-111111111111` can redirect to
-`http://localhost:3000/art/KATHA-PAUBHA-000001` when that synthetic binding exists
+`http://localhost:3000/art/KATHA-PAUBHA-000001?source=nfc` when that synthetic binding exists
 and is publicly eligible. Host/forwarded headers, stored document URIs, titles,
 slugs and query parameters cannot change the destination.
 
@@ -72,8 +86,8 @@ as discovery and artwork detail: explicit non-future publication, authorship
 commitment, verified artist, finalized verification and metadata, finalized initial
 inspection and indexed ownership on the configured cluster. Draft, unverified,
 unminted and wrong-cluster bindings return the same 404 as an unknown tag. Retired
-private bindings also return 404. Only the tag ID, permanent artwork ID and retirement
-time enter the internal public selection; administrative actors and private evidence
+private bindings also return 404. Only the tag ID, permanent artwork ID, retirement
+time and a publication flag enter the internal public selection; administrative actors and private evidence
 never enter it. These reads do not change custody, ownership or attribution.
 
 ## Persistence and replacement

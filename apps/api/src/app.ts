@@ -18,6 +18,7 @@ import {
 import type { NfcResolutionBoundary } from "./nfc-resolution.js";
 import { nfcResolutionQuerySchema } from "@katha/shared";
 import type { NfcTagsBoundary } from "./nfc-tags.js";
+import type { ArtworkWorkflowBoundary } from "./artwork-workflow.js";
 import {
   nfcArtworkParamsSchema,
   nfcTagParamsSchema,
@@ -45,6 +46,7 @@ import type { CustodyOperationsBoundary } from "./custody-operations.js";
 import {
   custodyPreparationRequestSchema,
   fulfillmentReceiptRequestSchema,
+  fulfillmentCancellationRequestSchema,
   fulfillmentCreateRequestSchema,
   fulfillmentUpdateRequestSchema,
   fulfillmentIdParamsSchema,
@@ -77,6 +79,7 @@ import type { AuthorizationBoundary } from "./authorization.js";
 import type { ArtistsBoundary } from "./artists.js";
 import {
   artistCreateRequestSchema,
+  artistSearchQuerySchema,
   artistIdParamsSchema,
   artistVerificationRequestSchema,
 } from "@katha/shared";
@@ -131,6 +134,7 @@ export function createApi(
   purchases?: ArtworkPurchasesBoundary,
   collector?: CollectorBoundary,
   resale?: ResaleInspectionBoundary,
+  workflow?: ArtworkWorkflowBoundary,
 ) {
   const app = new Hono<ApiEnvironment>();
   function errorResponse(error: unknown, context: Context<ApiEnvironment>) {
@@ -252,6 +256,11 @@ export function createApi(
     );
   }
   if (artists) {
+    // Administrators need artist record IDs to create artworks; verifiers to review.
+    for (const role of ["admin", "verifier"] as const)
+      app.get(`/${role}/artists`, async (c) =>
+        c.json(await artists.search(parseQuery(c, artistSearchQuerySchema))),
+      );
     app.get("/verifier/artists/:artistId", async (c) => {
       const params = parseParams(c, artistIdParamsSchema);
       return c.json(await artists.read(params.artistId));
@@ -361,8 +370,33 @@ export function createApi(
     app.get("/nfc/:tagId", async (c) => {
       const { tagId } = parseParams(c, nfcTagParamsSchema);
       parseQuery(c, nfcResolutionQuerySchema);
-      return c.redirect(await nfcResolution.resolve(tagId), 302);
+      try {
+        return c.redirect(await nfcResolution.resolve(tagId), 302);
+      } catch (error) {
+        // A phone tap opens a browser: show the web explanation, keep JSON for clients.
+        if (
+          error instanceof DomainError &&
+          (error.code === "NOT_FOUND" || error.code === "NFC_TAG_RETIRED") &&
+          /\btext\/html\b/.test(c.req.header("Accept") ?? "")
+        )
+          return c.redirect(nfcResolution.tagPage(tagId), 302);
+        throw error;
+      }
     });
+    app.get("/nfc/:tagId/status", async (c) => {
+      const { tagId } = parseParams(c, nfcTagParamsSchema);
+      parseQuery(c, nfcResolutionQuerySchema);
+      return c.json(await nfcResolution.status(tagId));
+    });
+  }
+  if (workflow) {
+    // Both roles open artwork workflows, so both read the tab markers.
+    for (const role of ["admin", "verifier"] as const)
+      app.get(`/${role}/artworks/:kathaId/workflow`, async (c) => {
+        const { kathaId } = parseParams(c, artworkDraftParamsSchema);
+        parseQuery(c, artworkDetailQuerySchema);
+        return c.json(await workflow.read(kathaId));
+      });
   }
   if (nfcTags) {
     app.post("/admin/artworks/:kathaId/nfc-tags", async (c) =>
@@ -374,6 +408,9 @@ export function createApi(
         ),
         200,
       ),
+    );
+    app.get("/admin/artworks/:kathaId/nfc-tags", async (c) =>
+      c.json(await nfcTags.list(parseParams(c, nfcArtworkParamsSchema).kathaId)),
     );
     app.get("/admin/nfc-tags/:tagId", async (c) =>
       c.json(await nfcTags.get(parseParams(c, nfcTagParamsSchema).tagId)),
@@ -699,6 +736,17 @@ export function createApi(
           c.req.header("Authorization"),
           requestId,
           await parseJson(c, fulfillmentReceiptRequestSchema),
+        ),
+      );
+    });
+    app.post("/fulfillment/:requestId/cancel", async (c) => {
+      const { requestId } = parseParams(c, fulfillmentIdParamsSchema);
+      parseQuery(c, artworkDetailQuerySchema);
+      return c.json(
+        await custodyOperations.cancel(
+          c.req.header("Authorization"),
+          requestId,
+          await parseJson(c, fulfillmentCancellationRequestSchema),
         ),
       );
     });

@@ -3,7 +3,12 @@ import { collectorCollectionResponseSchema } from "@katha/shared";
 import { createCollector } from "../src/collector.js";
 import { createWalletSessions } from "../src/wallet-session.js";
 import { createNfcResolution } from "../src/nfc-resolution.js";
-import { createNfcResolutionStore, createNfcTagStore, wallets } from "@katha/db";
+import {
+  createArtworkWorkflowStore,
+  createNfcResolutionStore,
+  createNfcTagStore,
+  wallets,
+} from "@katha/db";
 import { createArtworkProvenance } from "../src/artwork-provenance.js";
 import {
   createPublicProvenanceStore,
@@ -529,22 +534,31 @@ it("discovers only explicitly published, finalized artworks on the configured cl
       tagId: publicTag,
       kathaId: mandala.kathaId,
       retiredAt: null,
+      published: true,
     });
     expect(await nfc.resolve(publicTag)).toBe(
-      `https://katha.fun/art/${mandala.kathaId}`,
+      `https://katha.fun/art/${mandala.kathaId}?source=nfc`,
     );
+    // Another cluster's publication boundary sees the same binding as unpublished.
     expect(
       await createNfcResolutionStore(database.db, "DEVNET").find(publicTag),
-    ).toBeNull();
+    ).toMatchObject({ tagId: publicTag, published: false });
     for (const work of [...hidden, devnet]) {
       const tagId = randomUUID();
       await tags.assign(work.kathaId, tagId, tagActor.id);
-      expect(await nfcStore.find(tagId)).toBeNull();
+      expect(await nfcStore.find(tagId)).toMatchObject({ published: false });
       await expect(nfc.resolve(tagId)).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(await nfc.status(tagId)).toEqual({
+        tagId,
+        state: "UNPUBLISHED",
+        kathaId: null,
+      });
       await tags.retire(tagId, tagActor.id);
-      expect(await nfcStore.find(tagId)).toBeNull();
+      await expect(nfc.resolve(tagId)).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect((await nfc.status(tagId)).state).toBe("RETIRED");
     }
     expect(await nfcStore.find(randomUUID())).toBeNull();
+    expect((await nfc.status(randomUUID())).state).toBe("UNKNOWN");
     await tags.retire(publicTag, tagActor.id);
     await expect(nfc.resolve(publicTag)).rejects.toMatchObject({
       code: "NFC_TAG_RETIRED",
@@ -552,8 +566,24 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     const replacementTag = randomUUID();
     await tags.assign(mandala.kathaId, replacementTag, tagActor.id);
     expect(await nfc.resolve(replacementTag)).toBe(
-      `https://katha.fun/art/${mandala.kathaId}`,
+      `https://katha.fun/art/${mandala.kathaId}?source=nfc`,
     );
+    // The workspace list shows both bindings, newest first, retired included.
+    expect(
+      (await tags.listByArtwork(mandala.kathaId))!.map((row) => [
+        row.tagId,
+        row.retiredAt === null,
+      ]),
+    ).toEqual([
+      [replacementTag, true],
+      [publicTag, false],
+    ]);
+    expect(await tags.listByArtwork("KATHA-PAUBHA-999999")).toBeNull();
+    // Workflow markers read Katha's own records in one snapshot.
+    const workflowStore = createArtworkWorkflowStore(database.db, "LOCALNET");
+    const facts = await workflowStore.read(mandala.kathaId);
+    expect(facts).toMatchObject({ hasEvidence: true, published: true });
+    expect(await workflowStore.read("KATHA-PAUBHA-999999")).toBeNull();
 
     await database.db.insert(artworkMaterials).values([
       { artworkId: mandala.id, name: "Mineral pigments", position: 1 },
@@ -696,7 +726,9 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     );
     expect(next.items.map((row) => row.kathaId)).toEqual([privateHero.kathaId]);
     expect(next.pagination.hasMore).toBe(false);
-    expect(await (await app.request("/artworks?offset=100000")).json()).toEqual({
+    expect(filtered.pagination.total).toBe(2);
+    expect(next.pagination.total).toBe(2);
+    expect(await (await app.request("/artworks?offset=100000")).json()).toMatchObject({
       items: [],
       pagination: { limit: 20, offset: 100000, hasMore: false },
     });
@@ -706,7 +738,7 @@ it("discovers only explicitly published, finalized artworks on the configured cl
           limit: 100,
           offset: 0,
         })
-      ).map((row) => row.kathaId),
+      ).rows.map((row) => row.kathaId),
     ).toEqual([devnet.kathaId]);
     // A publication marker cannot be used to reopen draft editing, even when other eligibility data is missing.
     const markerOnly = await fixture({
@@ -1362,7 +1394,7 @@ it("discovers only explicitly published, finalized artworks on the configured cl
     // not a real Core transfer, sale, metadata revision or physical delivery.
     const taggedWork = await fixture();
     const stableId = taggedWork.kathaId;
-    const stableUrl = `https://katha.fun/art/${stableId}`;
+    const stableUrl = `https://katha.fun/art/${stableId}?source=nfc`;
     const lifecycleTag = randomUUID();
     expect((await tags.assign(stableId, lifecycleTag, tagActor.id)).status).toBe(
       "assigned",

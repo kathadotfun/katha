@@ -57,21 +57,25 @@ function fixture(mediaEnabled = false) {
       materials: [],
       editable: true,
     })),
-    list: vi.fn<ArtworkDraftStore["list"]>(async () => [
-      {
-        id: record.id,
-        kathaId: record.kathaId,
-        category: record.category,
-        title: record.title,
-        creationYear: record.creationYear,
-        artistId: record.artistId,
-        artistName: "Synthetic artist",
-        artistVerificationStatus: "UNVERIFIED",
-        lifecycleStarted: false,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]),
+    list: vi.fn<ArtworkDraftStore["list"]>(async () => ({
+      total: 1,
+      rows: [
+        {
+          total: 1,
+          id: record.id,
+          kathaId: record.kathaId,
+          category: record.category,
+          title: record.title,
+          creationYear: record.creationYear,
+          artistId: record.artistId,
+          artistName: "Synthetic artist",
+          artistVerificationStatus: "UNVERIFIED",
+          lifecycleStarted: false,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ],
+    })),
     update: vi.fn<ArtworkDraftStore["update"]>(async () => ({
       status: "updated",
       record,
@@ -450,7 +454,12 @@ it("lists safe draft summaries only after admin authorization with strict pagina
       const page = artworkDraftListResponseSchema.parse(body);
       expect(page.items[0]?.workflowStatus).toBe("DOCUMENTING");
       expect(page.items[0]?.artist.verificationStatus).toBe("UNVERIFIED");
-      expect(page.pagination).toEqual({ limit: 1, offset: 0, hasMore: false });
+      expect(page.pagination).toEqual({
+        limit: 1,
+        offset: 0,
+        hasMore: false,
+        total: 1,
+      });
     }
   }
   expect(f.store.list).toHaveBeenCalledTimes(1);

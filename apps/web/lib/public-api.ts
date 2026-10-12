@@ -6,6 +6,8 @@ import {
   artworkProvenanceQuerySchema,
   artworkProvenanceResponseSchema,
   kathaIdSchema,
+  nfcTagIdSchema,
+  nfcTagStatusResponseSchema,
   paginatedResponseSchema,
   paginationQuerySchema,
   publicArtistDetailSchema,
@@ -157,6 +159,17 @@ export function createPublicApi(
         request,
       );
       if (result.kathaId !== kathaId) throw new PublicApiError("INVALID_RESPONSE");
+      return result;
+    },
+    async nfcTagStatus(value: string, request: RequestOptions = {}) {
+      const tagId = nfcTagIdSchema.parse(value);
+      const result = await read(
+        `/nfc/${encodeURIComponent(tagId)}/status`,
+        nfcTagStatusResponseSchema,
+        {},
+        request,
+      );
+      if (result.tagId !== tagId) throw new PublicApiError("INVALID_RESPONSE");
       return result;
     },
     provenance(id: string, query: Query = {}, request: RequestOptions = {}) {

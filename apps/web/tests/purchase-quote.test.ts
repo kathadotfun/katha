@@ -8,7 +8,10 @@ import {
   createPurchaseQuote,
   purchaseCollection,
 } from "../lib/purchase-quote.ts";
-import { createWalletSessionApi } from "../lib/wallet-session-api.ts";
+import {
+  createWalletSessionApi,
+  WalletSessionApiError,
+} from "../lib/wallet-session-api.ts";
 import type { WalletSessionSnapshot } from "../lib/wallet-session.ts";
 import {
   canonicalDocumentBytes,
@@ -129,7 +132,7 @@ test("quote controller clears old terms on outage, coalesces requests and discar
       listeners.delete(fn);
     };
   };
-  let fail = false,
+  let fail: boolean | "funds" = false,
     reads = 0;
   let resolve: ((value: typeof quote) => void) | null = null;
   let gate: Promise<typeof quote> | null = null;
@@ -143,6 +146,7 @@ test("quote controller clears old terms on outage, coalesces requests and discar
       readPurchaseQuote: async (_, input) => {
         assert.deepEqual(input.supportedTransactionVersions, [0]);
         reads++;
+        if (fail === "funds") throw new WalletSessionApiError("INSUFFICIENT_FUNDS");
         if (fail) throw new Error("PRIVATE_ERROR");
         return gate ?? quote;
       },
@@ -178,13 +182,19 @@ test("quote controller clears old terms on outage, coalesces requests and discar
   await controller.refresh();
   assert.equal(controller.getSnapshot().quote, null);
   assert.equal(controller.getSnapshot().status, "unavailable");
+  // Only the server's specific funds code produces the funds message.
+  assert.equal(controller.getSnapshot().insufficientFunds, false);
+  fail = "funds";
+  await controller.refresh();
+  assert.equal(controller.getSnapshot().status, "unavailable");
+  assert.equal(controller.getSnapshot().insufficientFunds, true);
   fail = false;
   gate = new Promise((done) => {
     resolve = done;
   });
   const pending = controller.refresh();
   await controller.refresh();
-  assert.equal(reads, 3);
+  assert.equal(reads, 4);
   auth = { status: "signed-out", session: null, error: null };
   for (const fn of listeners) fn();
   assert.equal(controller.getSnapshot().status, "locked");
@@ -259,4 +269,33 @@ test("missing detail collection resolves from matching provenance and rejects mi
         artwork,
       ),
     );
+});
+
+test("a conflict names insufficient funds only when the server says so", async () => {
+  const { quote } = await purchaseQuoteFixture();
+  let body: unknown = {
+    error: {
+      code: "INSUFFICIENT_FUNDS",
+      message: "The wallet doesn't hold enough of the payment token.",
+    },
+    requestId: "b55d5929-a53d-4608-82d1-f6d91c1ba563",
+  };
+  const api = createWalletSessionApi("http://localhost:3001", async () =>
+    Response.json(body, { status: 409 }),
+  );
+  const read = () =>
+    api.readPurchaseQuote(
+      quote.kathaId,
+      { supportedTransactionVersions: [0] },
+      "synthetic",
+      new AbortController().signal,
+    );
+  await assert.rejects(read(), { code: "INSUFFICIENT_FUNDS" });
+  body = {
+    error: { code: "CONFLICT", message: "x" },
+    requestId: "b55d5929-a53d-4608-82d1-f6d91c1ba563",
+  };
+  await assert.rejects(read(), { code: "CONFLICT" });
+  body = "not json";
+  await assert.rejects(read(), { code: "CONFLICT" });
 });

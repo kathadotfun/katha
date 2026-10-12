@@ -1,10 +1,11 @@
 import Link from "next/link";
 
-// Catalogue APIs return `hasMore`, not a total, so pages are numbered without
-// claiming a last page. Links stay client-side to keep the wallet session.
+// Lists with a server total show "Page 2 of 5"; history, which has no total,
+// numbers pages without claiming a last one. Links stay client-side.
 export function Pagination({
   label = "Pagination",
   page,
+  pageCount,
   summary,
   previousHref,
   nextHref,
@@ -12,6 +13,7 @@ export function Pagination({
 }: {
   label?: string;
   page: number;
+  pageCount?: number;
   summary?: string;
   previousHref: string | null;
   nextHref: string | null;
@@ -22,7 +24,9 @@ export function Pagination({
       aria-label={label}
       className="flex flex-wrap items-center justify-between gap-4 border-t border-(--rule-soft) pt-6"
     >
-      <p className="sm mut m-0">{summary ?? `Page ${page}`}</p>
+      <p className="sm mut m-0">
+        {summary ?? (pageCount ? `Page ${page} of ${pageCount}` : `Page ${page}`)}
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         {previousHref ? (
           <Link className="btn btn-o btn-sm" href={previousHref}>

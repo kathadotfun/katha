@@ -2,7 +2,7 @@ import { z } from "zod";
 import { artworkCategorySchema, kathaIdSchema } from "./artwork-identity.js";
 import { artworkSchema } from "./artwork-domain.js";
 import { publicArtistSummarySchema } from "./artist-api.js";
-import { paginationQuerySchema, paginatedResponseSchema } from "./http.js";
+import { countedPaginatedResponseSchema, paginationQuerySchema } from "./http.js";
 
 export const artworkDiscoveryQuerySchema = paginationQuerySchema.extend({
   category: artworkCategorySchema.optional(),
@@ -36,7 +36,7 @@ export const publicArtworkSummarySchema = z
     path: ["kathaId"],
     error: "Category must match permanent ID",
   });
-export const artworkDiscoveryResponseSchema = paginatedResponseSchema(
+export const artworkDiscoveryResponseSchema = countedPaginatedResponseSchema(
   publicArtworkSummarySchema,
 );
 export type ArtworkDiscoveryQuery = z.infer<typeof artworkDiscoveryQuerySchema>;

@@ -167,7 +167,10 @@ export {
 
 export {
   createMarketplacePaymentSettlement,
+  createPaymentBalanceReader,
+  PaymentFundsError,
   PaymentValidationError,
+  type PaymentBalanceReader,
   type MarketplacePaymentSettlement,
   type PaymentArtworkState,
   type PaymentPreparation,

@@ -368,7 +368,10 @@ export function buildExpireListingTransaction(
   return release(context, accounts, input, true);
 }
 
-async function associatedTokens(owner: Address, mint: Address): Promise<Address> {
+export async function associatedTokens(
+  owner: Address,
+  mint: Address,
+): Promise<Address> {
   const encoder = getAddressEncoder();
   return (
     await getProgramDerivedAddress({

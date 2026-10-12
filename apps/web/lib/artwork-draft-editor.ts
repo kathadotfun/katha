@@ -111,7 +111,8 @@ export function createArtworkDraftEditor(
           "The server rejected these fields. Check the artwork documentation.",
         FORBIDDEN: "This wallet no longer has administration access.",
         UNAUTHENTICATED: "Your session changed or expired. Sign in again.",
-      };
+        INSUFFICIENT_FUNDS: "The request could not be completed. Reload and try again.",
+      } satisfies Record<WalletSessionApiError["code"], string>;
       publish({
         ...state,
         busy: false,

@@ -136,6 +136,14 @@ export const fulfillmentReceiptRequestSchema = z.strictObject({
   receiptConfirmed: z.literal(true),
 });
 export type FulfillmentReceiptRequest = z.infer<typeof fulfillmentReceiptRequestSchema>;
+// The requester may withdraw a request until it is dispatched.
+export const fulfillmentCancellationRequestSchema = z.strictObject({
+  expectedUpdatedAt: timestamp,
+  cancellationConfirmed: z.literal(true),
+});
+export type FulfillmentCancellationRequest = z.infer<
+  typeof fulfillmentCancellationRequestSchema
+>;
 export const collectorDeliveryReviewSchema = z
   .strictObject({
     kathaId: kathaIdSchema,

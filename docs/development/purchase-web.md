@@ -12,6 +12,12 @@ rereads finalized eligibility and rejects stale terms before preparing a purchas
 Preparation does not request a wallet signature. A stale/ineligible preparation
 clears the quote; refresh current terms before trying again.
 
+Before simulating, the API reads the buyer's canonical test-token account. A
+missing account or a balance below the price returns 409 `INSUFFICIENT_FUNDS`, and
+the page says **Not enough test token** with the wallet to fund and a **Refresh
+terms** button, instead of suggesting the listing is gone. Network fees are paid
+in SOL and are checked by simulation as before.
+
 ## Transaction review and approval
 
 The shared transaction flow checks the unsigned wire, sole buyer signer, cluster,

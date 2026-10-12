@@ -260,7 +260,9 @@ export async function runPrimaryJourney(context) {
       admin.getByRole("button", { name: "Create artist", exact: true }).click(),
     );
     await visit(verifier, "/admin");
-    await verifier.getByLabel("Artist record ID", { exact: true }).fill(artist.id);
+    await verifier
+      .getByLabel("Name, slug or record ID", { exact: true })
+      .fill(artist.id);
     await verifier.getByRole("button", { name: "Look up", exact: true }).click();
     await verifier
       .getByRole("checkbox", { name: /checked this artist's identity/ })
@@ -402,7 +404,10 @@ export async function runPrimaryJourney(context) {
       redirect: "manual",
     });
     assert.equal(resolved.status, 302);
-    assert.equal(resolved.headers.get("location"), `${context.origin}/art/${id}`);
+    assert.equal(
+      resolved.headers.get("location"),
+      `${context.origin}/art/${id}?source=nfc`,
+    );
     await visit(admin, `/collection/${id}/list`);
     await admin
       .getByRole("button", { name: "Refresh listing state", exact: true })

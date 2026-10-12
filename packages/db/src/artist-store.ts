@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, or, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import { artists, type ArtistRecord, type NewArtistRecord } from "./schema/artists.js";
 
@@ -25,6 +25,44 @@ export function createArtistStore(db: Database) {
     async read(id: string) {
       const [record] = await db.select().from(artists).where(eq(artists.id, id));
       return record;
+    },
+    async search({
+      query,
+      limit,
+      offset,
+    }: {
+      query: string;
+      limit: number;
+      offset: number;
+    }) {
+      // Escape LIKE wildcards so operator input matches literally.
+      const pattern = `%${query.replace(/[\\%_]/g, (character) => `\\${character}`)}%`;
+      const where = or(
+        ilike(artists.displayName, pattern),
+        ilike(artists.slug, pattern),
+        // An exact record ID also finds its artist, without any partial ID matching.
+        sql`${artists.id}::text = ${query.toLowerCase()}`,
+      );
+      const rows = await db
+        .select({
+          total: sql<number>`count(*) over ()`.mapWith(Number),
+          id: artists.id,
+          slug: artists.slug,
+          displayName: artists.displayName,
+          region: artists.region,
+          verificationStatus: artists.verificationStatus,
+        })
+        .from(artists)
+        .where(where)
+        .orderBy(asc(artists.displayName), asc(artists.id))
+        .limit(limit + 1)
+        .offset(offset);
+      if (rows.length) return { rows, total: rows[0]!.total };
+      const [counted] = await db
+        .select({ total: sql<number>`count(*)`.mapWith(Number) })
+        .from(artists)
+        .where(where);
+      return { rows, total: counted?.total ?? 0 };
     },
     async create(input: ArtistCreation) {
       // Explicit columns prevent callers from assigning identity or verification fields.

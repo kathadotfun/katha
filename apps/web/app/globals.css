@@ -1650,7 +1650,15 @@
     background: transparent;
     box-shadow: inset 0 0 0 1.5px var(--color-field-border);
   }
-  .tabs a[aria-current="page"] .dm {
+  .dm.dm-ok {
+    background: var(--color-ok);
+    box-shadow: none;
+  }
+  .dm.dm-now {
+    background: var(--color-amber);
+    box-shadow: none;
+  }
+  .tabs a[aria-current="page"] .dm:not(.dm-ok):not(.dm-now) {
     background: var(--color-madder);
     box-shadow: none;
   }
@@ -1677,6 +1685,10 @@
     color: var(--color-text-2);
     font-size: 13px;
     font-weight: 700;
+  }
+  .wfn.d {
+    background: var(--color-ok);
+    color: #f4faf5;
   }
   .wfn.n {
     background: var(--color-madder);

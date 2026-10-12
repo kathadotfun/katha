@@ -1,6 +1,7 @@
 import {
   artistCreateRequestSchema,
   type ArtistResponse,
+  type ArtistSearchResponse,
   type WalletPermissions,
 } from "@katha/shared";
 import { WalletSessionApiError } from "./wallet-session-api.ts";
@@ -9,8 +10,10 @@ import type { WalletSessionController } from "./wallet-session.ts";
 export type OnboardingSnapshot = Readonly<{
   status: "locked" | "checking" | "ready" | "denied" | "unavailable";
   permissions: WalletPermissions | null;
-  busy: "create" | "read" | "verify" | null;
+  busy: "create" | "read" | "verify" | "search" | null;
   artist: ArtistResponse | null;
+  // Last name-or-slug search, with the query it answers.
+  search: { query: string; results: ArtistSearchResponse } | null;
   error: string | null;
 }>;
 export const lockedOnboardingSnapshot: OnboardingSnapshot = {
@@ -18,6 +21,7 @@ export const lockedOnboardingSnapshot: OnboardingSnapshot = {
   permissions: null,
   busy: null,
   artist: null,
+  search: null,
   error: null,
 };
 const messages = {
@@ -29,7 +33,8 @@ const messages = {
   INVALID_REQUEST: "The server rejected these fields. Check the profile details.",
   UNAVAILABLE:
     "The request could not be confirmed. For creation, keep the same slug when retrying; for verification, reload the profile first.",
-};
+  INSUFFICIENT_FUNDS: "The request could not be completed. Reload and try again.",
+} satisfies Record<WalletSessionApiError["code"], string>;
 // Authority changes discard all operator data and invalidate outstanding responses.
 export function createArtistOnboarding(
   session: Pick<
@@ -40,6 +45,7 @@ export function createArtistOnboarding(
     | "createArtist"
     | "readArtist"
     | "verifyArtist"
+    | "searchArtists"
   >,
 ) {
   let state = lockedOnboardingSnapshot;
@@ -68,16 +74,20 @@ export function createArtistOnboarding(
     }
   });
   async function run(
-    action: "check" | "create" | "read" | "verify",
-    request: (signal: AbortSignal) => Promise<WalletPermissions | ArtistResponse>,
+    action: "check" | "create" | "read" | "verify" | "search",
+    request: (
+      signal: AbortSignal,
+    ) => Promise<WalletPermissions | ArtistResponse | ArtistSearchResponse>,
+    query = "",
   ) {
     if (disposed || !current || state.busy || state.status === "checking") return;
-    if (
-      action !== "check" &&
-      (state.status !== "ready" ||
-        !(action === "create" ? state.permissions?.admin : state.permissions?.verifier))
-    )
-      return;
+    const allowed =
+      action === "create"
+        ? state.permissions?.admin
+        : action === "search"
+          ? state.permissions?.admin || state.permissions?.verifier
+          : state.permissions?.verifier;
+    if (action !== "check" && (state.status !== "ready" || !allowed)) return;
     const version = ++generation;
     abort = new AbortController();
     const signal = abort.signal;
@@ -99,7 +109,13 @@ export function createArtistOnboarding(
           permissions,
           status: permissions.admin || permissions.verifier ? "ready" : "denied",
         });
-      } else publish({ ...state, busy: null, artist: result as ArtistResponse });
+      } else if (action === "search")
+        publish({
+          ...state,
+          busy: null,
+          search: { query, results: result as ArtistSearchResponse },
+        });
+      else publish({ ...state, busy: null, artist: result as ArtistResponse });
     } catch (error) {
       if (disposed || signal.aborted || version !== generation) return;
       const code = error instanceof WalletSessionApiError ? error.code : "UNAVAILABLE";
@@ -134,6 +150,19 @@ export function createArtistOnboarding(
       return run("create", (signal) => session.createArtist(parsed.data, signal));
     },
     read: (id: string) => run("read", (signal) => session.readArtist(id, signal)),
+    // Finds saved artists by part of the name or slug; the first page is enough
+    // for an operator to pick the right record.
+    search(value: string) {
+      const query = value.trim();
+      if (!query || query.length > 160) return Promise.resolve();
+      const role = state.permissions?.admin ? "admin" : "verifier";
+      return run(
+        "search",
+        (signal) =>
+          session.searchArtists(query, { limit: 20, offset: 0 }, role, signal),
+        query,
+      );
+    },
     verify(confirmed: boolean) {
       const artist = state.artist;
       if (!confirmed || !artist || artist.verificationStatus !== "UNVERIFIED")

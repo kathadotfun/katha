@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { countedPaginatedResponseSchema, paginationQuerySchema } from "./http.js";
 import {
   artistAttributionSchema,
   artistProfileSchema,
@@ -72,6 +73,26 @@ export const artistResponseSchema = z
       : value.verifiedByWallet === null && value.verifiedAt === null,
   );
 export type ArtistCreateRequest = z.infer<typeof artistCreateRequestSchema>;
+
+// Operators find saved artists by part of the name or slug, case-insensitively,
+// or by an exact record ID.
+export const artistSearchQuerySchema = paginationQuerySchema.extend({
+  query: content(z.string().trim().min(1).max(160)),
+});
+export type ArtistSearchQuery = z.infer<typeof artistSearchQuerySchema>;
+export const artistSearchItemSchema = z.strictObject({
+  id: z.uuid(),
+  slug: artistSlugSchema,
+  displayName: artistAttributionSchema.shape.displayName,
+  region: artistProfileSchema.shape.region,
+  verificationStatus: z.enum(["UNVERIFIED", "VERIFIED"]),
+});
+export const artistSearchResponseSchema = countedPaginatedResponseSchema(
+  artistSearchItemSchema,
+).refine(({ items }) => new Set(items.map((item) => item.id)).size === items.length, {
+  error: "Duplicate artists",
+});
+export type ArtistSearchResponse = z.infer<typeof artistSearchResponseSchema>;
 export type ArtistResponse = z.infer<typeof artistResponseSchema>;
 
 export const artistSlugParamsSchema = z.strictObject({ slug: artistSlugSchema });

@@ -18,8 +18,9 @@ For example, `/explore?category=PAUBHA&offset=12` displays page two. Unknown key
 repeated parameters, invalid categories and unsupported offsets show a resettable
 filter message without contacting the API; metadata marks these queries noindex.
 Valid canonical metadata uses `https://katha.fun/explore` with the selected query.
-There is no claimed total result count: the API exposes only the current page and
-`hasMore`. Offset pagination is not a snapshot and may change with publication.
+The API returns the page with `hasMore` and the matching `total`, computed in the
+same statement as the page, so the page shows "Showing 1–12 of N works" and
+"Page 1 of M". Later pages are separate reads and may shift with publication.
 At the API's offset limit, additional history is not silently presented as complete.
 
 The loader validates the shared response plus requested limit/offset/category and

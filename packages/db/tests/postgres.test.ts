@@ -3519,6 +3519,27 @@ it("serializes private fulfillment retries and status changes, and rejects stale
       items: [],
       hasMore: false,
     });
+    // The requester may withdraw an undispatched request exactly once; other
+    // wallets and stale timestamps change nothing.
+    const withdrawable = await store.findRequest(secondRequest!.id);
+    if (!withdrawable) throw new Error("Return request missing");
+    const stamp = withdrawable.request.updatedAt.toISOString();
+    expect(
+      await store.cancelByRequester(withdrawable, "F".repeat(32), stamp),
+    ).toBeNull();
+    expect(
+      await store.cancelByRequester(
+        withdrawable,
+        address,
+        artwork.createdAt.toISOString(),
+      ),
+    ).toBeNull();
+    const withdrawn = await store.cancelByRequester(withdrawable, address, stamp);
+    expect(withdrawn).toMatchObject({ status: "CANCELLED", handledByWallet: null });
+    expect(withdrawn!.updatedAt.getTime()).toBeGreaterThan(
+      withdrawable.request.updatedAt.getTime(),
+    );
+    expect(await store.cancelByRequester(withdrawable, address, stamp)).toBeNull();
     const approved = await store.findRequest(input.requestId);
     if (!approved) throw new Error("Snapshot missing");
     expect(
@@ -3535,6 +3556,13 @@ it("serializes private fulfillment retries and status changes, and rejects stale
     if (!dispatched) throw new Error("Dispatch missing");
     const dispatchedSnapshot = await store.findRequest(input.requestId);
     if (!dispatchedSnapshot) throw new Error("Snapshot missing");
+    expect(
+      await store.cancelByRequester(
+        dispatchedSnapshot,
+        address,
+        dispatched.updatedAt.toISOString(),
+      ),
+    ).toBeNull();
     expect(await store.hasOpenDelivery(artwork.id, address)).toBe(true);
     expect(
       await store.create(artwork, address, { ...input, requestId: randomUUID() }),
@@ -5360,7 +5388,7 @@ it("publishes under artwork locks only with matching finalized mint and indexed 
     expect(await store.publish(first, binding)).toBeNull();
     expect(
       await publicStore.list({ limit: 20, offset: 0, artistId: artist.id }),
-    ).toHaveLength(0);
+    ).toMatchObject({ rows: { length: 0 }, total: 0 });
     const [event] = await db
       .insert(indexedEvents)
       .values({
@@ -5480,7 +5508,7 @@ it("publishes under artwork locks only with matching finalized mint and indexed 
     expect(await store.publish(published, binding)).toEqual(published.artwork);
     expect(
       await publicStore.list({ limit: 20, offset: 0, artistId: artist.id }),
-    ).toHaveLength(1);
+    ).toMatchObject({ rows: { length: 1 }, total: 1 });
     expect(published.artwork.authorshipEvidenceHash).toBe(
       artwork.authorshipEvidenceHash,
     );

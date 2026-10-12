@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import type { NfcResolutionStore } from "@katha/db";
-import { apiErrorResponseSchema } from "@katha/shared";
+import { apiErrorResponseSchema, nfcTagStatusResponseSchema } from "@katha/shared";
 import { createApi } from "../src/app.js";
 import { createNfcResolution } from "../src/nfc-resolution.js";
 import { createLogger } from "../src/logger.js";
@@ -11,6 +11,7 @@ function fixture(origin = "https://katha.fun") {
     tagId: randomUUID(),
     kathaId: "KATHA-PAUBHA-000001",
     retiredAt: null as Date | null,
+    published: true,
   };
   const store: NfcResolutionStore = {
     find: vi.fn<NfcResolutionStore["find"]>(async () => record),
@@ -58,7 +59,9 @@ it.each(["https://katha.fun", "http://localhost:3000", "http://192.168.1.87:3000
       },
     });
     expect(result.status).toBe(302);
-    expect(result.headers.get("Location")).toBe(`${origin}/art/${f.record.kathaId}`);
+    expect(result.headers.get("Location")).toBe(
+      `${origin}/art/${f.record.kathaId}?source=nfc`,
+    );
     expect(result.headers.get("Cache-Control")).toBe("no-store");
     expect(f.store.find).toHaveBeenCalledWith(f.record.tagId);
     expect(await result.text()).not.toContain("PRIVATE");
@@ -141,11 +144,87 @@ it("HEAD resolves consistently and write methods cannot change public bindings",
   expect(head.status).toBe(302);
   expect(await head.text()).toBe("");
   expect(head.headers.get("Location")).toBe(
-    `https://katha.fun/art/${f.record.kathaId}`,
+    `https://katha.fun/art/${f.record.kathaId}?source=nfc`,
   );
   vi.mocked(f.store.find).mockClear();
   for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
     expect((await f.app.request(f.path, { method })).status).toBe(404);
   }
   expect(f.store.find).not.toHaveBeenCalled();
+});
+
+it("unpublished bindings and unpublished retired tags stay 404 without naming the work", async () => {
+  const f = fixture();
+  f.record.published = false;
+  const unpublished = await f.app.request(f.path);
+  expect(unpublished.status).toBe(404);
+  f.record.retiredAt = new Date();
+  const retired = await f.app.request(f.path);
+  expect(retired.status).toBe(404);
+  for (const result of [unpublished, retired])
+    expect(await result.text()).not.toContain(f.record.kathaId);
+});
+it("browser taps on unusable tags open the fixed web explanation page", async () => {
+  const f = fixture("http://localhost:3000");
+  const html = { headers: { Accept: "text/html,application/xhtml+xml" } };
+  vi.mocked(f.store.find).mockResolvedValueOnce(null);
+  const missing = await f.app.request(f.path, html);
+  expect(missing.status).toBe(302);
+  expect(missing.headers.get("Location")).toBe(
+    `http://localhost:3000/tags/${f.record.tagId}`,
+  );
+  f.record.retiredAt = new Date();
+  const retired = await f.app.request(f.path, html);
+  expect(retired.headers.get("Location")).toBe(
+    `http://localhost:3000/tags/${f.record.tagId}`,
+  );
+  f.record.retiredAt = null;
+  const active = await f.app.request(f.path, html);
+  expect(active.headers.get("Location")).toBe(
+    `http://localhost:3000/art/${f.record.kathaId}?source=nfc`,
+  );
+  // Invalid identifiers never redirect, even for browsers.
+  const invalid = await f.app.request("/nfc/invalid", html);
+  expect(invalid.status).toBe(400);
+  expect(invalid.headers.get("Location")).toBeNull();
+});
+it("status names the artwork only for an active tag on a published work", async () => {
+  const f = fixture();
+  const read = async () => {
+    const result = await f.app.request(`${f.path}/status`);
+    expect(result.status).toBe(200);
+    expect(result.headers.get("Cache-Control")).toBe("no-store");
+    return nfcTagStatusResponseSchema.parse(await result.json());
+  };
+  expect(await read()).toEqual({
+    tagId: f.record.tagId,
+    state: "ACTIVE",
+    kathaId: f.record.kathaId,
+  });
+  f.record.published = false;
+  expect(await read()).toEqual({
+    tagId: f.record.tagId,
+    state: "UNPUBLISHED",
+    kathaId: null,
+  });
+  f.record.retiredAt = new Date();
+  expect(await read()).toEqual({
+    tagId: f.record.tagId,
+    state: "RETIRED",
+    kathaId: null,
+  });
+  f.record.published = true;
+  expect(await read()).toEqual({
+    tagId: f.record.tagId,
+    state: "RETIRED",
+    kathaId: null,
+  });
+  vi.mocked(f.store.find).mockResolvedValueOnce(null);
+  expect(await read()).toEqual({
+    tagId: f.record.tagId,
+    state: "UNKNOWN",
+    kathaId: null,
+  });
+  for (const path of ["/nfc/invalid/status", `${f.path}/status?x=1`])
+    expect((await f.app.request(path)).status).toBe(400);
 });

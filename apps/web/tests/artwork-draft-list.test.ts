@@ -51,7 +51,7 @@ function fixture(admin = true) {
       calls.push(offset);
       return {
         items: offset ? [] : [item],
-        pagination: { limit, offset, hasMore: offset === 0 },
+        pagination: { limit, offset, hasMore: offset === 0, total: 1 },
       };
     },
   };
@@ -122,7 +122,10 @@ test("account changes and disposal discard late pages; simultaneous loads coales
   await list.refresh();
   assert.equal(calls, 1);
   f.emit();
-  resolve({ items: [item], pagination: { limit: 20, offset: 0, hasMore: false } });
+  resolve({
+    items: [item],
+    pagination: { limit: 20, offset: 0, hasMore: false, total: 1 },
+  });
   await pending;
   assert.equal(list.getSnapshot().status, "locked");
   assert.equal(list.getSnapshot().page, null);
@@ -136,13 +139,19 @@ test("account changes and disposal discard late pages; simultaneous loads coales
   const disposedPending = disposedList.load();
   await Promise.resolve();
   disposedList.dispose();
-  resolve({ items: [item], pagination: { limit: 20, offset: 0, hasMore: false } });
+  resolve({
+    items: [item],
+    pagination: { limit: 20, offset: 0, hasMore: false, total: 1 },
+  });
   await disposedPending;
   assert.equal(disposedList.getSnapshot().page, null);
   assert.equal(disposedList.getSnapshot().status, "locked");
 });
 test("draft HTTP client validates pagination binding and keeps bearer out of request URLs", async () => {
-  let body = { items: [item], pagination: { limit: 20, offset: 0, hasMore: false } };
+  let body = {
+    items: [item],
+    pagination: { limit: 20, offset: 0, hasMore: false, total: 1 },
+  };
   const api = createWalletSessionApi("http://localhost:3001", async (url, init) => {
     assert.equal(String(url), "http://localhost:3001/admin/artworks?limit=20&offset=0");
     assert.equal(init?.method, "GET");

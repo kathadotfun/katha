@@ -62,7 +62,7 @@ export function createArtworkDrafts(
       });
     },
     async list(page: Pagination) {
-      const rows = await store.list(page);
+      const { rows, total } = await store.list(page);
       return artworkDraftListResponseSchema.parse({
         items: rows.slice(0, page.limit).map((row) => ({
           id: row.id,
@@ -79,7 +79,7 @@ export function createArtworkDrafts(
           createdAt: row.createdAt.toISOString(),
           updatedAt: row.updatedAt.toISOString(),
         })),
-        pagination: { ...page, hasMore: rows.length > page.limit },
+        pagination: { ...page, hasMore: rows.length > page.limit, total },
       });
     },
     async update(kathaId: string, input: unknown) {

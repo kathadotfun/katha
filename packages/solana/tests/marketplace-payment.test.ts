@@ -18,7 +18,9 @@ import {
 } from "@solana/kit";
 import {
   createMarketplacePaymentSettlement,
+  PaymentFundsError,
   PaymentValidationError,
+  type PaymentBalanceReader,
 } from "../src/marketplace-payment.js";
 import {
   encodeUnsignedRegistryTransaction,
@@ -409,3 +411,27 @@ it.each([0, 1] as const)(
     ).rejects.toThrow();
   },
 );
+
+it("checks the buyer's payment-token balance before simulating and names a shortfall", async () => {
+  const f = await fixture();
+  const balance = vi.fn<PaymentBalanceReader>(async () => 100000000n);
+  const funded = createMarketplacePaymentSettlement(
+    f.chain,
+    f.read,
+    { cluster: "localnet", paymentMint: f.mint },
+    balance,
+  );
+  const prepare = () => funded.prepare(f.buyer.address, new Set([0]), f.state, f.input);
+  f.simulate.mockClear();
+  // Exactly the price is enough; the network fee is paid in SOL, not the test token.
+  await expect(prepare()).resolves.toMatchObject({ buyer: f.buyer.address });
+  expect(balance).toHaveBeenCalledWith(f.buyer.address, f.mint);
+  for (const value of [99999999n, 0n, null]) {
+    balance.mockResolvedValueOnce(value);
+    await expect(prepare()).rejects.toBeInstanceOf(PaymentFundsError);
+  }
+  expect(f.simulate).toHaveBeenCalledTimes(1);
+  // RPC failures stay unavailability, never a misleading funds message.
+  balance.mockRejectedValueOnce(new Error("rpc down"));
+  await expect(prepare()).rejects.not.toBeInstanceOf(PaymentFundsError);
+});

@@ -14,6 +14,7 @@ import type {
   FulfillmentUpdateRequest,
   FulfillmentCreateRequest,
   FulfillmentReceiptRequest,
+  FulfillmentCancellationRequest,
   ConditionPreparationRequest,
   ConditionAttestationRequest,
   ArtworkRegistrationRequest,
@@ -179,6 +180,16 @@ export function createWalletSession(
     ) {
       return authorized(
         (token) => api.createDelivery(kathaId, input, token, signal),
+        signal,
+      );
+    },
+    cancelDelivery(
+      id: string,
+      input: FulfillmentCancellationRequest,
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (token) => api.cancelDelivery(id, input, token, signal),
         signal,
       );
     },
@@ -530,6 +541,19 @@ export function createWalletSession(
         signal,
       );
     },
+    listNfcTags(kathaId: string, signal: AbortSignal) {
+      return authorized((value) => api.listNfcTags(kathaId, value, signal), signal);
+    },
+    readArtworkWorkflow(
+      kathaId: string,
+      role: "admin" | "verifier",
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (value) => api.readArtworkWorkflow(kathaId, role, value, signal),
+        signal,
+      );
+    },
     readNfcTag(tagId: string, signal: AbortSignal) {
       return authorized((value) => api.readNfcTag(tagId, value, signal), signal);
     },
@@ -577,6 +601,17 @@ export function createWalletSession(
     },
     createArtist(input: ArtistCreateRequest, signal: AbortSignal) {
       return authorized((value) => api.createArtist(input, value, signal), signal);
+    },
+    searchArtists(
+      query: string,
+      page: Pagination,
+      role: "admin" | "verifier",
+      signal: AbortSignal,
+    ) {
+      return authorized(
+        (value) => api.searchArtists(query, page, role, value, signal),
+        signal,
+      );
     },
     readArtist(artistId: string, signal: AbortSignal) {
       return authorized((value) => api.readArtist(artistId, value, signal), signal);

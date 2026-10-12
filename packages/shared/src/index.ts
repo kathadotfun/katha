@@ -80,6 +80,8 @@ export {
   paginationQuerySchema,
   paginationResponseSchema,
   paginatedResponseSchema,
+  countedPaginationResponseSchema,
+  countedPaginatedResponseSchema,
 } from "./http.js";
 export type { ApiErrorCode, ApiErrorResponse, Pagination } from "./http.js";
 export {
@@ -88,8 +90,16 @@ export {
   artistCreateRequestSchema,
   artistVerificationRequestSchema,
   artistResponseSchema,
+  artistSearchQuerySchema,
+  artistSearchItemSchema,
+  artistSearchResponseSchema,
 } from "./artist-api.js";
-export type { ArtistCreateRequest, ArtistResponse } from "./artist-api.js";
+export type {
+  ArtistCreateRequest,
+  ArtistResponse,
+  ArtistSearchQuery,
+  ArtistSearchResponse,
+} from "./artist-api.js";
 
 export {
   walletClusterSchema,
@@ -264,3 +274,4 @@ export * from "./collector-api.js";
 
 export * from "./resale-inspection.js";
 export * from "./devnet-bootstrap.js";
+export * from "./artwork-workflow-api.js";

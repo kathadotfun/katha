@@ -31,7 +31,7 @@ return `401`, disallowed roles `403`, and unexpected storage failures a redacted
 `500`. Cookies and redirects are not used by the browser API client.
 
 The strict shared response contains `items` and `pagination: { limit, offset,
-hasMore }`. Each item contains only `id`, `kathaId`, `category`, `title`,
+hasMore, total }`. Each item contains only `id`, `kathaId`, `category`, `title`,
 `creationYear`, `artist: { id, displayName, verificationStatus }`, `workflowStatus`,
 `createdAt` and `updatedAt`. Timestamps are UTC ISO strings. Private evidence,
 shipping information, document contents, wallet/session tokens and operation
@@ -39,8 +39,10 @@ payloads are excluded through an explicit database and API projection.
 
 Only records whose `publishedAt` is null appear, including works with stored
 lifecycle records. Results sort by creation time descending, then UUID descending.
-A bounded lookahead determines `hasMore`; no total count is claimed. Offset pages
-are not a snapshot: concurrent creation or publication can shift their boundaries.
+A bounded lookahead determines `hasMore`; `total` counts every unpublished record
+in the same statement, and the contract rejects a total that contradicts the page.
+The list shows "Showing 1–20 of N, newest first". Offset pages are not a snapshot:
+concurrent creation or publication can shift their boundaries.
 Refresh to restart browsing. The offset cap bounds supported navigation.
 
 `DOCUMENTING` means none of the following stored workflow records exist;

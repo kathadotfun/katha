@@ -119,8 +119,22 @@ it("bounds draft-list pagination and rejects privileged fields, duplicated or mi
     createdAt: response.createdAt,
     updatedAt: response.updatedAt,
   };
-  const page = { items: [item], pagination: { limit: 20, offset: 0, hasMore: false } };
+  const page = {
+    items: [item],
+    pagination: { limit: 20, offset: 0, hasMore: false, total: 1 },
+  };
   expect(artworkDraftListResponseSchema.safeParse(page).success).toBe(true);
+  // The total must agree with the page: never below what is shown, and
+  // "more pages" only when the total says so.
+  for (const pagination of [
+    { limit: 20, offset: 0, hasMore: false, total: 0 },
+    { limit: 20, offset: 0, hasMore: true, total: 1 },
+    { limit: 20, offset: 0, hasMore: false, total: 2 },
+    { limit: 20, offset: 0, hasMore: false },
+  ])
+    expect(
+      artworkDraftListResponseSchema.safeParse({ ...page, pagination }).success,
+    ).toBe(false);
   for (const items of [
     [item, item],
     [{ ...item, category: "THANGKA" }],

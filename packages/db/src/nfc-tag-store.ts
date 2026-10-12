@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { artists } from "./schema/artists.js";
 import { publicationPredicate } from "./public-artwork-store.js";
 import type { Database } from "./connection.js";
@@ -24,6 +24,23 @@ export function createNfcTagStore(db: Database) {
         .innerJoin(artworks, eq(artworks.id, nfcTags.artworkId))
         .where(eq(nfcTags.tagId, tagId));
       return record ?? null;
+    },
+    // Null when the artwork doesn't exist; otherwise every binding, newest first.
+    async listByArtwork(kathaId: string): Promise<NfcTagRecord[] | null> {
+      return db.transaction(async (tx) => {
+        const [artwork] = await tx
+          .select({ id: artworks.id })
+          .from(artworks)
+          .where(eq(artworks.kathaId, kathaId));
+        if (!artwork) return null;
+        return tx
+          .select(selection)
+          .from(nfcTags)
+          .innerJoin(artworks, eq(artworks.id, nfcTags.artworkId))
+          .where(eq(nfcTags.artworkId, artwork.id))
+          .orderBy(desc(nfcTags.assignedAt), desc(nfcTags.tagId))
+          .limit(100);
+      });
     },
     async assign(
       kathaId: string,
@@ -71,7 +88,8 @@ export function createNfcTagStore(db: Database) {
 }
 export type NfcTagStore = ReturnType<typeof createNfcTagStore>;
 
-// Public reads never expose draft bindings or administrative audit fields.
+// Public reads never expose administrative audit fields. Callers must not reveal
+// the Katha ID of an unpublished work; `published` lets them say "not yet".
 export function createNfcResolutionStore(db: Database, cluster: "LOCALNET" | "DEVNET") {
   return {
     async find(tagId: string) {
@@ -80,11 +98,15 @@ export function createNfcResolutionStore(db: Database, cluster: "LOCALNET" | "DE
           tagId: nfcTags.tagId,
           kathaId: artworks.kathaId,
           retiredAt: nfcTags.retiredAt,
+          published:
+            sql<boolean>`coalesce((${publicationPredicate(cluster)!}), false)`.mapWith(
+              Boolean,
+            ),
         })
         .from(nfcTags)
         .innerJoin(artworks, eq(artworks.id, nfcTags.artworkId))
         .innerJoin(artists, eq(artists.id, artworks.artistId))
-        .where(and(eq(nfcTags.tagId, tagId), publicationPredicate(cluster)))
+        .where(eq(nfcTags.tagId, tagId))
         .limit(1);
       return record ?? null;
     },

@@ -21,7 +21,7 @@ import { publicArtistDetailSchema } from "@katha/shared";
 import { createPublicArtists } from "../src/public-artists.js";
 import { randomUUID, createHash } from "node:crypto";
 import { createArtistStore } from "@katha/db";
-import { artistResponseSchema } from "@katha/shared";
+import { artistResponseSchema, artistSearchResponseSchema } from "@katha/shared";
 import { createArtists } from "../src/artists.js";
 import { createAuthorization } from "../src/authorization.js";
 import {
@@ -377,6 +377,35 @@ it("creates and manually verifies artists through real signed sessions with race
     expect(
       (
         await app.request(`/verifier/artists/${created.id}`, {
+          headers: { Authorization: `Bearer ${outsiderToken}` },
+        })
+      ).status,
+    ).toBe(403);
+    // Search matches name and slug parts case-insensitively, an exact record ID,
+    // and treats LIKE wildcards literally.
+    const search = async (query: string, token = adminToken, role = "admin") =>
+      artistSearchResponseSchema.parse(
+        await (
+          await app.request(`/${role}/artists?${new URLSearchParams({ query })}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        ).json(),
+      );
+    for (const query of ["FICTIONAL test", profile.slug.slice(-12), created.id]) {
+      const found = await search(query);
+      expect(found.items.map((item) => item.id)).toContain(created.id);
+      expect(found.pagination.total).toBeGreaterThanOrEqual(1);
+    }
+    expect((await search(created.id, verifierTokenA, "verifier")).items[0]?.id).toBe(
+      created.id,
+    );
+    for (const query of ["%", "_", created.id.slice(0, 8)])
+      expect((await search(query)).items.some((item) => item.id === created.id)).toBe(
+        false,
+      );
+    expect(
+      (
+        await app.request("/admin/artists?query=fictional", {
           headers: { Authorization: `Bearer ${outsiderToken}` },
         })
       ).status,
@@ -1234,6 +1263,9 @@ it("creates and edits private drafts with signed admin authorization, retry roll
       ).json(),
     );
     expect(one.pagination.hasMore).toBe(true);
+    // Every page reports the same total as the full unpublished list.
+    expect(one.pagination.total).toBe(overview.items.length);
+    expect(two.pagination.total).toBe(overview.items.length);
     expect(two.items[0]?.id).toBe(overview.items[1]?.id);
     expect(one.items[0]?.id).not.toBe(two.items[0]?.id);
     expect((await app.request("/admin/artworks")).status).toBe(401);

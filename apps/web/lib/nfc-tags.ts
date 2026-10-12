@@ -3,18 +3,28 @@ import type { WalletSessionController } from "./wallet-session.ts";
 import { WalletSessionApiError } from "./wallet-session-api.ts";
 
 // A tag reference is a URL identifier, not a hardware UID or authenticity proof.
+// `tags` lists every binding for this artwork, newest first; `tag` is the result
+// of the last assignment, lookup or retirement, which may name another artwork.
 export type NfcSnapshot = Readonly<{
-  busy: "assign" | "lookup" | "retire" | null;
+  busy: "load" | "assign" | "lookup" | "retire" | null;
+  tags: readonly NfcTagResponse[] | null;
   tag: NfcTagResponse | null;
   result: "assigned" | "lookup" | "retired" | null;
   error: string | null;
 }>;
 export const emptyNfcSnapshot: NfcSnapshot = {
   busy: null,
+  tags: null,
   tag: null,
   result: null,
   error: null,
 };
+function merge(tags: readonly NfcTagResponse[] | null, tag: NfcTagResponse) {
+  if (!tags) return null;
+  return [tag, ...tags.filter((item) => item.tagId !== tag.tagId)].sort((a, b) =>
+    b.assignedAt.localeCompare(a.assignedAt),
+  );
+}
 
 const messages: Record<WalletSessionApiError["code"], string> = {
   UNAUTHENTICATED: "Your session changed or expired. Sign in again.",
@@ -25,6 +35,7 @@ const messages: Record<WalletSessionApiError["code"], string> = {
   INVALID_REQUEST: "Katha rejected that tag reference. Check it and try again.",
   UNAVAILABLE:
     "The tag service couldn't confirm the result. Look the tag up before retrying.",
+  INSUFFICIENT_FUNDS: "The tag service couldn't complete that. Try again.",
 };
 
 export function parseTagId(value: string): string | null {
@@ -35,7 +46,12 @@ export function parseTagId(value: string): string | null {
 export function createNfcTags(
   session: Pick<
     WalletSessionController,
-    "getSnapshot" | "subscribe" | "assignNfcTag" | "readNfcTag" | "retireNfcTag"
+    | "getSnapshot"
+    | "subscribe"
+    | "listNfcTags"
+    | "assignNfcTag"
+    | "readNfcTag"
+    | "retireNfcTag"
   >,
   kathaId: string,
 ) {
@@ -59,10 +75,10 @@ export function createNfcTags(
       publish(emptyNfcSnapshot);
     }
   });
-  async function run(
+  async function run<T>(
     busy: NonNullable<NfcSnapshot["busy"]>,
-    result: NonNullable<NfcSnapshot["result"]>,
-    action: (signal: AbortSignal) => Promise<NfcTagResponse>,
+    action: (signal: AbortSignal) => Promise<T>,
+    done: (value: T) => NfcSnapshot,
   ) {
     if (disposed || state.busy || !session.getSnapshot().session) return;
     const version = ++generation;
@@ -70,9 +86,9 @@ export function createNfcTags(
     const signal = abort.signal;
     publish({ ...state, busy, error: null });
     try {
-      const tag = await action(signal);
+      const value = await action(signal);
       if (disposed || signal.aborted || version !== generation) return;
-      publish({ busy: null, tag, result, error: null });
+      publish(done(value));
     } catch (error) {
       if (disposed || signal.aborted || version !== generation) return;
       const code = error instanceof WalletSessionApiError ? error.code : "UNAVAILABLE";
@@ -87,6 +103,13 @@ export function createNfcTags(
         listeners.delete(fn);
       };
     },
+    load() {
+      return run(
+        "load",
+        (signal) => session.listNfcTags(kathaId, signal),
+        (list) => ({ ...state, busy: null, tags: list.items, error: null }),
+      );
+    },
     assign(value: string) {
       const tagId = parseTagId(value);
       if (!tagId) {
@@ -96,8 +119,16 @@ export function createNfcTags(
         });
         return Promise.resolve();
       }
-      return run("assign", "assigned", (signal) =>
-        session.assignNfcTag(kathaId, tagId, signal),
+      return run(
+        "assign",
+        (signal) => session.assignNfcTag(kathaId, tagId, signal),
+        (tag) => ({
+          busy: null,
+          tags: merge(state.tags, tag),
+          tag,
+          result: "assigned",
+          error: null,
+        }),
       );
     },
     lookup(value: string) {
@@ -109,15 +140,33 @@ export function createNfcTags(
         });
         return Promise.resolve();
       }
-      return run("lookup", "lookup", (signal) => session.readNfcTag(tagId, signal));
+      return run(
+        "lookup",
+        (signal) => session.readNfcTag(tagId, signal),
+        (tag) => ({
+          busy: null,
+          tags: tag.kathaId === kathaId ? merge(state.tags, tag) : state.tags,
+          tag,
+          result: "lookup",
+          error: null,
+        }),
+      );
     },
-    retire() {
-      const tag = state.tag;
-      // Only an active binding to this artwork can be retired from its workspace.
+    // Only an active binding to this artwork can be retired from its workspace.
+    retire(tagId: string) {
+      const tag = state.tags?.find((item) => item.tagId === tagId);
       if (!tag || tag.kathaId !== kathaId || tag.state !== "ACTIVE")
         return Promise.resolve();
-      return run("retire", "retired", (signal) =>
-        session.retireNfcTag(tag.tagId, signal),
+      return run(
+        "retire",
+        (signal) => session.retireNfcTag(tag.tagId, signal),
+        (retired) => ({
+          busy: null,
+          tags: merge(state.tags, retired),
+          tag: retired,
+          result: "retired",
+          error: null,
+        }),
       );
     },
     dispose() {

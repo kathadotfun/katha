@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { artworkDraftParamsSchema } from "@katha/shared";
-import { ArtworkWorkflowNav } from "../../../../components/artwork-workflow-nav";
+import {
+  ArtworkWorkflowNav,
+  ArtworkWorkflowProvider,
+} from "../../../../components/artwork-workflow-nav";
 
 export default async function ArtworkWorkflowLayout({
   children,
@@ -12,9 +15,9 @@ export default async function ArtworkWorkflowLayout({
   const parsed = artworkDraftParamsSchema.safeParse(await params);
   if (!parsed.success) notFound();
   return (
-    <>
+    <ArtworkWorkflowProvider kathaId={parsed.data.kathaId}>
       <ArtworkWorkflowNav kathaId={parsed.data.kathaId} />
       <div className="mt-8">{children}</div>
-    </>
+    </ArtworkWorkflowProvider>
   );
 }

@@ -260,6 +260,18 @@ async function fixture(
     retireNfcTag: async () => {
       throw new Error("Unexpected NFC retirement");
     },
+    listNfcTags: async () => {
+      throw new Error("Unexpected NFC retirement");
+    },
+    readArtworkWorkflow: async () => {
+      throw new Error("Unexpected NFC retirement");
+    },
+    searchArtists: async () => {
+      throw new Error("Unexpected NFC retirement");
+    },
+    cancelDelivery: async () => {
+      throw new Error("Unexpected NFC retirement");
+    },
     readArtworkDraft: async () => {
       throw new Error("Unused");
     },

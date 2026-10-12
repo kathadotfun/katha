@@ -2,6 +2,7 @@ import type { NfcTagRecord, NfcTagStore } from "@katha/db";
 import {
   nfcArtworkParamsSchema,
   nfcTagAssignmentRequestSchema,
+  nfcTagListResponseSchema,
   nfcTagParamsSchema,
   nfcTagResponseSchema,
   type WalletSession,
@@ -27,6 +28,16 @@ export function createNfcTags(store: NfcTagStore) {
       const record = await store.get(tagId(value));
       if (!record) throw new DomainError("NOT_FOUND");
       return response(record);
+    },
+    async list(kathaId: string) {
+      const path = nfcArtworkParamsSchema.safeParse({ kathaId });
+      if (!path.success) throw new DomainError("INVALID_REQUEST");
+      const records = await store.listByArtwork(path.data.kathaId);
+      if (!records) throw new DomainError("NOT_FOUND");
+      return nfcTagListResponseSchema.parse({
+        kathaId: path.data.kathaId,
+        items: records.map(response),
+      });
     },
     async assign(kathaId: string, input: unknown, session: WalletSession) {
       const path = nfcArtworkParamsSchema.safeParse({ kathaId });

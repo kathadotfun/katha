@@ -201,6 +201,7 @@ export async function runPublicBrowsingJourneys({
               limit: 20,
               offset,
               hasMore: draftMode === "READY" && offset === 0,
+              total: draftMode === "EMPTY" ? 0 : 21,
             },
           },
         });
@@ -273,6 +274,52 @@ export async function runPublicBrowsingJourneys({
           json: { artwork: savedArtwork, editable: !freezeDraft },
         });
       });
+      // Tag bindings and workflow markers for the artwork workspace.
+      let nfcListReads = 0,
+        workflowReads = 0;
+      await context.route(`${apiOrigin}/admin/artworks/*/nfc-tags`, async (route) => {
+        if (route.request().method() === "OPTIONS")
+          return route.fulfill({ status: 204, headers: adminHeaders });
+        assert.equal(
+          route.request().headers().authorization,
+          `Bearer ${"a".repeat(64)}`,
+        );
+        nfcListReads++;
+        const kathaId = new URL(route.request().url()).pathname.split("/")[3];
+        return route.fulfill({ headers: adminHeaders, json: { kathaId, items: [] } });
+      });
+      for (const role of ["admin", "verifier"])
+        await context.route(
+          `${apiOrigin}/${role}/artworks/*/workflow`,
+          async (route) => {
+            if (route.request().method() === "OPTIONS")
+              return route.fulfill({ status: 204, headers: adminHeaders });
+            assert.equal(
+              route.request().headers().authorization,
+              `Bearer ${"a".repeat(64)}`,
+            );
+            workflowReads++;
+            const kathaId = new URL(route.request().url()).pathname.split("/")[3];
+            return route.fulfill({
+              headers: adminHeaders,
+              json: {
+                kathaId,
+                minted: false,
+                published: false,
+                steps: {
+                  documentation: "COMPLETE",
+                  registration: "PENDING",
+                  verification: "NOT_STARTED",
+                  condition: "NOT_STARTED",
+                  custody: "NOT_STARTED",
+                  media: "PENDING",
+                  minting: "NOT_STARTED",
+                  metadata: "NOT_STARTED",
+                },
+              },
+            });
+          },
+        );
       const registration = await registrationFixture();
       let registrationPage = { ...registration.page, metadata: null };
       let metadataCalls = 0,
@@ -1104,7 +1151,9 @@ export async function runPublicBrowsingJourneys({
         exact: true,
       });
       await expect(approveArtist).toBeDisabled();
-      await main.getByLabel("Artist record ID", { exact: true }).fill(savedArtist.id);
+      await main
+        .getByLabel("Name, slug or record ID", { exact: true })
+        .fill(savedArtist.id);
       await main.getByRole("button", { name: "Look up", exact: true }).click();
       await expect(savedArtistPanel).toContainText(savedArtist.id);
       await expect(approveArtist).toBeDisabled();
@@ -1185,9 +1234,20 @@ export async function runPublicBrowsingJourneys({
       await expect(main.locator('[name="story"]')).toHaveValue(
         "Approved synthetic cultural story",
       );
+      // Tab markers come from the workflow read; the tag panel lists bindings.
+      await expect(
+        main
+          .getByRole("navigation", { name: "Artwork workflows" })
+          .getByRole("link", { name: "Documentation, done" }),
+      ).toBeVisible();
+      await expect(main).toContainText("No tag yet");
+      assert.ok(workflowReads > 0);
+      assert.ok(nfcListReads > 0);
       await audit("draft editor loaded by permanent ID");
       const workflows = main.getByRole("navigation", { name: "Artwork workflows" });
-      const tab = (name) => workflows.getByRole("link", { name, exact: true }).click();
+      // Tab names end with their status (", done", ", in progress", ", not started").
+      const tab = (name) =>
+        workflows.getByRole("link", { name: new RegExp(`^${name}(,|$)`) }).click();
       const documentation = main.locator("#documentation-form");
       await main.locator('[name="story"]').fill("Revised synthetic cultural story");
       await expect(main).toContainText("You have unsaved changes");

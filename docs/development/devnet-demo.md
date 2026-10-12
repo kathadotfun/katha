@@ -278,7 +278,7 @@ POST /admin/nfc-tags/{tagId}/retire       {}
 
 1. Generate and retain one tag UUID. Confirm ACTIVE and the intended Katha ID.
 2. An anonymous GET to `<api-origin>/nfc/{tagId}` must return 302 with Location
-   `<web-origin>/art/{same-id}` and no-store. Unknown tag: 404; published retired
+   `<web-origin>/art/{same-id}?source=nfc` and no-store. Unknown tag: 404; published retired
    tag: 410. Do not assign a query-string redirect override.
 3. On the phone, first open both origins and the resolver URL manually. Write one
    NDEF URI record containing the **API resolver URL**, not the direct artwork URL.

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import {
   OperationSimulationError,
+  PaymentFundsError,
   PaymentValidationError,
   type MarketplacePaymentSettlement,
   type PaymentPreparation,
@@ -175,4 +176,16 @@ it("preserves unknown and failed receipts and rejects tampered signed preparatio
     f.provider.verify("Bearer test", prepared, "tampered-wire"),
   ).rejects.toMatchObject({ code: "CONFLICT" });
   expect(f.prepare).not.toHaveBeenCalled();
+});
+
+it("reports a buyer balance shortfall as its own domain error", async () => {
+  const f = fixture();
+  f.prepare.mockRejectedValueOnce(new PaymentFundsError());
+  await expect(
+    f.provider.prepare("Bearer test", f.state, f.input, f.versions),
+  ).rejects.toMatchObject({ code: "INSUFFICIENT_FUNDS" });
+  f.prepare.mockRejectedValueOnce(new PaymentValidationError());
+  await expect(
+    f.provider.prepare("Bearer test", f.state, f.input, f.versions),
+  ).rejects.toMatchObject({ code: "CONFLICT" });
 });

@@ -7,8 +7,8 @@ import { Badge, FieldTag, Notice } from "./ui/status";
 
 const noop = () => () => {};
 
-// TODO(nfc): the API has no "tags for this artwork" read, so the module shows the
-// tag an operator assigns or looks up in this session rather than listing bindings.
+// Lists every tag bound to this artwork. A tag points to the record; it never
+// proves authenticity, ownership or custody.
 export function NfcTagPanel({
   kathaId,
   title,
@@ -26,6 +26,9 @@ export function NfcTagPanel({
     setNfc(current);
     return () => current.dispose();
   }, [session, kathaId]);
+  useEffect(() => {
+    void nfc?.load();
+  }, [nfc]);
   const state = useSyncExternalStore(
     nfc?.subscribe ?? noop,
     nfc?.getSnapshot ?? (() => emptyNfcSnapshot),
@@ -34,16 +37,20 @@ export function NfcTagPanel({
   const [assignValue, setAssignValue] = useState("");
   const [lookupValue, setLookupValue] = useState("");
   const [confirming, setConfirming] = useState(false);
-  const tag = state.tag;
-  const ours = tag?.kathaId === kathaId;
-  const active = ours && tag?.state === "ACTIVE";
-  const badge = !tag
-    ? ["neu", "No tag shown"]
-    : !ours
-      ? ["warn", "Bound elsewhere"]
-      : tag.state === "ACTIVE"
+  const result = state.tag;
+  // The current binding comes from the artwork's list, never from a lookup of
+  // a tag that belongs to another work.
+  const tag = state.tags?.find((item) => item.state === "ACTIVE") ?? null;
+  const active = tag !== null;
+  const retired = state.tags?.filter((item) => item.state === "RETIRED") ?? [];
+  const badge =
+    state.tags === null
+      ? ["neu", state.busy === "load" ? "Checking" : "Not loaded"]
+      : tag
         ? ["ok", "Active"]
-        : ["err", "Retired"];
+        : retired.length
+          ? ["warn", "No active tag"]
+          : ["neu", "No tag yet"];
   return (
     <section
       className="panel cut flex flex-col gap-4"
@@ -75,18 +82,7 @@ export function NfcTagPanel({
             </div>
             <div className="kv kv-ops">
               <dt>State</dt>
-              <dd>
-                {tag.state === "ACTIVE"
-                  ? `Active since ${localDateTime(tag.assignedAt)}`
-                  : `Retired ${localDateTime(tag.retiredAt!)}. Scans no longer open a record.`}
-                {!ours && (
-                  <>
-                    {" "}
-                    · bound to <span className="id">{tag.kathaId}</span>, not this
-                    artwork
-                  </>
-                )}
-              </dd>
+              <dd>Active since {localDateTime(tag.assignedAt)}</dd>
             </div>
             <div className="kv kv-ops">
               <dt>Tag link</dt>
@@ -97,32 +93,57 @@ export function NfcTagPanel({
           </>
         )}
       </dl>
+      {retired.length > 0 && (
+        <details className="more">
+          <summary>Retired tags ({retired.length})</summary>
+          <ul className="m-0 mt-2 flex list-none flex-col gap-1.5 p-0">
+            {retired.map((item) => (
+              <li key={item.tagId} className="sm">
+                <span className="id">{item.tagId}</span>, retired{" "}
+                {localDateTime(item.retiredAt!)}. Scans say the tag is retired.
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {state.tags === null && !state.busy && (
+        <button
+          type="button"
+          className="lnk self-start"
+          onClick={() => void nfc?.load()}
+        >
+          Load tags
+        </button>
+      )}
       {state.error && (
         <p role="alert" className="ferr">
           {state.error}
         </p>
       )}
-      {state.result === "assigned" && tag && (
+      {state.result === "assigned" && result && (
         <Notice tone="ok">
           <p>
-            <strong>Tag {tag.tagId} assigned.</strong> Tap it with a phone to check it
-            opens this record.
+            <strong>Tag {result.tagId} assigned.</strong> Tap it with a phone to check
+            it opens this record.
           </p>
         </Notice>
       )}
-      {state.result === "lookup" && tag && (
+      {state.result === "lookup" && result && (
         <Notice tone="info">
           <p>
-            <strong>Lookup result:</strong> <span className="id">{tag.tagId}</span> is
-            bound to <span className="id">{tag.kathaId}</span>,{" "}
-            {tag.state === "ACTIVE"
-              ? `active since ${localDateTime(tag.assignedAt)}`
-              : `retired ${localDateTime(tag.retiredAt!)}`}
+            <strong>Lookup result:</strong> <span className="id">{result.tagId}</span>{" "}
+            is bound to <span className="id">{result.kathaId}</span>
+            {result.kathaId === kathaId
+              ? " (this artwork)"
+              : ", not this artwork"},{" "}
+            {result.state === "ACTIVE"
+              ? `active since ${localDateTime(result.assignedAt)}`
+              : `retired ${localDateTime(result.retiredAt!)}`}
             .
           </p>
         </Notice>
       )}
-      {state.result === "retired" && tag && (
+      {state.result === "retired" && result && (
         <Notice tone="neu" icon="info">
           <p>
             <strong>Tag retired.</strong> Scans now report that the tag has been
@@ -153,7 +174,7 @@ export function NfcTagPanel({
               disabled={state.busy !== null}
               onClick={() => {
                 setConfirming(false);
-                void nfc?.retire();
+                void nfc?.retire(tag!.tagId);
               }}
             >
               Retire tag
@@ -186,7 +207,7 @@ export function NfcTagPanel({
         >
           <div className="fld" style={{ flex: "1 1 260px" }}>
             <label className="lbl" htmlFor="nfc-assign">
-              {tag && ours ? "New tag reference" : "Tag reference"}{" "}
+              {retired.length ? "New tag reference" : "Tag reference"}{" "}
               <FieldTag kind="req" />
             </label>
             <input

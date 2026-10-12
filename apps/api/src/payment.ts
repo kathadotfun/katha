@@ -5,7 +5,11 @@ import type {
   PaymentPreparation,
   MarketplacePaymentSettlement,
 } from "@katha/solana";
-import { PaymentValidationError, OperationSimulationError } from "@katha/solana";
+import {
+  PaymentFundsError,
+  PaymentValidationError,
+  OperationSimulationError,
+} from "@katha/solana";
 import type { WalletSessionBoundary } from "./wallet-session.js";
 import { DomainError } from "./errors.js";
 
@@ -60,6 +64,8 @@ export function createDevnetPaymentProvider(
         );
         return { ...prepared, walletId: session.walletId };
       } catch (error) {
+        if (error instanceof PaymentFundsError)
+          throw new DomainError("INSUFFICIENT_FUNDS");
         if (
           error instanceof TypeError ||
           error instanceof PaymentValidationError ||

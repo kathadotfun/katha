@@ -7,7 +7,7 @@ import {
 export function createArtworkDiscovery(store: PublicArtworkStore) {
   return {
     async list(query: ArtworkDiscoveryQuery) {
-      const records = await store.list(query);
+      const { rows: records, total } = await store.list(query);
       // Explicit projection also protects against future private columns on storage results.
       return artworkDiscoveryResponseSchema.parse({
         items: records.slice(0, query.limit).map((record) => ({
@@ -34,6 +34,7 @@ export function createArtworkDiscovery(store: PublicArtworkStore) {
           limit: query.limit,
           offset: query.offset,
           hasMore: records.length > query.limit,
+          total,
         },
       });
     },

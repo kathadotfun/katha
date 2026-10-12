@@ -45,8 +45,15 @@ type DiscoveryQuery = {
 export function createPublicArtworkStore(db: Database, cluster: "LOCALNET" | "DEVNET") {
   return {
     async list({ limit, offset, category, artistId }: DiscoveryQuery) {
-      return db
+      const where = and(
+        publicationPredicate(cluster),
+        category === undefined ? undefined : eq(artworks.category, category),
+        artistId === undefined ? undefined : eq(artworks.artistId, artistId),
+      );
+      const rows = await db
         .select({
+          // Window count runs before LIMIT, so the page and total share one snapshot.
+          total: sql<number>`count(*) over ()`.mapWith(Number),
           kathaId: artworks.kathaId,
           category: artworks.category,
           title: artworks.title,
@@ -75,16 +82,18 @@ export function createPublicArtworkStore(db: Database, cluster: "LOCALNET" | "DE
             eq(artworkMedia.visibility, "PUBLIC"),
           ),
         )
-        .where(
-          and(
-            publicationPredicate(cluster),
-            category === undefined ? undefined : eq(artworks.category, category),
-            artistId === undefined ? undefined : eq(artworks.artistId, artistId),
-          ),
-        )
+        .where(where)
         .orderBy(asc(artworks.kathaId))
         .limit(limit + 1)
         .offset(offset);
+      if (rows.length) return { rows, total: rows[0]!.total };
+      // A page past the end has no rows to carry the window count.
+      const [counted] = await db
+        .select({ total: sql<number>`count(*)`.mapWith(Number) })
+        .from(artworks)
+        .innerJoin(artists, eq(artists.id, artworks.artistId))
+        .where(where);
+      return { rows, total: counted?.total ?? 0 };
     },
   };
 }

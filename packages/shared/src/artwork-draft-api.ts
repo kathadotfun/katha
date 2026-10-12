@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { artworkCategorySchema, kathaIdSchema } from "./artwork-identity.js";
-import { paginatedResponseSchema, paginationQuerySchema } from "./http.js";
+import { countedPaginatedResponseSchema, paginationQuerySchema } from "./http.js";
 import { artistIdParamsSchema } from "./artist-api.js";
 import {
   artworkDimensionsSchema,
@@ -128,7 +128,7 @@ export const artworkDraftListItemSchema = z
     path: ["kathaId"],
     error: "Category must match permanent ID",
   });
-export const artworkDraftListResponseSchema = paginatedResponseSchema(
+export const artworkDraftListResponseSchema = countedPaginatedResponseSchema(
   artworkDraftListItemSchema,
 ).refine(
   ({ items }) => new Set(items.map((item) => item.kathaId)).size === items.length,

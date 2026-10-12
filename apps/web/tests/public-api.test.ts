@@ -3,6 +3,11 @@ import { test } from "node:test";
 import { createPublicApi, PublicApiError, publicApiOrigin } from "../lib/public-api.ts";
 
 const emptyPage = { items: [], pagination: { limit: 20, offset: 0, hasMore: false } };
+// Artwork discovery pages also carry the matching total.
+const emptyArtworkPage = {
+  items: [],
+  pagination: { limit: 20, offset: 0, hasMore: false, total: 0 },
+};
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -39,10 +44,10 @@ test("discovery validates filters and sends fresh public reads without cookies o
       assert.equal(init?.redirect, "error");
       assert.equal(init?.cache, "no-store");
       assert.deepEqual(init?.headers, { Accept: "application/json" });
-      return json(emptyPage);
+      return json(emptyArtworkPage);
     },
   });
-  assert.deepEqual(await api.artworks({ category: "PAUBHA" }), emptyPage);
+  assert.deepEqual(await api.artworks({ category: "PAUBHA" }), emptyArtworkPage);
 });
 
 test("invalid identities and filters fail before making any request", () => {

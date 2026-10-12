@@ -52,6 +52,13 @@ import {
   collectorDeliveryReviewSchema,
   fulfillmentCreateRequestSchema,
   fulfillmentReceiptRequestSchema,
+  fulfillmentCancellationRequestSchema,
+  type FulfillmentCancellationRequest,
+  nfcTagListResponseSchema,
+  artworkWorkflowResponseSchema,
+  artistSearchQuerySchema,
+  artistSearchResponseSchema,
+  apiErrorResponseSchema,
   type FulfillmentCreateRequest,
   type FulfillmentReceiptRequest,
   fulfillmentResponseSchema,
@@ -112,23 +119,17 @@ import {
 } from "@katha/shared";
 import { publicApiOrigin } from "./public-api.ts";
 
+export type WalletSessionApiErrorCode =
+  | "UNAUTHENTICATED"
+  | "FORBIDDEN"
+  | "CONFLICT"
+  | "INSUFFICIENT_FUNDS"
+  | "NOT_FOUND"
+  | "INVALID_REQUEST"
+  | "UNAVAILABLE";
 export class WalletSessionApiError extends Error {
-  readonly code:
-    | "UNAUTHENTICATED"
-    | "FORBIDDEN"
-    | "CONFLICT"
-    | "NOT_FOUND"
-    | "INVALID_REQUEST"
-    | "UNAVAILABLE";
-  constructor(
-    code:
-      | "UNAUTHENTICATED"
-      | "FORBIDDEN"
-      | "CONFLICT"
-      | "NOT_FOUND"
-      | "INVALID_REQUEST"
-      | "UNAVAILABLE",
-  ) {
+  readonly code: WalletSessionApiErrorCode;
+  constructor(code: WalletSessionApiErrorCode) {
     super("Wallet session request failed.");
     this.code = code;
   }
@@ -176,6 +177,17 @@ export function createWalletSessionApi(
       415: "INVALID_REQUEST",
     } as const;
     const code = codes[response.status as keyof typeof codes];
+    // A conflict may name a more specific, safe cause; anything else stays CONFLICT.
+    if (code === "CONFLICT") {
+      const body = apiErrorResponseSchema.safeParse(
+        await response.json().catch(() => null),
+      );
+      throw new WalletSessionApiError(
+        body.success && body.data.error.code === "INSUFFICIENT_FUNDS"
+          ? "INSUFFICIENT_FUNDS"
+          : "CONFLICT",
+      );
+    }
     if (code) throw new WalletSessionApiError(code);
     if (
       !response.ok ||
@@ -269,6 +281,25 @@ export function createWalletSessionApi(
         result.kathaId !== kathaId ||
         result.kind !== "DELIVERY"
       )
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async cancelDelivery(
+      id: string,
+      input: FulfillmentCancellationRequest,
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = fulfillmentIdParamsSchema.parse({ requestId: id });
+      const result = fulfillmentResponseSchema.parse(
+        await request(
+          `/fulfillment/${path.requestId}/cancel`,
+          fulfillmentCancellationRequestSchema.parse(input),
+          token,
+          signal,
+        ),
+      );
+      if (result.id !== id || result.status !== "CANCELLED")
         throw new WalletSessionApiError("UNAVAILABLE");
       return result;
     },
@@ -904,6 +935,41 @@ export function createWalletSessionApi(
         throw new WalletSessionApiError("UNAVAILABLE");
       return result;
     },
+    async listNfcTags(kathaId: string, token: string, signal: AbortSignal) {
+      const path = nfcArtworkParamsSchema.parse({ kathaId });
+      const result = nfcTagListResponseSchema.parse(
+        await request(
+          `/admin/artworks/${path.kathaId}/nfc-tags`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async readArtworkWorkflow(
+      kathaId: string,
+      role: "admin" | "verifier",
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const path = artworkDraftParamsSchema.parse({ kathaId });
+      const result = artworkWorkflowResponseSchema.parse(
+        await request(
+          `/${role}/artworks/${path.kathaId}/workflow`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (result.kathaId !== path.kathaId)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
     async readNfcTag(tagId: string, token: string, signal: AbortSignal) {
       const path = nfcTagParamsSchema.parse({ tagId });
       const result = nfcTagResponseSchema.parse(
@@ -1012,6 +1078,34 @@ export function createWalletSessionApi(
         ),
       );
       if (result.verificationStatus !== "UNVERIFIED" || result.slug !== input.slug)
+        throw new WalletSessionApiError("UNAVAILABLE");
+      return result;
+    },
+    async searchArtists(
+      query: string,
+      page: Pagination,
+      role: "admin" | "verifier",
+      token: string,
+      signal: AbortSignal,
+    ) {
+      const checked = artistSearchQuerySchema.parse({
+        query,
+        limit: String(page.limit),
+        offset: String(page.offset),
+      });
+      const result = artistSearchResponseSchema.parse(
+        await request(
+          `/${role}/artists?${new URLSearchParams({ query: checked.query, limit: String(checked.limit), offset: String(checked.offset) })}`,
+          undefined,
+          token,
+          signal,
+          "GET",
+        ),
+      );
+      if (
+        result.pagination.limit !== checked.limit ||
+        result.pagination.offset !== checked.offset
+      )
         throw new WalletSessionApiError("UNAVAILABLE");
       return result;
     },

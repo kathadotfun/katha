@@ -27,6 +27,16 @@ is retained in the active controller. If the request was saved, it appears in th
 list. A new UUID does not bypass the open-delivery guard. No contact/address data
 belongs in public metadata, URL parameters, logs or Git.
 
+## Cancel a request
+
+Until Katha dispatches it, the original requester can withdraw a request with
+**Cancel request** and the confirmation that follows. The browser posts
+`POST /fulfillment/:requestId/cancel` with the saved version and
+`cancellationConfirmed: true`. The API requires the requester's session and current
+Core ownership, accepts only `REQUESTED` or `APPROVED`, and returns 409 for stale
+versions or later statuses. Cancelling changes no custody, ownership or chain
+record; a new request can follow.
+
 ## Reporting receipt
 
 Katha operators approve and dispatch requests using the existing

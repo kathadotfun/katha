@@ -13,6 +13,7 @@ import { parseArtistForm } from "../lib/artist-form";
 import { localDateTime, shortAddress } from "../lib/format";
 import { signInHref } from "../lib/return-path";
 import { Badge, FieldTag, Icon, Notice } from "./ui/status";
+import { CopyButton } from "./ui/copy-button";
 
 const emptySubscribe = () => () => {};
 const serverAuth = () => signedOutSnapshot;
@@ -114,19 +115,22 @@ function OnboardingForms({
     setErrors({});
     await onboarding?.create(parsed.data);
   }
+  // A record ID opens the profile directly; anything else searches names and slugs.
   function read(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const parsed = artistIdParamsSchema.safeParse({
-      artistId: new FormData(event.currentTarget).get("artistId"),
-    });
-    if (!parsed.success) {
-      setIdError("Enter the artist record ID returned when the profile was created.");
+    const value = String(
+      new FormData(event.currentTarget).get("artistId") ?? "",
+    ).trim();
+    const parsed = artistIdParamsSchema.safeParse({ artistId: value });
+    if (!value || value.length > 160) {
+      setIdError("Enter part of the artist's name or slug, or their record ID.");
       event.currentTarget.querySelector<HTMLInputElement>("input")?.focus();
       return;
     }
     setIdError(null);
     setConfirmed(false);
-    void onboarding?.read(parsed.data.artistId);
+    if (parsed.success && verifier) void onboarding?.read(parsed.data.artistId);
+    else void onboarding?.search(value);
   }
   if (state.status === "denied")
     return (
@@ -529,7 +533,7 @@ function OnboardingForms({
           <form className="flex items-end gap-2" onSubmit={read} noValidate>
             <div className="fld flex-1">
               <label className="lbl" htmlFor="artist-review-id">
-                Artist record ID
+                Name, slug or record ID
               </label>
               <input
                 id="artist-review-id"
@@ -538,14 +542,16 @@ function OnboardingForms({
                 type="text"
                 autoComplete="off"
                 spellCheck={false}
-                maxLength={36}
+                maxLength={160}
                 aria-invalid={idError ? true : undefined}
                 aria-describedby={idError ? "artist-id-error" : "artist-id-help"}
                 disabled={!!state.busy}
               />
             </div>
             <button className="btn btn-o" type="submit" disabled={!!state.busy}>
-              {state.busy === "read" ? "Looking up…" : "Look up"}
+              {state.busy === "read" || state.busy === "search"
+                ? "Looking up…"
+                : "Look up"}
             </button>
           </form>
           {idError ? (
@@ -554,8 +560,64 @@ function OnboardingForms({
             </p>
           ) : (
             <p id="artist-id-help" className="help -mt-2.5">
-              The ID returned when the profile was created.
+              Part of a name or slug finds matching artists. A record ID opens the
+              profile{verifier ? "" : " in the list"}.
             </p>
+          )}
+          {state.search && (
+            <section aria-labelledby="artist-results" className="flex flex-col gap-2">
+              <p id="artist-results" className="sm mut m-0" role="status">
+                {state.search.results.pagination.total === 0
+                  ? `No artists match “${state.search.query}”.`
+                  : `${state.search.results.pagination.total} ${state.search.results.pagination.total === 1 ? "artist matches" : "artists match"} “${state.search.query}”${state.search.results.pagination.hasMore ? "; showing the first 20" : ""}.`}
+              </p>
+              {state.search.results.items.length > 0 && (
+                <ul className="m-0 flex list-none flex-col gap-2 p-0">
+                  {state.search.results.items.map((item) => (
+                    <li
+                      key={item.id}
+                      className="inset flex flex-wrap items-center justify-between gap-x-4 gap-y-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="m-0 font-semibold">{item.displayName}</p>
+                        <p className="xs mut m-0">
+                          {item.slug} · {item.region}
+                        </p>
+                        <p className="xs id m-0">{item.id}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge
+                          tone={item.verificationStatus === "VERIFIED" ? "ok" : "warn"}
+                        >
+                          {item.verificationStatus === "VERIFIED"
+                            ? "Verified"
+                            : "Not verified"}
+                        </Badge>
+                        <CopyButton
+                          value={item.id}
+                          label={`Copy record ID for ${item.displayName}`}
+                          text="Copy ID"
+                        />
+                        {verifier && (
+                          <button
+                            type="button"
+                            className="btn btn-o btn-sm"
+                            disabled={!!state.busy}
+                            onClick={() => {
+                              setConfirmed(false);
+                              void onboarding?.read(item.id);
+                            }}
+                            aria-label={`Review ${item.displayName}`}
+                          >
+                            Review
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           )}
           {state.artist && (
             <article

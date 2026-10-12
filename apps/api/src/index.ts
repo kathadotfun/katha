@@ -8,6 +8,7 @@ import { createDevnetPaymentProvider } from "./payment.js";
 import {
   createMarketplacePurchaseReader,
   createMarketplacePaymentSettlement,
+  createPaymentBalanceReader,
 } from "@katha/solana";
 import { createArtworkListings } from "./artwork-listings.js";
 import { createMarketplaceListingStore } from "@katha/db";
@@ -28,6 +29,8 @@ import { createArtworkMedia } from "./artwork-media.js";
 import { createNfcResolution } from "./nfc-resolution.js";
 import { createNfcResolutionStore } from "@katha/db";
 import { createNfcTags } from "./nfc-tags.js";
+import { createArtworkWorkflow } from "./artwork-workflow.js";
+import { createArtworkWorkflowStore } from "@katha/db";
 import { createNfcTagStore } from "@katha/db";
 import { createArtworkProvenance } from "./artwork-provenance.js";
 import { createPublicProvenanceStore } from "@katha/db";
@@ -331,6 +334,7 @@ function startApi() {
             createOperationChain(rpcConfig),
             createOperationReceiptReader(rpcConfig),
             { cluster: config.KATHA_CLUSTER, paymentMint },
+            createPaymentBalanceReader(rpcConfig),
           ),
         ),
       config.KATHA_CLUSTER,
@@ -355,6 +359,12 @@ function startApi() {
       createConditionAttestationReader(rpcConfig),
       createMarketplaceListingReader(rpcConfig),
       config.KATHA_CLUSTER,
+    ),
+    createArtworkWorkflow(
+      createArtworkWorkflowStore(
+        database.db,
+        config.KATHA_CLUSTER === "localnet" ? "LOCALNET" : "DEVNET",
+      ),
     ),
   );
   const port = config.API_PORT;

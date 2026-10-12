@@ -17,6 +17,7 @@ import type { TransactionLifecycle } from "./transaction-lifecycle.ts";
 import type { WalletSessionController } from "./wallet-session.ts";
 import type { WalletConnection } from "./wallet-connection.ts";
 import type { createPublicApi } from "./public-api.ts";
+import { WalletSessionApiError } from "./wallet-session-api.ts";
 
 export function testTokenAmount(units: string) {
   const value = BigInt(tokenAmountSchema.parse(units));
@@ -82,6 +83,9 @@ export type PurchaseQuoteSnapshot = Readonly<{
   collection: string | null;
   preparing: boolean;
   preparationError: string | null;
+  // Set when the server says the buyer's test-token balance is short, so the
+  // page can say what to fix instead of suggesting the listing is gone.
+  insufficientFunds: boolean;
 }>;
 export const emptyPurchaseQuote: PurchaseQuoteSnapshot = {
   status: "locked",
@@ -90,7 +94,10 @@ export const emptyPurchaseQuote: PurchaseQuoteSnapshot = {
   collection: null,
   preparing: false,
   preparationError: null,
+  insufficientFunds: false,
 };
+const shortOfFunds = (error: unknown) =>
+  error instanceof WalletSessionApiError && error.code === "INSUFFICIENT_FUNDS";
 export function createPurchaseQuote(
   session: Pick<
     WalletSessionController,
@@ -177,11 +184,12 @@ export function createPurchaseQuote(
         if (disposed || signal.aborted || version !== generation) return;
         // Clear the actionable preview: a new review must obtain current terms.
         publish({ ...emptyPurchaseQuote, status: "locked" });
-      } catch {
+      } catch (error) {
         if (!disposed && !signal.aborted && version === generation)
           publish({
             ...emptyPurchaseQuote,
             status: "unavailable",
+            insufficientFunds: shortOfFunds(error),
             preparationError:
               "Purchase preparation did not complete. The quote may be stale; refresh current terms and check any pending signature before trying again.",
           });
@@ -227,9 +235,13 @@ export function createPurchaseQuote(
           ));
         if (disposed || signal.aborted || version !== generation) return;
         publish({ ...emptyPurchaseQuote, status: "ready", ...checked, collection });
-      } catch {
+      } catch (error) {
         if (!disposed && !signal.aborted && version === generation)
-          publish({ ...emptyPurchaseQuote, status: "unavailable" });
+          publish({
+            ...emptyPurchaseQuote,
+            status: "unavailable",
+            insufficientFunds: shortOfFunds(error),
+          });
       }
     },
     dispose() {

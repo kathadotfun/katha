@@ -1,5 +1,6 @@
 import {
   address,
+  type Address,
   assertIsTransactionWithinSizeLimit,
   getTransactionDecoder,
   getTransactionEncoder,
@@ -8,7 +9,9 @@ import {
   getSignatureFromTransaction,
 } from "@solana/kit";
 import { sha256Hex, listingPriceSchema, kathaIdSchema } from "@katha/shared";
+import { fetchMaybeToken, TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import {
+  associatedTokens,
   buildPurchaseListingTransaction,
   type MarketplacePurchaseAccounts,
   type MarketplacePurchaseInput,
@@ -30,7 +33,11 @@ import {
   parsePurchaseListingInstruction,
 } from "./generated/marketplace/index.js";
 import { findArtworkPda } from "./generated/registry/index.js";
-import type { WalletTransactionVersion } from "./client.js";
+import {
+  createKathaRpcClient,
+  type KathaRpcConfig,
+  type WalletTransactionVersion,
+} from "./client.js";
 
 export interface PaymentArtworkState {
   /** Server-fetched snapshots and chain clock; never browser-supplied accounts. */
@@ -41,6 +48,37 @@ export type PaymentPurchaseInput = Omit<
   MarketplacePurchaseInput,
   "buyerAddress" | "paymentMintAddress"
 >;
+// The buyer's canonical payment-token account is missing or holds less than the price.
+export class PaymentFundsError extends Error {
+  constructor() {
+    super("Buyer payment balance is insufficient");
+    this.name = "PaymentFundsError";
+  }
+}
+/** Null means the owner has no canonical token account for the mint. */
+export type PaymentBalanceReader = (
+  owner: Address,
+  mint: Address,
+) => Promise<bigint | null>;
+export function createPaymentBalanceReader(
+  config: KathaRpcConfig,
+): PaymentBalanceReader {
+  const { rpc } = createKathaRpcClient(config);
+  return async (owner, mint) => {
+    const account = await fetchMaybeToken(rpc, await associatedTokens(owner, mint), {
+      commitment: "confirmed",
+      abortSignal: AbortSignal.timeout(10_000),
+    });
+    if (!account.exists) return null;
+    if (
+      account.programAddress !== TOKEN_PROGRAM_ADDRESS ||
+      account.data.owner !== owner ||
+      account.data.mint !== mint
+    )
+      throw new TypeError("Unexpected payment token account");
+    return account.data.amount;
+  };
+}
 export class PaymentValidationError extends Error {
   constructor() {
     super("Payment operation does not match preparation");
@@ -76,6 +114,7 @@ export function createMarketplacePaymentSettlement(
   chain: OperationChain,
   readReceipt: OperationReceiptReader,
   config: { cluster: "localnet" | "devnet"; paymentMint: string },
+  readBalance?: PaymentBalanceReader,
 ) {
   if (config.cluster !== "localnet" && config.cluster !== "devnet")
     throw new PaymentValidationError();
@@ -97,6 +136,16 @@ export function createMarketplacePaymentSettlement(
         context.feePayerAddress !== wallet
       )
         throw new PaymentValidationError();
+      // A short balance is a buyer problem, not an unavailable listing; say so
+      // before simulation turns it into a generic rejection.
+      if (readBalance) {
+        const balance = await readBalance(wallet, mint);
+        if (
+          balance === null ||
+          balance < BigInt(listingPriceSchema.parse(input.expectedPrice))
+        )
+          throw new PaymentFundsError();
+      }
       const prepared = await buildPurchaseListingTransaction(
         { ...context, chainTime: state.chainTime },
         state.accounts,

@@ -25,10 +25,18 @@ const row = {
   },
   authorshipEvidenceHash: "PRIVATE-EVIDENCE",
   creationRequestId: "PRIVATE-REQUEST",
+  total: 4,
 };
+const page = (
+  rows: (typeof row | (Omit<typeof row, "heroImage"> & { heroImage: null }))[],
+  total = 4,
+) => ({
+  rows,
+  total,
+});
 function fixture() {
   const store: PublicArtworkStore = {
-    list: vi.fn(async () => [row, { ...row, kathaId: "KATHA-PAUBHA-000002" }]),
+    list: vi.fn(async () => page([row, { ...row, kathaId: "KATHA-PAUBHA-000002" }])),
   };
   const logs: string[] = [];
   const app = createApi(
@@ -50,7 +58,7 @@ it("lists public summaries anonymously with category filtering and bounded pagin
   expect(response.status).toBe(200);
   const body = artworkDiscoveryResponseSchema.parse(await response.json());
   expect(body.items).toHaveLength(1);
-  expect(body.pagination).toEqual({ limit: 1, offset: 2, hasMore: true });
+  expect(body.pagination).toEqual({ limit: 1, offset: 2, hasMore: true, total: 4 });
   expect(store.list).toHaveBeenCalledWith({ category: "PAUBHA", limit: 1, offset: 2 });
   expect(body.items[0]?.heroImage?.mimeType).toBe("image/png");
   expect(body.items[0]?.heroImage?.altText).toBe(row.heroImage.altText);
@@ -58,15 +66,20 @@ it("lists public summaries anonymously with category filtering and bounded pagin
 });
 it("uses defaults and reports an empty page", async () => {
   const { app, store } = fixture();
-  vi.mocked(store.list).mockResolvedValue([]);
+  vi.mocked(store.list).mockResolvedValue(page([], 0));
   expect(await (await app.request("/artworks")).json()).toEqual({
     items: [],
-    pagination: { limit: 20, offset: 0, hasMore: false },
+    pagination: { limit: 20, offset: 0, hasMore: false, total: 0 },
   });
+});
+it("rejects a total that contradicts the page instead of publishing it", async () => {
+  const { app, store } = fixture();
+  vi.mocked(store.list).mockResolvedValue(page([row, row], 1));
+  expect((await app.request("/artworks?limit=1")).status).toBe(500);
 });
 it("allows a missing public hero without exposing a private fallback", async () => {
   const { app, store } = fixture();
-  vi.mocked(store.list).mockResolvedValue([{ ...row, heroImage: null }]);
+  vi.mocked(store.list).mockResolvedValue(page([{ ...row, heroImage: null }], 1));
   const body = artworkDiscoveryResponseSchema.parse(
     await (await app.request("/artworks")).json(),
   );

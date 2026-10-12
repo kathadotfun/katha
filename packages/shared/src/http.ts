@@ -7,6 +7,10 @@ export const apiErrors = {
   NOT_FOUND: { status: 404, message: "The requested resource was not found." },
   NFC_TAG_RETIRED: { status: 410, message: "This NFC tag has been retired." },
   CONFLICT: { status: 409, message: "The request conflicts with the current state." },
+  INSUFFICIENT_FUNDS: {
+    status: 409,
+    message: "The wallet doesn't hold enough of the payment token.",
+  },
   PAYLOAD_TOO_LARGE: { status: 413, message: "The request body is too large." },
   UNSUPPORTED_MEDIA_TYPE: {
     status: 415,
@@ -20,6 +24,7 @@ export const apiErrorCodeSchema = z.enum([
   "FORBIDDEN",
   "NOT_FOUND",
   "CONFLICT",
+  "INSUFFICIENT_FUNDS",
   "NFC_TAG_RETIRED",
   "PAYLOAD_TOO_LARGE",
   "UNSUPPORTED_MEDIA_TYPE",
@@ -58,6 +63,28 @@ export const paginationResponseSchema = z.strictObject({
   offset: z.number().int().min(0).max(HTTP_LIMITS.offset),
   hasMore: z.boolean(),
 });
+// Lists that show "Showing 1–20 of N" also return the matching total. The page and
+// total come from one statement, so a non-empty page always fits inside the total.
+export const countedPaginationResponseSchema = paginationResponseSchema.extend({
+  total: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+});
+export function countedPaginatedResponseSchema<T extends z.ZodType>(item: T) {
+  return z
+    .strictObject({
+      items: z.array(item).max(HTTP_LIMITS.pageSize),
+      pagination: countedPaginationResponseSchema,
+    })
+    .refine(({ items, pagination }) => items.length <= pagination.limit, {
+      error: "Page exceeds requested limit",
+    })
+    .refine(
+      ({ items, pagination: { offset, total, hasMore } }) =>
+        items.length === 0
+          ? !hasMore
+          : total >= offset + items.length && hasMore === total > offset + items.length,
+      { error: "Page is inconsistent with its total" },
+    );
+}
 export function paginatedResponseSchema<T extends z.ZodType>(item: T) {
   return z
     .strictObject({

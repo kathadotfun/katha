@@ -61,7 +61,12 @@ artist editing, listing, deletion or recovery queue in this step.
 
 ## Review and verify an artist
 
-1. A verifier enters the artist record ID and chooses **Look up**.
+1. Under **Saved artists**, enter part of the artist's name or slug, or their
+   record ID, and choose **Look up**. A name or slug lists matching artists
+   (`GET /admin/artists?query=` for administrators, `GET /verifier/artists?query=`
+   for verifiers), each with its record ID and a copy button; verifiers choose
+   **Review** to open one. A record ID typed by a verifier opens the profile
+   directly. Search returns identity fields only, never wallets.
    `GET /verifier/artists/:artistId` validates the UUID and returns an explicit
    `artistResponseSchema` projection, including unverified content. This read is
    protected by the same verifier middleware as manual approval; it is not a

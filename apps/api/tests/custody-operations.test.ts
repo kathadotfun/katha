@@ -85,6 +85,11 @@ async function fixture(minted = false) {
     })),
     hasOpenDelivery: vi.fn(async () => false),
     reportReceipt: vi.fn(async () => ({ ...row, ownerReportedReceivedAt: new Date() })),
+    cancelByRequester: vi.fn(async () => ({
+      ...row,
+      status: "CANCELLED" as const,
+      ownerReportedReceivedAt: null,
+    })),
     load,
     findRequest,
     create,
@@ -653,6 +658,72 @@ it.each(["owner", "requester", "early", "return", "unconfirmed", "stale"])(
     expect(f.update).not.toHaveBeenCalled();
   },
 );
+it.each(["REQUESTED", "APPROVED"] as const)(
+  "the requester can withdraw a %s request before dispatch without custody effects",
+  async (status) => {
+    const f = await fixture(true);
+    f.row.status = status;
+    const result = await f.service.cancel("Bearer synthetic", f.row.id, {
+      expectedUpdatedAt: f.row.updatedAt.toISOString(),
+      cancellationConfirmed: true,
+    });
+    expect(result.status).toBe("CANCELLED");
+    expect(f.store.cancelByRequester).toHaveBeenCalledWith(
+      expect.objectContaining({ request: expect.objectContaining({ id: f.row.id }) }),
+      f.session.walletAddress,
+      f.row.updatedAt.toISOString(),
+    );
+    expect(f.update).not.toHaveBeenCalled();
+    expect(f.save).not.toHaveBeenCalled();
+    expect(f.simulate).not.toHaveBeenCalled();
+  },
+);
+it.each([
+  "owner",
+  "requester",
+  "dispatched",
+  "received",
+  "cancelled",
+  "unconfirmed",
+  "stale",
+  "missing",
+])("rejects collector cancellation: %s", async (failure) => {
+  const f = await fixture(true);
+  if (failure === "owner") f.accounts.ownerWallet = temporaryWallet().address;
+  if (failure === "requester") f.row.requesterWallet = temporaryWallet().address;
+  if (failure === "dispatched") f.row.status = "DISPATCHED";
+  if (failure === "received") f.row.status = "RECEIVED";
+  if (failure === "cancelled") f.row.status = "CANCELLED";
+  if (failure === "stale")
+    vi.mocked(f.store.cancelByRequester).mockResolvedValueOnce(null);
+  if (failure === "missing") f.findRequest.mockResolvedValueOnce(null);
+  await expect(
+    f.service.cancel("Bearer synthetic", f.row.id, {
+      expectedUpdatedAt: f.row.updatedAt.toISOString(),
+      cancellationConfirmed: failure !== "unconfirmed",
+    }),
+  ).rejects.toMatchObject({
+    code:
+      failure === "owner" || failure === "requester"
+        ? "FORBIDDEN"
+        : failure === "unconfirmed"
+          ? "INVALID_REQUEST"
+          : failure === "missing"
+            ? "NOT_FOUND"
+            : "CONFLICT",
+  });
+  if (failure !== "stale") expect(f.store.cancelByRequester).not.toHaveBeenCalled();
+});
+it("cancellation requires a signed-in session", async () => {
+  const f = await fixture(true);
+  await expect(
+    f.service.cancel(undefined, f.row.id, {
+      expectedUpdatedAt: f.row.updatedAt.toISOString(),
+      cancellationConfirmed: true,
+    }),
+  ).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  expect(f.findRequest).not.toHaveBeenCalled();
+});
 it("delivery review and receipt routes validate inputs and prohibit public caching", async () => {
   const f = await fixture(true);
   f.row.status = "DISPATCHED";
@@ -694,4 +765,29 @@ it("delivery review and receipt routes validate inputs and prohibit public cachi
   expect(fulfillmentResponseSchema.parse(await receipt.json()).status).toBe(
     "DISPATCHED",
   );
+  f.row.status = "REQUESTED";
+  const cancel = (body: unknown) =>
+    app.request(`/fulfillment/${f.row.id}/cancel`, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  const cancelled = await cancel({
+    expectedUpdatedAt: f.row.updatedAt.toISOString(),
+    cancellationConfirmed: true,
+  });
+  expect(cancelled.status).toBe(200);
+  expect(cancelled.headers.get("Cache-Control")).toBe("no-store");
+  expect(fulfillmentResponseSchema.parse(await cancelled.json()).status).toBe(
+    "CANCELLED",
+  );
+  expect(
+    (
+      await cancel({
+        expectedUpdatedAt: f.row.updatedAt.toISOString(),
+        cancellationConfirmed: true,
+        status: "RECEIVED",
+      })
+    ).status,
+  ).toBe(400);
 });

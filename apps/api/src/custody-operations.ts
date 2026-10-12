@@ -1,6 +1,7 @@
 import {
   collectorDeliveryReviewSchema,
   fulfillmentReceiptRequestSchema,
+  fulfillmentCancellationRequestSchema,
   custodyPreparationRequestSchema,
   custodyAdministrationReviewSchema,
   physicalCustodyTransitionSchema,
@@ -112,6 +113,27 @@ export function createCustodyOperations(
       if (found.request.kind !== "DELIVERY" || found.request.status !== "DISPATCHED")
         throw new DomainError("CONFLICT");
       const row = await store.reportReceipt(
+        found,
+        wallet.walletAddress,
+        parsed.data.expectedUpdatedAt,
+      );
+      if (!row) throw new DomainError("CONFLICT");
+      return response(row, found.artwork.kathaId);
+    },
+    async cancel(bearer: string | undefined, id: string, input: unknown) {
+      const wallet = await session(bearer);
+      const parsed = fulfillmentCancellationRequestSchema.safeParse(input);
+      if (!parsed.success) throw new DomainError("INVALID_REQUEST");
+      const found = await store.findRequest(id);
+      if (!found) throw new DomainError("NOT_FOUND");
+      if (found.request.requesterWallet !== wallet.walletAddress)
+        throw new DomainError("FORBIDDEN");
+      const accounts = await read(found.artwork.kathaId);
+      if (accounts.ownerWallet !== wallet.walletAddress)
+        throw new DomainError("FORBIDDEN");
+      if (!["REQUESTED", "APPROVED"].includes(found.request.status))
+        throw new DomainError("CONFLICT");
+      const row = await store.cancelByRequester(
         found,
         wallet.walletAddress,
         parsed.data.expectedUpdatedAt,

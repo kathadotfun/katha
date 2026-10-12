@@ -18,7 +18,10 @@ const summary = {
   artist: artworkFixture.artist,
   heroImage: null,
 };
-const page = { items: [summary], pagination: { limit: 12, offset: 0, hasMore: false } };
+const page = {
+  items: [summary],
+  pagination: { limit: 12, offset: 0, hasMore: false, total: 1 },
+};
 test("artist slug and profile identity are validated before rendering, with not-found distinct from failures", async () => {
   for (const slug of ["../admin", "Uppercase", "artist?private=1"])
     assert.equal(

@@ -27,6 +27,27 @@ const api = createServer((request, response) => {
   requests++;
   response.setHeader("Content-Type", "application/json");
   const path = new URL(request.url, "http://localhost").pathname;
+  // Public tag status for the browser tag page: one synthetic tag per state.
+  const tagStatus = /^\/nfc\/([0-9a-f-]{36})\/status$/.exec(path);
+  if (tagStatus) {
+    const tagId = tagStatus[1];
+    const state = {
+      "aaaaaaaa-1111-4111-8111-111111111111": "ACTIVE",
+      "bbbbbbbb-1111-4111-8111-111111111111": "RETIRED",
+      "cccccccc-1111-4111-8111-111111111111": "UNPUBLISHED",
+    }[tagId];
+    if (tagId === "eeeeeeee-1111-4111-8111-111111111111") {
+      response.statusCode = 503;
+      return response.end("{}");
+    }
+    return response.end(
+      JSON.stringify({
+        tagId,
+        state: state ?? "UNKNOWN",
+        kathaId: state === "ACTIVE" ? artworkFixture.kathaId : null,
+      }),
+    );
+  }
   if (path.startsWith("/artists/")) {
     const slug = path.split("/").at(-1);
     if (slug === artistFixture.slug)
@@ -91,19 +112,23 @@ const api = createServer((request, response) => {
         altText: "Synthetic catalogue photograph",
       },
     };
+    const items =
+      (isHome && homeMode === "EMPTY") ||
+      category === "THANGKA" ||
+      offset === 12 ||
+      artistId === "dddddddd-1111-4111-8111-111111111111"
+        ? []
+        : [summary];
+    // The first page reports a second page; the total stays consistent with it.
+    const hasMore = items.length > 0 && offset === 0;
     return response.end(
       JSON.stringify({
-        items:
-          (isHome && homeMode === "EMPTY") ||
-          category === "THANGKA" ||
-          offset === 12 ||
-          artistId === "dddddddd-1111-4111-8111-111111111111"
-            ? []
-            : [summary],
+        items,
         pagination: {
           limit: Number(query.get("limit")),
           offset,
-          hasMore: offset === 0 && category !== "THANGKA",
+          hasMore,
+          total: items.length ? (hasMore ? 13 : offset + items.length) : 0,
         },
       }),
     );
@@ -325,6 +350,44 @@ try {
     4,
     "One artwork, history, listing and metadata document read per render",
   );
+  // A tapped tag the resolver couldn't open shows a readable web page; an
+  // active tag on a published work goes to its record with the tag marker.
+  async function tagPage(tagId) {
+    const response = await globalThis.fetch(`${origin}/tags/${tagId}`, {
+      signal: globalThis.AbortSignal.timeout(15000),
+      redirect: "manual",
+    });
+    return {
+      status: response.status,
+      location: response.headers.get("location"),
+      html: await response.text(),
+    };
+  }
+  const activeTag = await tagPage("aaaaaaaa-1111-4111-8111-111111111111");
+  // Before streaming Next answers with an HTTP redirect; once the shell has
+  // streamed it emits a refresh redirect to the same destination.
+  const destination = `/art/${artworkFixture.kathaId}?source=nfc`;
+  assert.ok(
+    activeTag.location?.endsWith(destination) ||
+      (activeTag.status === 200 &&
+        activeTag.html.includes("__next-page-redirect") &&
+        activeTag.html.includes(destination)),
+    `${activeTag.status} ${activeTag.location}`,
+  );
+  for (const [tagId, text] of [
+    ["bbbbbbbb-1111-4111-8111-111111111111", "This tag has been retired"],
+    ["cccccccc-1111-4111-8111-111111111111", "This artwork isn’t published yet"],
+    ["dddddddd-1111-4111-8111-111111111111", "isn’t linked to a Katha artwork"],
+    ["eeeeeeee-1111-4111-8111-111111111111", "couldn’t check this tag right now"],
+  ]) {
+    const tag = await tagPage(tagId);
+    assert.equal(tag.status, 200);
+    assert.ok(tag.html.includes(text), text);
+    assert.ok(tag.html.includes("noindex"));
+    assert.ok(!tag.html.includes("KATHA-PAUBHA"));
+  }
+  const invalidTag = await tagPage("NOT-A-TAG");
+  assert.ok(invalidTag.html.includes("Page not found"));
 
   const nextHistory = await page(`${artworkFixture.kathaId}?historyOffset=20`);
   assert.equal(nextHistory.status, 200);

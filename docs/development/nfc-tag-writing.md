@@ -20,13 +20,13 @@ not a secret, chip UID, artist ID, asset address or proof of authenticity. Do no
 include a wallet session token, private evidence, shipping data or redirect query.
 
 The resolver lives on the API, not the Next.js web server. It returns a temporary
-302 to the configured web origin's permanent `/art/<kathaId>` route. There is no
+302 to the configured web origin's permanent `/art/<kathaId>?source=nfc` route. There is no
 Next.js `/nfc` proxy or hosted domain routing provisioned by this project.
 
-| Demo                  | URL written to tag                    | Expected redirect                        |
-| --------------------- | ------------------------------------- | ---------------------------------------- |
-| Same laptop           | `http://localhost:3001/nfc/<uuid>`    | `http://localhost:3000/art/<kathaId>`    |
-| Phone on the same LAN | `http://192.168.1.87:3001/nfc/<uuid>` | `http://192.168.1.87:3000/art/<kathaId>` |
+| Demo                  | URL written to tag                    | Expected redirect                                   |
+| --------------------- | ------------------------------------- | --------------------------------------------------- |
+| Same laptop           | `http://localhost:3001/nfc/<uuid>`    | `http://localhost:3000/art/<kathaId>?source=nfc`    |
+| Phone on the same LAN | `http://192.168.1.87:3001/nfc/<uuid>` | `http://192.168.1.87:3000/art/<kathaId>?source=nfc` |
 
 The LAN address above is an example. Substitute the laptop's current reachable
 address; do not assume it stays unchanged. A phone's `localhost` refers to the
@@ -111,7 +111,7 @@ Inspect the redirect without following it, using an actually assigned UUID:
 curl --head 'http://192.168.1.87:3001/nfc/<uuid>'
 ```
 
-Expect 302, `Location: http://192.168.1.87:3000/art/<kathaId>` and
+Expect 302, `Location: http://192.168.1.87:3000/art/<kathaId>?source=nfc` and
 `Cache-Control: no-store`. Then open that location on the phone. Unknown/private
 bindings return 404, public retired tags 410 and malformed identifiers/extra queries 400. Failures have no Location header; never work around them by writing another
 artwork's URL.

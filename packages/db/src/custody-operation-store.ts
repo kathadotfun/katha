@@ -124,6 +124,46 @@ export function createCustodyOperationStore(
         return { ...request, ownerReportedReceivedAt: report.reportedAt };
       });
     },
+    // Withdraws an undispatched request on behalf of its requester. The handler
+    // stays as recorded, so an approved request keeps who approved it.
+    async cancelByRequester(
+      expected: { artwork: Artwork; request: Request },
+      wallet: string,
+      expectedUpdatedAt: string,
+    ) {
+      return db.transaction(async (tx) => {
+        const [artwork] = await tx
+          .select()
+          .from(artworks)
+          .where(eq(artworks.id, expected.artwork.id))
+          .for("update");
+        const [request] = await tx
+          .select()
+          .from(fulfillmentRequests)
+          .where(eq(fulfillmentRequests.id, expected.request.id))
+          .for("update");
+        if (
+          !artwork ||
+          !request ||
+          artwork.updatedAt.toISOString() !==
+            expected.artwork.updatedAt.toISOString() ||
+          request.updatedAt.toISOString() !== expectedUpdatedAt ||
+          request.requesterWallet !== wallet ||
+          request.artworkId !== artwork.id ||
+          !["REQUESTED", "APPROVED"].includes(request.status)
+        )
+          return null;
+        const [updated] = await tx
+          .update(fulfillmentRequests)
+          .set({
+            status: "CANCELLED",
+            updatedAt: new Date(Math.max(Date.now(), request.updatedAt.getTime() + 1)),
+          })
+          .where(eq(fulfillmentRequests.id, request.id))
+          .returning();
+        return updated ? { ...updated, ownerReportedReceivedAt: null } : null;
+      });
+    },
     async load(kathaId: string, fulfillmentId?: string) {
       const [artwork] = await db
         .select()

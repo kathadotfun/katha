@@ -23,7 +23,7 @@ export const summaryFixture = {
 };
 const page = {
   items: [summaryFixture],
-  pagination: { limit: 12, offset: 0, hasMore: true },
+  pagination: { limit: 12, offset: 0, hasMore: true, total: 13 },
 };
 test("category and page query uses bounded canonical values and rejects duplicate/unknown parameters", () => {
   assert.deepEqual(parseExplorationQuery({}), { offset: 0 });
@@ -86,7 +86,10 @@ test("loader sends real API filters, rejects invalid query before fetch and vali
     );
 });
 test("empty publication pages stay distinct from unavailable API responses", async () => {
-  const empty = await loadExploration({}, async () => ({ ...page, items: [] }));
+  const empty = await loadExploration({}, async () => ({
+    items: [],
+    pagination: { ...page.pagination, hasMore: false, total: 0 },
+  }));
   assert.equal(empty.kind, "READY");
   const failure = await loadExploration(
     { category: "PAUBHA", offset: "12" },

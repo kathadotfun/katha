@@ -36,6 +36,20 @@ function fixture() {
       listeners.add(fn);
       return () => listeners.delete(fn) && undefined;
     },
+    async listNfcTags(id: string) {
+      calls.push(`list:${id}`);
+      return {
+        kathaId: id,
+        items: [
+          tag({
+            tagId: "6f1c2b3a-2222-4222-8222-222222222222",
+            state: "RETIRED",
+            assignedAt: new Date(Date.now() - 9000).toISOString(),
+            retiredAt: new Date(Date.now() - 5000).toISOString(),
+          }),
+        ],
+      };
+    },
     async assignNfcTag(id: string, value: string) {
       calls.push(`assign:${id}:${value}`);
       return tag();
@@ -73,15 +87,33 @@ test("tag references are canonical UUIDs and invalid input never reaches the API
 test("assign, look up and retire act only on this artwork's active binding", async () => {
   const f = fixture();
   const nfc = createNfcTags(f.methods, kathaId);
+  await nfc.load();
+  assert.equal(nfc.getSnapshot().tags?.length, 1);
   await nfc.assign(tagId);
   assert.equal(nfc.getSnapshot().result, "assigned");
-  await nfc.retire();
+  // The new binding joins the list, newest first, next to the retired one.
+  assert.deepEqual(
+    nfc.getSnapshot().tags?.map((item) => item.state),
+    ["ACTIVE", "RETIRED"],
+  );
+  await nfc.retire(tagId);
   assert.equal(nfc.getSnapshot().tag?.state, "RETIRED");
-  await nfc.retire();
-  assert.deepEqual(f.calls, [`assign:${kathaId}:${tagId}`, `retire:${tagId}`]);
-  f.methods.readNfcTag = async () => tag({ kathaId: "KATHA-PAUBHA-000002" });
-  await nfc.lookup(tagId);
-  await nfc.retire();
+  assert.equal(nfc.getSnapshot().tags?.[0]?.state, "RETIRED");
+  await nfc.retire(tagId);
+  assert.deepEqual(f.calls, [
+    `list:${kathaId}`,
+    `assign:${kathaId}:${tagId}`,
+    `retire:${tagId}`,
+  ]);
+  // A tag bound to another artwork can be looked up but never listed or retired here.
+  f.methods.readNfcTag = async () =>
+    tag({
+      tagId: "6f1c2b3a-3333-4333-8333-333333333333",
+      kathaId: "KATHA-PAUBHA-000002",
+    });
+  await nfc.lookup("6f1c2b3a-3333-4333-8333-333333333333");
+  assert.equal(nfc.getSnapshot().tags?.length, 2);
+  await nfc.retire("6f1c2b3a-3333-4333-8333-333333333333");
   assert.equal(f.calls.filter((call) => call.startsWith("retire")).length, 1);
   nfc.dispose();
 });
@@ -95,8 +127,10 @@ test("conflicts are explained and sign-out clears tag results", async () => {
   await nfc.assign(tagId);
   assert.match(nfc.getSnapshot().error!, /already be bound/);
   await nfc.lookup(tagId);
+  await nfc.load();
   f.signOut();
   assert.equal(nfc.getSnapshot().tag, null);
+  assert.equal(nfc.getSnapshot().tags, null);
   nfc.dispose();
 });
 
@@ -112,11 +146,16 @@ test("NFC transport uses the admin endpoints and rejects mismatched bindings", a
   await api.readNfcTag(tagId, "token", signal);
   body = tag({ state: "RETIRED", retiredAt: new Date().toISOString() });
   await api.retireNfcTag(tagId, "token", signal);
+  body = { kathaId, items: [tag()] };
+  await api.listNfcTags(kathaId, "token", signal);
   assert.deepEqual(requests, [
     `POST http://localhost:3001/admin/artworks/${kathaId}/nfc-tags`,
     `GET http://localhost:3001/admin/nfc-tags/${tagId}`,
     `POST http://localhost:3001/admin/nfc-tags/${tagId}/retire`,
+    `GET http://localhost:3001/admin/artworks/${kathaId}/nfc-tags`,
   ]);
+  body = { kathaId: "KATHA-PAUBHA-000002", items: [] };
+  await assert.rejects(api.listNfcTags(kathaId, "token", signal));
   body = tag({ kathaId: "KATHA-PAUBHA-000002" });
   await assert.rejects(api.assignNfcTag(kathaId, tagId, "token", signal));
 });

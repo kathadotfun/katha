@@ -13,7 +13,7 @@ const summary = {
 };
 const page = {
   items: [summary],
-  pagination: { limit: 3, offset: 0, hasMore: false },
+  pagination: { limit: 3, offset: 0, hasMore: false, total: 1 },
 };
 
 test("homepage reads only a bounded first page of the public catalogue", async () => {

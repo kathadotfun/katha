@@ -24,3 +24,33 @@ export const nfcTagResponseSchema = z
 export type NfcTagResponse = z.infer<typeof nfcTagResponseSchema>;
 
 export const nfcResolutionQuerySchema = z.strictObject({});
+
+// Every tag bound to one artwork, newest first, including retired ones.
+export const nfcTagListResponseSchema = z
+  .strictObject({
+    kathaId: kathaIdSchema,
+    items: z.array(nfcTagResponseSchema).max(100),
+  })
+  .refine(
+    ({ kathaId, items }) =>
+      items.every((item) => item.kathaId === kathaId) &&
+      new Set(items.map((item) => item.tagId)).size === items.length,
+  );
+export type NfcTagListResponse = z.infer<typeof nfcTagListResponseSchema>;
+
+// Public answer for a tapped tag. Only an active tag on a published work names
+// the artwork; retired and unpublished bindings stay anonymous.
+export const nfcTagStatusSchema = z.enum([
+  "ACTIVE",
+  "RETIRED",
+  "UNPUBLISHED",
+  "UNKNOWN",
+]);
+export const nfcTagStatusResponseSchema = z
+  .strictObject({
+    tagId: nfcTagIdSchema,
+    state: nfcTagStatusSchema,
+    kathaId: kathaIdSchema.nullable(),
+  })
+  .refine((value) => (value.state === "ACTIVE") === (value.kathaId !== null));
+export type NfcTagStatusResponse = z.infer<typeof nfcTagStatusResponseSchema>;

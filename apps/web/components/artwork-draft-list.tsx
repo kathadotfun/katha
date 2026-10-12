@@ -221,7 +221,8 @@ export function ArtworkDraftListPanel() {
           >
             <p className="sm mut m-0" role="status">
               Showing {page.pagination.offset + 1}–
-              {page.pagination.offset + page.items.length}
+              {page.pagination.offset + page.items.length} of {page.pagination.total},
+              newest first
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -234,6 +235,14 @@ export function ArtworkDraftListPanel() {
               </button>
               <span className="pg cut-s" aria-current="page">
                 {page.pagination.offset / page.pagination.limit + 1}
+                <span className="sr-only">
+                  {" "}
+                  of{" "}
+                  {Math.max(
+                    1,
+                    Math.ceil(page.pagination.total / page.pagination.limit),
+                  )}
+                </span>
               </span>
               <button
                 type="button"

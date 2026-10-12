@@ -2,6 +2,7 @@ import {
   collectorDeliveryReviewSchema,
   fulfillmentCreateRequestSchema,
   fulfillmentReceiptRequestSchema,
+  fulfillmentCancellationRequestSchema,
   type CollectorDeliveryReview,
   type FulfillmentCreateRequest,
 } from "@katha/shared";
@@ -26,6 +27,9 @@ export function canReturn(page: CollectorDeliveryReview) {
     )
   );
 }
+export function canCancel(status: string) {
+  return status === "REQUESTED" || status === "APPROVED";
+}
 export function createCollectorDelivery(
   session: Pick<
     WalletSessionController,
@@ -34,6 +38,7 @@ export function createCollectorDelivery(
     | "readDelivery"
     | "createDelivery"
     | "reportDeliveryReceipt"
+    | "cancelDelivery"
   >,
   kathaId: string,
 ) {
@@ -154,6 +159,21 @@ export function createCollectorDelivery(
         const result = await session.reportDeliveryReceipt(id, input, signal);
         if (result.kathaId !== kathaId || result.id !== id)
           throw new Error("Receipt mismatch");
+        return session.readDelivery(kathaId, { limit: 20, offset: 0 }, signal);
+      });
+    },
+    // The requester can withdraw a request until Katha dispatches it.
+    cancel(id: string, confirmed: boolean) {
+      const row = state.page?.requests.find((row) => row.id === id);
+      if (!row || !canCancel(row.status) || !confirmed) return Promise.resolve();
+      return run(true, async (signal) => {
+        const input = fulfillmentCancellationRequestSchema.parse({
+          expectedUpdatedAt: row.updatedAt,
+          cancellationConfirmed: confirmed,
+        });
+        const result = await session.cancelDelivery(id, input, signal);
+        if (result.kathaId !== kathaId || result.id !== id)
+          throw new Error("Cancellation mismatch");
         return session.readDelivery(kathaId, { limit: 20, offset: 0 }, signal);
       });
     },

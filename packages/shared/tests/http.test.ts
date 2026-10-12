@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   apiErrorResponseSchema,
   paginationQuerySchema,
+  countedPaginatedResponseSchema,
   paginatedResponseSchema,
   tokenAmountSchema,
 } from "../src/index.js";
@@ -45,6 +46,33 @@ it("rejects unknown query fields and oversized response pages", () => {
     schema.parse({ items: [], pagination: { limit: 20, offset: 0, hasMore: false } })
       .items,
   ).toEqual([]);
+});
+it("counted pages keep the total consistent with the page they describe", () => {
+  const schema = countedPaginatedResponseSchema(z.string());
+  const page = (items: string[], pagination: object) =>
+    schema.safeParse({ items, pagination });
+  expect(page(["a"], { limit: 1, offset: 0, hasMore: true, total: 3 }).success).toBe(
+    true,
+  );
+  expect(page(["c"], { limit: 1, offset: 2, hasMore: false, total: 3 }).success).toBe(
+    true,
+  );
+  // A page past the end may report any total but never "more pages".
+  expect(page([], { limit: 20, offset: 40, hasMore: false, total: 3 }).success).toBe(
+    true,
+  );
+  expect(page([], { limit: 20, offset: 40, hasMore: true, total: 99 }).success).toBe(
+    false,
+  );
+  for (const pagination of [
+    { limit: 1, offset: 2, hasMore: false, total: 2 },
+    { limit: 1, offset: 0, hasMore: false, total: 3 },
+    { limit: 1, offset: 0, hasMore: true, total: 1 },
+    { limit: 1, offset: 0, hasMore: true, total: -1 },
+    { limit: 1, offset: 0, hasMore: true, total: 1.5 },
+    { limit: 1, offset: 0, hasMore: true },
+  ])
+    expect(page(["a"], pagination).success).toBe(false);
 });
 it("shares strict error response contracts without private extras", () => {
   const value = {

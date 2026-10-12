@@ -9,6 +9,7 @@ import {
 import { useWalletSession } from "./wallet-provider";
 import { signedOutSnapshot } from "../lib/wallet-session";
 import {
+  canCancel,
   canReturn,
   createCollectorDelivery,
   emptyDeliverySnapshot,
@@ -579,6 +580,7 @@ function RequestReceipt({
   disabled: boolean;
 }) {
   const [confirmed, setConfirmed] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const position = flow.indexOf(row.status as (typeof flow)[number]);
   const note =
     row.status === "REQUESTED"
@@ -695,6 +697,53 @@ function RequestReceipt({
             </button>
           </div>
         )}
+      {canCancel(row.status) &&
+        (cancelling ? (
+          <div
+            className="confirm"
+            role="alertdialog"
+            aria-labelledby={`cancel-${row.id}-title`}
+            aria-describedby={`cancel-${row.id}-body`}
+          >
+            <p id={`cancel-${row.id}-title`} className="confirm-title">
+              Cancel this request?
+            </p>
+            <p id={`cancel-${row.id}-body`} className="p sm">
+              Katha stops arranging this{" "}
+              {row.kind === "DELIVERY" ? "delivery" : "return"}. Nothing changes on the
+              artwork&apos;s record, and you can make a new request afterwards.
+            </p>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+              <button
+                type="button"
+                className="btn btn-d cut-s"
+                disabled={disabled}
+                onClick={() => {
+                  setCancelling(false);
+                  void controller.cancel(row.id, true);
+                }}
+              >
+                Cancel request
+              </button>
+              <button
+                type="button"
+                className="lnk"
+                onClick={() => setCancelling(false)}
+              >
+                Keep request
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="lnk lnk-err self-start"
+            disabled={disabled}
+            onClick={() => setCancelling(true)}
+          >
+            Cancel request
+          </button>
+        ))}
     </article>
   );
 }

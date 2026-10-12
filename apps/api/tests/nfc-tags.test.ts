@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import type { NfcTagStore, NfcTagRecord } from "@katha/db";
-import type { WalletSession } from "@katha/shared";
+import { nfcTagListResponseSchema, type WalletSession } from "@katha/shared";
 import { createApi } from "../src/app.js";
 import { createNfcTags } from "../src/nfc-tags.js";
 import { createAuthorization } from "../src/authorization.js";
@@ -28,6 +28,10 @@ function fixture() {
   const store: NfcTagStore = {
     assign: vi.fn<NfcTagStore["assign"]>(async () => ({ status: "assigned", record })),
     get: vi.fn<NfcTagStore["get"]>(async () => record),
+    listByArtwork: vi.fn<NfcTagStore["listByArtwork"]>(async () => [
+      { ...retired, tagId: randomUUID() },
+      record,
+    ]),
     retire: vi.fn<NfcTagStore["retire"]>(async () => retired),
   };
   const admin = temporaryWallet().address;
@@ -134,6 +138,7 @@ it("all NFC admin routes deny anonymous, verifier-only, outsider and wrong-clust
     for (const [path, method, body] of [
       [f.assignPath, "POST", { tagId: f.record.tagId }],
       [f.tagPath, "GET", {}],
+      [f.assignPath, "GET", {}],
       [f.tagPath + "/retire", "POST", {}],
     ] as const)
       expect((await f.request(path, method, body, token)).status).toBe(
@@ -141,7 +146,29 @@ it("all NFC admin routes deny anonymous, verifier-only, outsider and wrong-clust
       );
   expect(f.store.assign).not.toHaveBeenCalled();
   expect(f.store.get).not.toHaveBeenCalled();
+  expect(f.store.listByArtwork).not.toHaveBeenCalled();
   expect(f.store.retire).not.toHaveBeenCalled();
+});
+it("admin lists every binding for one artwork without audit fields", async () => {
+  const f = fixture();
+  const listed = await f.request(f.assignPath, "GET");
+  expect(listed.status).toBe(200);
+  expect(listed.headers.get("Cache-Control")).toBe("no-store");
+  const body = nfcTagListResponseSchema.parse(await listed.json());
+  expect(body.kathaId).toBe(f.record.kathaId);
+  expect(body.items.map((item) => item.state)).toEqual(["RETIRED", "ACTIVE"]);
+  const text = JSON.stringify(body);
+  expect(text).not.toContain("PRIVATE_SENTINEL");
+  expect(text).not.toContain(f.record.assignedByWalletId);
+  expect(f.store.listByArtwork).toHaveBeenCalledWith(f.record.kathaId);
+  vi.mocked(f.store.listByArtwork).mockResolvedValueOnce(null);
+  expect((await f.request(f.assignPath, "GET")).status).toBe(404);
+  // A binding that names a different artwork is a corrupt read, never shown.
+  vi.mocked(f.store.listByArtwork).mockResolvedValueOnce([
+    { ...f.record, kathaId: "KATHA-PAUBHA-000002" },
+  ]);
+  expect((await f.request(f.assignPath, "GET")).status).toBe(500);
+  expect((await f.request("/admin/artworks/invalid/nfc-tags", "GET")).status).toBe(400);
 });
 it("invalid IDs and extra body fields fail validation before any store call", async () => {
   const f = fixture();

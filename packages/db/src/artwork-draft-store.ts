@@ -103,8 +103,10 @@ export function createArtworkDraftStore(db: Database) {
       });
     },
     async list(page: { limit: number; offset: number }) {
-      return db
+      const rows = await db
         .select({
+          // Window count runs before LIMIT, so the page and total share one snapshot.
+          total: sql<number>`count(*) over ()`.mapWith(Number),
           id: artworks.id,
           kathaId: artworks.kathaId,
           title: artworks.title,
@@ -123,6 +125,13 @@ export function createArtworkDraftStore(db: Database) {
         .orderBy(desc(artworks.createdAt), desc(artworks.id))
         .limit(page.limit + 1)
         .offset(page.offset);
+      if (rows.length) return { rows, total: rows[0]!.total };
+      // A page past the end has no rows to carry the window count.
+      const [counted] = await db
+        .select({ total: sql<number>`count(*)`.mapWith(Number) })
+        .from(artworks)
+        .where(isNull(artworks.publishedAt));
+      return { rows, total: counted?.total ?? 0 };
     },
     async update(
       kathaId: string,

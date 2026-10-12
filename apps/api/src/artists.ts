@@ -3,6 +3,8 @@ import {
   artistCreateRequestSchema,
   artistIdParamsSchema,
   artistResponseSchema,
+  artistSearchResponseSchema,
+  type ArtistSearchQuery,
   artistVerificationRequestSchema,
   type WalletSession,
 } from "@katha/shared";
@@ -37,6 +39,20 @@ export function createArtists(store: ArtistStore) {
       const record = await store.read(params.data.artistId);
       if (!record) throw new DomainError("NOT_FOUND");
       return response(record);
+    },
+    // The route validates the query string; this receives the parsed values.
+    async search({ query, limit, offset }: ArtistSearchQuery) {
+      const { rows, total } = await store.search({ query, limit, offset });
+      return artistSearchResponseSchema.parse({
+        items: rows.slice(0, limit).map((row) => ({
+          id: row.id,
+          slug: row.slug,
+          displayName: row.displayName,
+          region: row.region,
+          verificationStatus: row.verificationStatus,
+        })),
+        pagination: { limit, offset, hasMore: rows.length > limit, total },
+      });
     },
     async create(input: unknown) {
       const parsed = artistCreateRequestSchema.safeParse(input);

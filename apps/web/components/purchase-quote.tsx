@@ -15,7 +15,13 @@ import {
   emptyPurchaseQuote,
   type PurchaseQuoteController,
 } from "../lib/purchase-quote";
-import { localDateTime, localTime, tokenAmount, unixSecondsIso } from "../lib/format";
+import {
+  localDateTime,
+  localTime,
+  shortAddress,
+  tokenAmount,
+  unixSecondsIso,
+} from "../lib/format";
 import { signInHref } from "../lib/return-path";
 import { Badge, Icon, Notice } from "./ui/status";
 
@@ -148,22 +154,41 @@ export function PurchaseQuotePanel({
           </button>
         </Notice>
       )}
-      {state.status === "unavailable" && (
-        <Notice tone="err" icon="cancel" className="mt-7">
-          <p>
-            <strong>
-              {state.preparationError
-                ? "Preparation didn't complete."
-                : "Purchase terms aren't available."}
-            </strong>{" "}
-            {state.preparationError ??
-              "The listing may have sold, been cancelled or expired, or your wallet may not hold enough Katha test token. Nothing was sent from your wallet."}
-          </p>
-          <Link className="btn btn-o btn-sm self-start" href={`/art/${kathaId}`}>
-            Back to artwork record
-          </Link>
-        </Notice>
-      )}
+      {state.status === "unavailable" &&
+        (state.insufficientFunds ? (
+          <Notice tone="err" icon="cancel" className="mt-7">
+            <p>
+              <strong>Not enough test token.</strong> Your wallet doesn&apos;t hold
+              enough Katha test token for this total. Add test token to{" "}
+              <span className="id">
+                {shortAddress(auth.session?.walletAddress ?? "")}
+              </span>
+              , then refresh the terms. Nothing has been sent.
+            </p>
+            <button
+              type="button"
+              className="btn btn-o btn-sm self-start"
+              onClick={() => void controller?.refresh()}
+            >
+              Refresh terms
+            </button>
+          </Notice>
+        ) : (
+          <Notice tone="err" icon="cancel" className="mt-7">
+            <p>
+              <strong>
+                {state.preparationError
+                  ? "Preparation didn't complete."
+                  : "Purchase terms aren't available."}
+              </strong>{" "}
+              {state.preparationError ??
+                "The listing may have sold, been cancelled or expired. Nothing was sent from your wallet."}
+            </p>
+            <Link className="btn btn-o btn-sm self-start" href={`/art/${kathaId}`}>
+              Back to artwork record
+            </Link>
+          </Notice>
+        ))}
       <div className="mt-8 flex flex-wrap items-start gap-8">
         <div className="flex min-w-0 flex-col gap-6" style={{ flex: "999 1 600px" }}>
           <section

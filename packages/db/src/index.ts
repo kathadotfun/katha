@@ -230,3 +230,8 @@ export {
   type ResaleInspectionStore,
 } from "./resale-inspection-store.js";
 export { resaleInspectionRequests } from "./schema/resale-inspection-requests.js";
+export {
+  createArtworkWorkflowStore,
+  type ArtworkWorkflowStore,
+  type WorkflowOperationKind,
+} from "./artwork-workflow-store.js";

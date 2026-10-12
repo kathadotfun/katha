@@ -217,6 +217,9 @@ export function ArtistProfile({
                 <Pagination
                   label="Artist artwork pages"
                   page={works.offset / explorationPageSize + 1}
+                  pageCount={Math.ceil(
+                    works.page.pagination.total / explorationPageSize,
+                  )}
                   previousHref={
                     works.offset > 0
                       ? artistWorksUrl(artist.slug, works.offset - explorationPageSize)

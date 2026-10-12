@@ -31,6 +31,7 @@ function fixture() {
   let page = structuredClone(initial),
     writes = 0,
     reports = 0;
+  const cancels: string[] = [];
   const listeners = new Set<() => void>();
   const methods = {
     getSnapshot: () => auth,
@@ -61,6 +62,15 @@ function fixture() {
       page = { ...page, canRequest: false, requests: [row] };
       return row;
     },
+    async cancelDelivery(id: string) {
+      cancels.push(id);
+      const row = {
+        ...page.requests.find((item) => item.id === id)!,
+        status: "CANCELLED" as const,
+      };
+      page = { ...page, canRequest: true, requests: [row] };
+      return row;
+    },
     async reportDeliveryReceipt() {
       reports++;
       const row = {
@@ -85,6 +95,7 @@ function fixture() {
     get reports() {
       return reports;
     },
+    cancels,
     change() {
       auth = { status: "signed-out", session: null, error: null };
       for (const fn of listeners) fn();
@@ -219,5 +230,29 @@ test("returns to Katha are offered only while the owner holds the work and none 
   await c.read();
   await c.create({ ...input(c.getSnapshot().requestId!), kind: "RETURN_TO_KATHA" });
   assert.equal(f.writes, 1, "a Katha-held work cannot be returned");
+  c.dispose();
+});
+
+test("the requester can withdraw a request only before dispatch, with explicit confirmation", async () => {
+  const f = fixture(),
+    c = createCollectorDelivery(f.methods, kathaId);
+  await c.read();
+  await c.create(input(c.getSnapshot().requestId!));
+  const id = c.getSnapshot().page!.requests[0]!.id;
+  await c.cancel(id, false);
+  assert.deepEqual(f.cancels, []);
+  await c.cancel(id, true);
+  assert.deepEqual(f.cancels, [id]);
+  assert.equal(c.getSnapshot().page?.requests[0]?.status, "CANCELLED");
+  // A cancelled, dispatched or unknown request can't be withdrawn.
+  await c.cancel(id, true);
+  await c.cancel("00000000-0000-4000-8000-000000000000", true);
+  f.page = {
+    ...f.page,
+    requests: [{ ...f.page.requests[0]!, status: "DISPATCHED" }],
+  };
+  await c.read();
+  await c.cancel(id, true);
+  assert.deepEqual(f.cancels, [id]);
   c.dispose();
 });

@@ -97,7 +97,7 @@ export function ArtworkExploration({
               {state.page.items.length === 1
                 ? query.offset + 1
                 : `${query.offset + 1}–${query.offset + state.page.items.length}`}{" "}
-              {describe(state.page.items.length)}
+              of {state.page.pagination.total} {describe(state.page.pagination.total)}
             </p>
           )}
         </div>
@@ -185,6 +185,7 @@ function ExplorationPages({
   return (
     <Pagination
       page={query.offset / explorationPageSize + 1}
+      pageCount={Math.ceil(state.page.pagination.total / explorationPageSize)}
       previousHref={
         query.offset > 0
           ? explorationUrl({ ...query, offset: query.offset - explorationPageSize })

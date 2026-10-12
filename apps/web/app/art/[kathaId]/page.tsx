@@ -75,8 +75,8 @@ export default async function ArtworkPage({ params, searchParams }: ArtworkPageP
       apiOrigin={apiOrigin}
       evidence={{ history, integrity }}
       listing={listing}
-      // TODO(nfc): the API's /nfc/:tagId redirect does not yet append
-      // `?source=nfc`, so this arrival note only appears on links that include it.
+      // The tag resolver appends this marker. It only changes wording; anyone can
+      // add it, and a tap never authenticates the painting.
       arrivedByNfc={query.source === "nfc"}
     />
   );
