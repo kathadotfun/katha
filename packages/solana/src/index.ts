@@ -22,6 +22,9 @@ export type { CoreAssetView, CoreCollectionInput, CoreCollectionView } from "./c
 export {
   buildInitializePlatformTransaction,
   buildRegisterArtworkTransaction,
+  hasKathaTransactionConfig,
+  KATHA_V1_COMPUTE_UNIT_LIMIT,
+  KATHA_V1_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
 } from "./registration.js";
 export {
   buildVerifyArtworkTransaction,

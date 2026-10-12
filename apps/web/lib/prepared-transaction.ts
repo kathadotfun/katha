@@ -1,6 +1,10 @@
 import { parseWalletOperation, type WalletOperation } from "./wallet-operation.ts";
 import * as market from "@katha/solana/marketplace";
-import { CORE_PROGRAM_ADDRESS, calculateMarketplaceDistribution } from "@katha/solana";
+import {
+  CORE_PROGRAM_ADDRESS,
+  calculateMarketplaceDistribution,
+  hasKathaTransactionConfig,
+} from "@katha/solana";
 import {
   getBase64Encoder,
   getBase64Decoder,
@@ -157,6 +161,7 @@ export async function inspectPreparedTransaction(
     (await sha256Hex(Uint8Array.from(transaction.messageBytes))) !==
       operation.messageHash ||
     message.instructions.length !== 1 ||
+    !hasKathaTransactionConfig(message) ||
     !instruction?.data ||
     (operation.kind !== "CREATE_LISTING" &&
       operation.kind !== "CANCEL_LISTING" &&

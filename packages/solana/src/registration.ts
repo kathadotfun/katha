@@ -13,13 +13,21 @@ import {
   getAddressDecoder,
   getAddressEncoder,
   getProgramDerivedAddress,
+  getTransactionMessageComputeUnitLimit,
+  getTransactionMessageHeapSize,
+  getTransactionMessageLoadedAccountsDataSizeLimit,
+  getTransactionMessagePriorityFeeLamports,
   isSignerRole,
+  setTransactionMessageComputeUnitLimit,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
+  setTransactionMessageLoadedAccountsDataSizeLimit,
+  setTransactionMessagePriorityFeeLamports,
   type Address,
   type BlockhashLifetimeConstraint,
   type EncodedAccount,
   type Instruction,
+  type TransactionMessage,
 } from "@solana/kit";
 import {
   assertOwnedEncodedAccount,
@@ -75,6 +83,24 @@ export type ArtworkRegistrationInput = Pick<
 > &
   Pick<ArtistAttribution, "artistId" | "creatorWallet">;
 
+// v1 messages carry resource limits in the header, and an omitted limit is zero rather
+// than the v0 default. Fix them at the v0 single-instruction defaults so every reviewed
+// operation runs identically on both versions, and set a zero priority fee so wallets
+// need not insert their own fee fields after preparation.
+export const KATHA_V1_COMPUTE_UNIT_LIMIT = 200_000;
+export const KATHA_V1_LOADED_ACCOUNTS_DATA_SIZE_LIMIT = 64 * 1024 * 1024;
+
+export function hasKathaTransactionConfig(message: TransactionMessage) {
+  if (message.version !== 1) return true;
+  return (
+    getTransactionMessageComputeUnitLimit(message) === KATHA_V1_COMPUTE_UNIT_LIMIT &&
+    getTransactionMessageLoadedAccountsDataSizeLimit(message) ===
+      KATHA_V1_LOADED_ACCOUNTS_DATA_SIZE_LIMIT &&
+    getTransactionMessagePriorityFeeLamports(message) === 0n &&
+    getTransactionMessageHeapSize(message) === undefined
+  );
+}
+
 export function nonzeroAddress(value: Address): Address {
   const result = address(value);
   if (result === SYSTEM) throw new TypeError("Wallet or role address must not be zero");
@@ -121,7 +147,21 @@ export function unsignedMessage(
     instruction,
     setTransactionMessageLifetimeUsingBlockhash(
       lifetime,
-      setTransactionMessageFeePayer(feePayer, createTransactionMessage({ version })),
+      setTransactionMessageFeePayer(
+        feePayer,
+        version === 1
+          ? setTransactionMessageLoadedAccountsDataSizeLimit(
+              KATHA_V1_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
+              setTransactionMessageComputeUnitLimit(
+                KATHA_V1_COMPUTE_UNIT_LIMIT,
+                setTransactionMessagePriorityFeeLamports(
+                  0n,
+                  createTransactionMessage({ version: 1 }),
+                ),
+              ),
+            )
+          : createTransactionMessage({ version: 0 }),
+      ),
     ),
   );
   const requiredSignerAddresses = [

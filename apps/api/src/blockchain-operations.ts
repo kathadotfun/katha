@@ -8,6 +8,7 @@ import {
 import type { OperationPreparationStore } from "@katha/db";
 import {
   OperationSimulationError,
+  hasKathaTransactionConfig,
   RegistryLifecycleError,
   type OperationChain,
   type RegistryTransactionContext,
@@ -101,6 +102,7 @@ export function createBlockchainOperations(
         message.lifetimeConstraint.lastValidBlockHeight !==
           context.lifetime.lastValidBlockHeight ||
         message.instructions.length !== 1 ||
+        !hasKathaTransactionConfig(message) ||
         instruction?.programAddress !== KATHA_REGISTRY_PROGRAM_ADDRESS ||
         JSON.stringify(actualAccounts) !== JSON.stringify(expectedAccounts)
       )

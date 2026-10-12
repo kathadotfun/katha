@@ -14,7 +14,14 @@ import {
   signTransaction,
   getSignatureFromTransaction,
   pipe,
+  setTransactionMessageComputeUnitLimit,
+  setTransactionMessageLoadedAccountsDataSizeLimit,
+  setTransactionMessagePriorityFeeLamports,
 } from "@solana/kit";
+import {
+  KATHA_V1_COMPUTE_UNIT_LIMIT,
+  KATHA_V1_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
+} from "@katha/solana";
 import { sha256Hex, type UnsignedOperationResponse } from "@katha/shared";
 import {
   getRegisterArtworkInstructionAsync,
@@ -45,6 +52,7 @@ async function fixture(
     | "VERIFY_ARTWORK"
     | "RECORD_CONDITION"
     | "MINT_ARTWORK" = "REGISTER_ARTWORK",
+  v1Limits = true,
 ) {
   const signer = await generateKeyPairSigner();
   const kathaId = ["RECORD_CONDITION", "MINT_ARTWORK"].includes(kind)
@@ -79,7 +87,18 @@ async function fixture(
       ? decodeCanonicalTransaction(inspection.operation.transactionBase64)
       : compileTransaction(
           pipe(
-            createTransactionMessage({ version }),
+            version === 1 && v1Limits
+              ? setTransactionMessageLoadedAccountsDataSizeLimit(
+                  KATHA_V1_LOADED_ACCOUNTS_DATA_SIZE_LIMIT,
+                  setTransactionMessageComputeUnitLimit(
+                    KATHA_V1_COMPUTE_UNIT_LIMIT,
+                    setTransactionMessagePriorityFeeLamports(
+                      0n,
+                      createTransactionMessage({ version: 1 }),
+                    ),
+                  ),
+                )
+              : createTransactionMessage({ version }),
             (msg) => setTransactionMessageFeePayer(signer.address, msg),
             (msg) =>
               setTransactionMessageLifetimeUsingBlockhash(
@@ -439,6 +458,17 @@ test("canonical preparation validates signer, cluster, version, kind, hash and e
     );
     f.flow.dispose();
   }
+  // Omitted v1 header limits are zero on-chain, so such a preparation is never signed.
+  const unlimited = await fixture(1, "REGISTER_ARTWORK", false);
+  await assert.rejects(
+    inspectPreparedTransaction(unlimited.operation, {
+      wallet: unlimited.signer.address,
+      cluster: unlimited.operation.cluster,
+      kind: unlimited.operation.kind,
+      kathaId: unlimited.operation.kathaId,
+    }),
+  );
+  unlimited.flow.dispose();
 });
 test("explicit approval records before single submission; unknown outcomes only reconcile and do not re-sign", async () => {
   const f = await fixture();
