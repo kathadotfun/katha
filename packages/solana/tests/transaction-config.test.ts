@@ -42,7 +42,7 @@ const instruction = {
 describe("Katha transaction resource configuration", () => {
   it("sets explicit v1 limits so omitted header values are not zero", () => {
     const { transactionMessage } = unsignedMessage(context([0, 1]), instruction);
-    expect(transactionMessage.version).toBe(1);
+    if (transactionMessage.version !== 1) throw new Error("Expected v1");
     expect(getTransactionMessageComputeUnitLimit(transactionMessage)).toBe(
       KATHA_V1_COMPUTE_UNIT_LIMIT,
     );

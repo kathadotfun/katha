@@ -7,6 +7,7 @@ import type { OperationReceiptStore } from "@katha/db";
 import {
   validateSignedPreparation,
   ReceiptValidationError,
+  type AttemptExpiryReader,
   type OperationReceiptReader,
 } from "@katha/solana";
 import type { WalletSessionBoundary } from "./wallet-session.js";
@@ -16,6 +17,7 @@ export function createOperationReceipts(
   sessions: Pick<WalletSessionBoundary, "authenticate">,
   read: OperationReceiptReader,
   cluster: "localnet" | "devnet",
+  expired?: AttemptExpiryReader,
 ) {
   return {
     async reconcile(bearer: string | undefined, operationId: string, input: unknown) {
@@ -83,8 +85,48 @@ export function createOperationReceipts(
         if (error instanceof ReceiptValidationError) throw new DomainError("CONFLICT");
         return pending;
       }
-      return observation.status === "UNKNOWN" ? pending : persist(observation);
+      if (observation.status !== "UNKNOWN") return persist(observation);
+      // A dropped attempt stays unknown until its blockhash provably can no longer land.
+      try {
+        if (
+          expired &&
+          (await expired(bound.signature, preparation.lastValidBlockHeight)) &&
+          (await store.expireAttempt(pending.receiptId))
+        )
+          return persist({ status: "UNKNOWN" });
+      } catch {
+        /* Any doubt keeps the attempt unknown. */
+      }
+      return pending;
     },
   };
 }
 export type OperationReceiptsBoundary = ReturnType<typeof createOperationReceipts>;
+
+// Resolves attempts whose signed bytes the browser no longer holds, e.g. after a reload.
+export function createExpiredAttemptResolver(
+  store: Pick<OperationReceiptStore, "listUnknownAttempts" | "expireAttempt">,
+  expired: AttemptExpiryReader,
+  cluster: "localnet" | "devnet",
+  limit = 20,
+) {
+  return async () => {
+    const attempts = await store.listUnknownAttempts(
+      cluster === "localnet" ? "LOCALNET" : "DEVNET",
+      limit,
+    );
+    let resolved = 0;
+    for (const attempt of attempts) {
+      try {
+        if (
+          (await expired(attempt.signature, attempt.lastValidBlockHeight)) &&
+          (await store.expireAttempt(attempt.receiptId))
+        )
+          resolved++;
+      } catch {
+        /* RPC doubt keeps this attempt unknown until a later sweep. */
+      }
+    }
+    return resolved;
+  };
+}

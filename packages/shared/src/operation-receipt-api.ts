@@ -24,7 +24,7 @@ export const operationReceiptResponseSchema = z
     messageHash: z.string().regex(/^[0-9a-f]{64}$/),
     status: z.enum(["UNKNOWN", "FAILED", "FINALIZED"]),
     operationStatus: z.enum(["PREPARED", "UNKNOWN", "FAILED", "FINALIZED"]),
-    failureCode: z.literal("TRANSACTION_FAILED").nullable(),
+    failureCode: z.enum(["TRANSACTION_FAILED", "BLOCKHASH_EXPIRED"]).nullable(),
     slot: tokenAmountSchema.nullable(),
     chainRecordedAt: z.iso.datetime({ precision: 3 }).nullable(),
   })

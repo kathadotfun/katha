@@ -38,7 +38,7 @@ import { CORE_PROGRAM_ADDRESS } from "@katha/solana";
 import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "@katha/solana/registry";
 import { createOperationReceipts } from "./operation-receipts.js";
 import { createOperationReceiptStore } from "@katha/db";
-import { createOperationReceiptReader } from "@katha/solana";
+import { createAttemptExpiryReader, createOperationReceiptReader } from "@katha/solana";
 import { createMetadataRevisions } from "./metadata-revisions.js";
 import { createMetadataRevisionStore } from "@katha/db";
 import { createMetadataRevisionReader } from "@katha/solana";
@@ -290,6 +290,7 @@ function startApi() {
       sessions,
       createOperationReceiptReader(rpcConfig),
       config.KATHA_CLUSTER,
+      createAttemptExpiryReader(rpcConfig),
     ),
     createArtworkProvenance(
       createPublicProvenanceStore(

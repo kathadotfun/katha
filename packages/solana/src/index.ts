@@ -123,6 +123,12 @@ export {
   type ReceiptObservation,
   type OperationReceiptReader,
 } from "./operation-receipt.js";
+export {
+  ATTEMPT_EXPIRY_MARGIN_BLOCKS,
+  createAttemptExpiryReader,
+  createAttemptExpiryReaderFromRpc,
+  type AttemptExpiryReader,
+} from "./attempt-expiry.js";
 
 export { decodeRegistryEvent, type RegistryActivityEvent } from "./registry-events.js";
 export { decodeCoreTransferInstruction, type CoreTransferActivity } from "./core.js";

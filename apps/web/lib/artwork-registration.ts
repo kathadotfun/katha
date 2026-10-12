@@ -1,3 +1,4 @@
+import { operationIdempotencyKey } from "./operation-retry.ts";
 import {
   metadataDocumentSchema,
   canonicalDocumentBytes,
@@ -189,7 +190,10 @@ export function createArtworkRegistrationWorkflow(
         const prepared = await session.prepareRegistration(
           kathaId,
           {
-            idempotencyKey: `register-${session.getSnapshot().session!.walletId}-${page.metadata!.id}`,
+            idempotencyKey: operationIdempotencyKey(
+              `register-${session.getSnapshot().session!.walletId}-${page.metadata!.id}`,
+              page.registration.receipt,
+            ),
             expectedUpdatedAt: page.updatedAt,
             metadataVersionId: page.metadata!.id,
             supportedTransactionVersions,

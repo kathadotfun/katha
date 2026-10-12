@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
 import type { OperationReceiptStore } from "@katha/db";
-import type { OperationReceiptReader, ReceiptObservation } from "@katha/solana";
+import type {
+  AttemptExpiryReader,
+  OperationReceiptReader,
+  ReceiptObservation,
+} from "@katha/solana";
 import { registrationFixture } from "./registration.js";
 import { createOperationReceipts } from "../../src/operation-receipts.js";
 import { DomainError } from "../../src/errors.js";
@@ -81,7 +85,50 @@ export async function receiptFixture() {
   const read = vi.fn<OperationReceiptReader>(async (): Promise<ReceiptObservation> => ({
     status: "UNKNOWN",
   }));
-  const store: OperationReceiptStore = { load, save };
-  const service = createOperationReceipts(store, { authenticate }, read, "localnet");
-  return { ...f, snapshot, response, request, load, save, read, authenticate, service };
+  const listUnknownAttempts = vi.fn<OperationReceiptStore["listUnknownAttempts"]>(
+    async () =>
+      receipt?.status === "UNKNOWN"
+        ? [
+            {
+              receiptId: receipt.id,
+              signature: receipt.signature,
+              lastValidBlockHeight: snapshot.preparation.lastValidBlockHeight,
+            },
+          ]
+        : [],
+  );
+  const expireAttempt = vi.fn<OperationReceiptStore["expireAttempt"]>(async (id) => {
+    if (receipt?.id !== id || receipt.status !== "UNKNOWN") return false;
+    receipt = { ...receipt, status: "FAILED", failureCode: "BLOCKHASH_EXPIRED" };
+    return true;
+  });
+  const expired = vi.fn<AttemptExpiryReader>(async () => false);
+  const store: OperationReceiptStore = {
+    load,
+    save,
+    listUnknownAttempts,
+    expireAttempt,
+  };
+  const service = createOperationReceipts(
+    store,
+    { authenticate },
+    read,
+    "localnet",
+    expired,
+  );
+  return {
+    ...f,
+    snapshot,
+    response,
+    request,
+    load,
+    save,
+    read,
+    expired,
+    store,
+    listUnknownAttempts,
+    expireAttempt,
+    authenticate,
+    service,
+  };
 }

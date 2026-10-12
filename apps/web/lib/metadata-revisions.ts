@@ -1,3 +1,4 @@
+import { operationIdempotencyKey } from "./operation-retry.ts";
 import {
   metadataRevisionRequestSchema,
   metadataRevisionDocumentRequestSchema,
@@ -181,7 +182,10 @@ export function createMetadataRevisionWorkflow(
       return run(true, async (signal) => {
         await validateRegistrationDocument({ ...page, registration: page.revision });
         const input = metadataRevisionRequestSchema.parse({
-          idempotencyKey: `metadata-${session.getSnapshot().session!.walletId}-${metadata.id}`,
+          idempotencyKey: operationIdempotencyKey(
+            `metadata-${session.getSnapshot().session!.walletId}-${metadata.id}`,
+            page.revision.receipt,
+          ),
           expectedUpdatedAt: page.updatedAt,
           metadataVersionId: metadata.id,
           expectedMetadataVersion: chain.version,

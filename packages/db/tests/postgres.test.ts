@@ -4256,6 +4256,152 @@ it("atomically reconciles owned prepared receipts, terminal retries and competin
   }
 });
 
+it("expires only unknown attempts and lets a fresh key open a new operation", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url),
+    db = connection.db;
+  const { createOperationReceiptStore, createOperationPreparationStore } =
+    await import("../src/index.js");
+  const address = "Q".repeat(32); // Persistence-only synthetic identity, never signs.
+  try {
+    const [artist] = await db
+      .insert(artists)
+      .values({
+        slug: "attempt-expiry-artist",
+        displayName: "Synthetic",
+        biography: "Synthetic",
+        region: "Bagmati",
+        traditions: ["Paubha"],
+      })
+      .returning();
+    if (!artist) throw new Error("Fixture missing");
+    const [artwork] = await db
+      .insert(artworks)
+      .values({
+        artistId: artist.id,
+        category: "PAUBHA",
+        title: "Synthetic expiry",
+        creationYear: 2026,
+      })
+      .returning();
+    const [wallet] = await db.insert(wallets).values({ address }).returning();
+    if (!artwork || !wallet) throw new Error("Fixture missing");
+    const preparation = {
+      canonicalRequest: '{"synthetic":"expiry preparation"}',
+      messageHash: "e".repeat(64),
+      transactionBase64: "AAAA",
+      transactionVersion: 1,
+      blockhash: "11111111111111111111111111111111",
+      lastValidBlockHeight: 497580785n,
+      simulationSlot: 10n,
+      simulationUnits: 20n,
+    };
+    const operation = {
+      artworkId: artwork.id,
+      walletId: wallet.id,
+      cluster: "DEVNET" as const,
+      kind: "REGISTER_ARTWORK" as const,
+      idempotencyKey: "expiry-1",
+      requestHash: createHash("sha256")
+        .update(preparation.canonicalRequest)
+        .digest("hex"),
+      programAddress: address,
+      expectedAccounts: [address],
+      expectedHashes: ["b".repeat(64)],
+    };
+    const preparedStore = createOperationPreparationStore(db),
+      store = createOperationReceiptStore(db);
+    const prepare = (key: string) =>
+      preparedStore.save(
+        { ...operation, idempotencyKey: key },
+        address,
+        artwork.kathaId,
+        preparation,
+      );
+    const first = await prepare("expiry-1");
+    if (first.status !== "saved") throw new Error("Preparation failed");
+    const signature = "R".repeat(88);
+    const retained = await store.save(
+      first.operationId,
+      first.preparationId,
+      wallet.id,
+      "DEVNET",
+      signature,
+      preparation.messageHash,
+      { status: "UNKNOWN" },
+    );
+    if (retained.status !== "saved") throw new Error("Receipt failed");
+    const listed = await store.listUnknownAttempts("DEVNET", 50);
+    expect(listed).toContainEqual({
+      receiptId: retained.receipt.id,
+      signature,
+      lastValidBlockHeight: 497580785n,
+    });
+    expect(
+      (await store.listUnknownAttempts("LOCALNET", 50)).map((a) => a.receiptId),
+    ).not.toContain(retained.receipt.id);
+    // Racing sweeps record the expiry exactly once.
+    expect(
+      (
+        await Promise.all([
+          store.expireAttempt(retained.receipt.id),
+          store.expireAttempt(retained.receipt.id),
+        ])
+      ).sort(),
+    ).toEqual([false, true]);
+    const [receipt] = await db
+      .select()
+      .from(transactionReceipts)
+      .where(eq(transactionReceipts.id, retained.receipt.id));
+    expect(receipt).toMatchObject({
+      status: "FAILED",
+      failureCode: "BLOCKHASH_EXPIRED",
+    });
+    const [closed] = await db
+      .select()
+      .from(blockchainOperations)
+      .where(eq(blockchainOperations.id, first.operationId));
+    expect(closed?.status).toBe("FAILED");
+    expect(
+      (await store.listUnknownAttempts("DEVNET", 50)).map((a) => a.receiptId),
+    ).not.toContain(retained.receipt.id);
+    expect(await store.expireAttempt(randomUUID())).toBe(false);
+    // The failed key stays closed; a retry key opens one new prepared operation.
+    expect((await prepare("expiry-1")).status).toBe("conflict");
+    const retry = await prepare("expiry-1-retry-RRRRRRRRRRRRRRRR");
+    expect(retry.status).toBe("saved");
+    if (retry.status === "saved") expect(retry.operationId).not.toBe(first.operationId);
+    const finalized = await store.save(
+      first.operationId,
+      first.preparationId,
+      wallet.id,
+      "DEVNET",
+      "S".repeat(88),
+      preparation.messageHash,
+      { status: "UNKNOWN" },
+    );
+    if (finalized.status !== "saved") throw new Error("Receipt failed");
+    await store.save(
+      first.operationId,
+      first.preparationId,
+      wallet.id,
+      "DEVNET",
+      "S".repeat(88),
+      preparation.messageHash,
+      {
+        status: "FINALIZED",
+        slot: 12n,
+        chainRecordedAt: new Date("2026-10-05T00:00:00.000Z"),
+      },
+    );
+    // A recorded outcome is terminal and can never be rewritten as expired.
+    expect(await store.expireAttempt(finalized.receipt.id)).toBe(false);
+  } finally {
+    await connection.close();
+  }
+});
 it("commits activity, ownership and cursors atomically across replay, races and restart", async () => {
   const url = process.env.KATHA_TEST_DATABASE_URL;
   if (!url || url !== process.env.DATABASE_URL)

@@ -618,6 +618,24 @@ test("only finalized execution failure becomes failed, and receipt mismatches ne
   assert.ok(!g.calls.includes("submit"));
   g.flow.dispose();
 });
+test("a provably expired attempt fails without claiming on-chain execution", async () => {
+  const f = await fixture();
+  await f.flow.load(f.operation, f.operation);
+  await f.flow.approveAndSend();
+  assert.equal(f.flow.getSnapshot().phase, "unknown");
+  f.setStatus("FAILED");
+  const reconcile = f.session.reconcile;
+  f.session.reconcile = async (...args) => ({
+    ...(await reconcile(...args)),
+    failureCode: "BLOCKHASH_EXPIRED" as const,
+  });
+  await f.flow.checkConfirmation();
+  assert.equal(f.flow.getSnapshot().phase, "failed");
+  assert.match(f.flow.getSnapshot().error!, /expired without reaching Solana/);
+  // The expired signature stays visible; a fresh preparation is a separate operation.
+  assert.equal(f.flow.getSnapshot().signature, f.signature);
+  f.flow.dispose();
+});
 test("wallet adapter uses separate signing and rejects wallet byte modifications", async () => {
   const f = await fixture();
   const account = {
@@ -735,7 +753,6 @@ test("Kit RPC checks genesis, preserves simulation bytes and submits once with p
     assert.equal(submit[0]!.params[0], f.wire);
     assert.deepEqual(submit[0]!.params[1], {
       encoding: "base64",
-      maxRetries: 0,
       preflightCommitment: "confirmed",
       skipPreflight: false,
     });

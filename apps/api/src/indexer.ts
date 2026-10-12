@@ -3,10 +3,12 @@ import {
   createActivityStore,
   createIndexerRecoveryStore,
   createDatabase,
+  createOperationReceiptStore,
 } from "@katha/db";
 import { walletAddressSchema } from "@katha/shared";
 import {
   createActivityReader,
+  createAttemptExpiryReader,
   createHistoryReader,
   isRetryableRpcFailure,
   createRegistryCollectionReader,
@@ -16,6 +18,7 @@ import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "@katha/solana/registry";
 import { setTimeout } from "node:timers/promises";
 import { readServerConfiguration, ConfigurationError } from "./config.js";
 import { createLogger } from "./logger.js";
+import { createExpiredAttemptResolver } from "./operation-receipts.js";
 import {
   recoverActivityStream,
   reconcileCoreOwnership,
@@ -91,8 +94,23 @@ async function run() {
       marketplace: KATHA_MARKETPLACE_PROGRAM_ADDRESS,
       collection,
     });
+    // Browsers drop signed bytes on reload; resolve their provably expired attempts here.
+    const resolveExpiredAttempts = createExpiredAttemptResolver(
+      createOperationReceiptStore(connection.db),
+      createAttemptExpiryReader(rpcConfig),
+      config.KATHA_CLUSTER,
+    );
+    let lastExpirySweep = 0;
     let backfill = flags.includes("--backfill");
     while (!controller.signal.aborted) {
+      if (!once && Date.now() - lastExpirySweep >= 30_000) {
+        lastExpirySweep = Date.now();
+        try {
+          await resolveExpiredAttempts();
+        } catch {
+          logger.activityPollingFailed();
+        }
+      }
       try {
         const snapshot = await retryRpc(
           () => history.snapshot(controller.signal),

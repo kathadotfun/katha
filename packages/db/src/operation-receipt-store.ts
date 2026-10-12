@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "./connection.js";
 import {
   blockchainOperations,
@@ -157,6 +157,76 @@ export function createOperationReceiptStore(db: Database) {
           .where(eq(blockchainOperations.id, operationId));
         if (!current) throw new Error("Operation missing");
         return { status: "saved" as const, receipt, operationStatus: current.status };
+      });
+    },
+    /** Unresolved signed attempts with the blockhash lifetime of their exact preparation. */
+    async listUnknownAttempts(cluster: "LOCALNET" | "DEVNET", limit: number) {
+      return db
+        .select({
+          receiptId: transactionReceipts.id,
+          signature: transactionReceipts.signature,
+          lastValidBlockHeight: operationPreparations.lastValidBlockHeight,
+        })
+        .from(transactionReceipts)
+        .innerJoin(
+          operationPreparations,
+          and(
+            eq(operationPreparations.operationId, transactionReceipts.operationId),
+            eq(operationPreparations.messageHash, transactionReceipts.messageHash),
+          ),
+        )
+        .where(
+          and(
+            eq(transactionReceipts.cluster, cluster),
+            eq(transactionReceipts.status, "UNKNOWN"),
+          ),
+        )
+        .orderBy(asc(transactionReceipts.createdAt))
+        .limit(limit);
+    },
+    /** Records that an attempt can never execute; callers must prove expiry on-chain first. */
+    async expireAttempt(receiptId: string) {
+      return db.transaction(async (tx) => {
+        const [identity] = await tx
+          .select({
+            operationId: blockchainOperations.id,
+            artworkId: blockchainOperations.artworkId,
+            kind: blockchainOperations.kind,
+          })
+          .from(transactionReceipts)
+          .innerJoin(
+            blockchainOperations,
+            eq(blockchainOperations.id, transactionReceipts.operationId),
+          )
+          .where(eq(transactionReceipts.id, receiptId));
+        if (!identity) return false;
+        // Same lock order as save(): artwork for condition/custody writers, then operation.
+        if (
+          ["RECORD_CONDITION", "UPDATE_CUSTODY"].includes(identity.kind) &&
+          identity.artworkId
+        ) {
+          await tx
+            .select({ id: artworks.id })
+            .from(artworks)
+            .where(eq(artworks.id, identity.artworkId))
+            .for("share");
+        }
+        await tx
+          .select({ id: blockchainOperations.id })
+          .from(blockchainOperations)
+          .where(eq(blockchainOperations.id, identity.operationId))
+          .for("update");
+        const expired = await tx
+          .update(transactionReceipts)
+          .set({ status: "FAILED", failureCode: "BLOCKHASH_EXPIRED" })
+          .where(
+            and(
+              eq(transactionReceipts.id, receiptId),
+              eq(transactionReceipts.status, "UNKNOWN"),
+            ),
+          )
+          .returning({ id: transactionReceipts.id });
+        return expired.length === 1;
       });
     },
   };

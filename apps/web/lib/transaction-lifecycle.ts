@@ -46,6 +46,11 @@ export const idleTransactionSnapshot: TransactionSnapshot = {
   purchaseOwnerConfirmed: false,
   error: null,
 };
+function failedMessage(failureCode: string | null) {
+  return failureCode === "BLOCKHASH_EXPIRED"
+    ? "This attempt expired without reaching Solana. Nothing changed; you can prepare a fresh transaction."
+    : "The finalized transaction failed. It did not complete this operation.";
+}
 export function createTransactionLifecycle(
   connection: WalletConnection,
   session: Pick<WalletSessionController, "getSnapshot" | "subscribe" | "reconcile">,
@@ -162,10 +167,7 @@ export function createTransactionLifecycle(
     if (finalized && result.status !== "FINALIZED")
       throw new Error("Receipt regressed.");
     if (result.status === "FAILED") {
-      publish({
-        phase: "failed",
-        error: "The finalized transaction failed. It did not complete this operation.",
-      });
+      publish({ phase: "failed", error: failedMessage(result.failureCode) });
       return;
     }
     if (result.status === "UNKNOWN") {
@@ -328,11 +330,7 @@ export function createTransactionLifecycle(
         )
           throw new Error("Receipt mismatch.");
         if (retained.status === "FAILED") {
-          publish({
-            phase: "failed",
-            error:
-              "The finalized transaction failed. It did not complete this operation.",
-          });
+          publish({ phase: "failed", error: failedMessage(retained.failureCode) });
           return;
         }
         if (retained.status === "FINALIZED") {

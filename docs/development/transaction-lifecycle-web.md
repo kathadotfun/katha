@@ -66,16 +66,26 @@ The existing [receipt endpoint](operation-receipts-api.md) first retains the ver
 signed attempt as UNKNOWN. The browser broadcasts only after receipt retention
 succeeds and the lifetime remains valid. This gives a known signature before any
 uncertain send. The signature is shown as soon as signed; it does not imply broadcast
-or success. Submission uses the exact signed bytes, preflight enabled and validator
-`maxRetries: 0`. The controller makes one submission attempt and never resubmits.
+or success. Submission uses the exact signed bytes with preflight enabled. The
+controller makes one submission attempt and never re-signs or resubmits; the RPC node
+keeps its default rebroadcast of those identical bytes until the blockhash expires,
+because public Devnet drops single sends and one signature executes at most once.
 
 A timeout or missing confirmation stays **Confirmation unknown**. **Check this
 transaction again** only reconciles the same signed receipt; it never signs or sends.
 Only the API's matching finalized successful receipt establishes finalization;
 a matching finalized execution error establishes failure. A stale receipt cannot
 regress a known finalized outcome. An expired preparation stops before broadcasting;
-expiry of an unresolved signature does not prove it failed. Do not blindly prepare
-or submit a replacement while the previous outcome is unresolved.
+blockhash expiry alone does not prove an unresolved signature failed. The API records
+`FAILED` with `BLOCKHASH_EXPIRED` only after finalized block height passes that exact
+preparation's last valid height (plus a 32-block margin) and a history search from at
+least that finalized slot has no record of the signature; any RPC doubt keeps it
+`UNKNOWN`. Reconciliation checks this immediately; the indexer worker sweeps retained
+attempts every 30 seconds, so a reloaded tab without the signed bytes still resolves.
+After a failed or expired attempt, registration, verification, metadata and condition
+retries derive a fresh idempotency key from that failed signature; repeated clicks
+for the same retry still share one key. Do not prepare a replacement while the
+previous outcome is unresolved.
 
 After successful registration finalization, a protected registration read checks for
 the same finalized receipt signature and matching indexed Registry event, even for

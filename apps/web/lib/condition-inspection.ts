@@ -1,3 +1,4 @@
+import { operationIdempotencyKey } from "./operation-retry.ts";
 import {
   conditionReportDocumentSchema,
   conditionPreparationRequestSchema,
@@ -234,7 +235,10 @@ export function createConditionInspectionWorkflow(
             reportId: page.report!.id,
             expectedUpdatedAt: page.updatedAt,
             expectedConditionVersion: page.chain.version,
-            idempotencyKey: `condition-${session.getSnapshot().session!.walletId}-${page.report!.id}`,
+            idempotencyKey: operationIdempotencyKey(
+              `condition-${session.getSnapshot().session!.walletId}-${page.report!.id}`,
+              page.attestation.receipt,
+            ),
             supportedTransactionVersions,
           },
           signal,

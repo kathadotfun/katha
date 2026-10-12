@@ -87,12 +87,13 @@ export function createTransactionRpc(cluster: "localnet" | "devnet", url?: strin
     async submit(wire: string, signal: AbortSignal) {
       await check(signal);
       const tx = decodeCanonicalTransaction(wire);
+      // One client submission. maxRetries is left to the node, which rebroadcasts these
+      // identical signed bytes until the blockhash expires; one signature executes at most once.
       const result = await rpc
         .sendTransaction(getBase64EncodedWireTransaction(tx), {
           encoding: "base64",
           skipPreflight: false,
           preflightCommitment: "confirmed",
-          maxRetries: 0n,
         })
         .send({ abortSignal: signal });
       if (result !== getSignatureFromTransaction(tx))

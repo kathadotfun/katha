@@ -1,3 +1,4 @@
+import { operationIdempotencyKey } from "./operation-retry.ts";
 import type { ArtworkVerificationReview } from "@katha/shared";
 import { validateRegistrationDocument } from "./artwork-registration.ts";
 import { WalletSessionApiError } from "./wallet-session-api.ts";
@@ -157,7 +158,10 @@ export function createArtworkVerificationWorkflow(
           {
             authenticityConfirmed: true,
             reviewedEvidenceHash,
-            idempotencyKey: `verify-${session.getSnapshot().session!.walletId}-${page.metadata!.id}`,
+            idempotencyKey: operationIdempotencyKey(
+              `verify-${session.getSnapshot().session!.walletId}-${page.metadata!.id}`,
+              page.verification.receipt,
+            ),
             expectedUpdatedAt: page.updatedAt,
             metadataVersionId: page.metadata!.id,
             supportedTransactionVersions,
