@@ -11,7 +11,7 @@ import {
   pipe,
 } from "@solana/kit";
 import {
-  getCreateListingInstructionAsync,
+  getCreateListingWithFeesInstructionAsync,
   getCancelListingInstructionAsync,
 } from "@katha/solana/marketplace";
 import {
@@ -39,7 +39,7 @@ export async function listingFixture(
     reportId: new Uint8Array(16).fill(1),
   });
   const signer = createNoopSigner(address(patch.seller ?? wallet));
-  const ix = await getCreateListingInstructionAsync({
+  const ix = await getCreateListingWithFeesInstructionAsync({
     artwork,
     conditionReport: report,
     collection: address(collection),
@@ -47,6 +47,9 @@ export async function listingFixture(
     price: patch.price ?? 12500001n,
     expiresAt: patch.expiresAt ?? 1900000000n,
     expectedRevision: patch.expectedRevision ?? 0n,
+    expectedFeeRevision: 1n,
+    expectedCommissionBps: 1000,
+    expectedSecondaryRoyaltyBps: 0,
     registryProgram: KATHA_REGISTRY_PROGRAM_ADDRESS,
     ...(patch.coreProgram ? { coreProgram: address(patch.coreProgram) } : {}),
   });
@@ -85,6 +88,11 @@ export async function listingFixture(
     expiresAt: "1900000000",
     currentRevision: "0",
     nextRevision: "1",
+    fees: {
+      scheduleRevision: "1",
+      platformCommissionBps: 1000,
+      secondaryRoyaltyBps: 0,
+    },
   };
   return {
     operation,

@@ -480,6 +480,14 @@ async function lifecycleJourney() {
           inspectionValiditySeconds: 2592000n,
         }),
       ]);
+      await client.sendTransaction([
+        await marketplace.getInitializeFeeScheduleInstructionAsync({
+          authority: bootstrap,
+          primaryCommissionBps: 1000,
+          secondaryCommissionBps: 250,
+          secondaryRoyaltyBps: 500,
+        }),
+      ]);
       const require = createRequire(join(root, "apps/web/package.json"));
       web = spawn(
         process.execPath,
@@ -1000,8 +1008,8 @@ async function lifecycleJourney() {
                     ).toEqual(history.items);
                     expect(await balance(outsider.address)).toBe(10850000n);
                     expect(await balance(buyerB.address)).toBe(8000000n);
-                    expect(await balance(payout.address)).toBe(1075000n);
-                    expect(await balance(bootstrap.address)).toBe(75000n);
+                    expect(await balance(payout.address)).toBe(1000000n);
+                    expect(await balance(bootstrap.address)).toBe(150000n);
                   }
                 },
               },
@@ -1052,8 +1060,8 @@ async function lifecycleJourney() {
                   });
                   expect(await balance(outsider.address)).toBe(10850000n);
                   expect(await balance(buyerB.address)).toBe(8000000n);
-                  expect(await balance(payout.address)).toBe(1075000n);
-                  expect(await balance(bootstrap.address)).toBe(75000n);
+                  expect(await balance(payout.address)).toBe(1000000n);
+                  expect(await balance(bootstrap.address)).toBe(150000n);
                   const [listing] = await marketplace.findListingPda({
                     asset: core.address,
                   });
@@ -1131,8 +1139,8 @@ async function lifecycleJourney() {
             outsider.address,
           );
           expect(await balance(outsider.address)).toBe(9000000n);
-          expect(await balance(payout.address)).toBe(975000n);
-          expect(await balance(bootstrap.address)).toBe(25000n);
+          expect(await balance(payout.address)).toBe(900000n);
+          expect(await balance(bootstrap.address)).toBe(100000n);
           const history = artworkProvenanceResponseSchema.parse(
             await json(`/artworks/${kathaId}/provenance`),
           );

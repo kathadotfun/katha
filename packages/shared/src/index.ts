@@ -60,6 +60,8 @@ export {
   listingPriceSchema,
   listingStatusSchema,
   marketplaceFeeRatesSchema,
+  marketplaceFeeScheduleSchema,
+  DEFAULT_MARKETPLACE_FEES,
   tokenAmountSchema,
 } from "./marketplace.js";
 export type {

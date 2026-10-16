@@ -730,7 +730,7 @@ pub mod katha_registry {
 
         let asset_info = ctx.accounts.asset.to_account_info();
         require!(
-            asset_info.data_is_empty() && asset_info.lamports() == 0,
+            asset_info.data_is_empty() && *asset_info.owner == anchor_lang::system_program::ID,
             RegistryError::AssetAlreadyExists
         );
         let collection_info = ctx.accounts.collection.to_account_info();
@@ -743,6 +743,22 @@ pub mod katha_registry {
         let artwork_key = artwork.key();
         let asset_seeds: &[&[u8]] = &[CORE_ASSET_SEED, artwork_key.as_ref(), &asset_bump];
         let collection_seeds: &[&[u8]] = &[COLLECTION_AUTHORITY_SEED, &collection_bump];
+        // Anyone can send SOL to this deterministic address before minting.
+        // Reclaim only empty System-owned PDA dust so it cannot block Core creation.
+        let prefunded = asset_info.lamports();
+        if prefunded > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new_with_signer(
+                    anchor_lang::system_program::ID,
+                    anchor_lang::system_program::Transfer {
+                        from: asset_info.clone(),
+                        to: registration_info.clone(),
+                    },
+                    &[asset_seeds],
+                ),
+                prefunded,
+            )?;
+        }
         let metadata = &ctx.accounts.metadata_revision;
         CreateV2CpiBuilder::new(&core_info)
             .asset(&asset_info)

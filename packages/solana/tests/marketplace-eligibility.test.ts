@@ -210,7 +210,7 @@ it("validates real Core owner, verification, canonical accounts and current comm
   const reportValue = registry.getConditionAttestationDecoder().decode(report.data);
   for (const override of [
     { reportHash: new Uint8Array(32) },
-    { version: 2 },
+    { version: 3 },
     { verifier: f.roles.outsider.address },
   ]) {
     f.client.svm.setAccount({
@@ -231,7 +231,7 @@ it("validates real Core owner, verification, canonical accounts and current comm
   for (const override of [
     { artistPayout: f.roles.outsider.address },
     { paymentMint: f.wrongMint },
-    { version: 2 },
+    { version: 3 },
     { artwork: f.secondArtwork.artwork },
   ]) {
     f.installHistory(override);

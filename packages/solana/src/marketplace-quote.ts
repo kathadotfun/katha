@@ -7,6 +7,7 @@ import {
 import { nonzeroAddress } from "./registration.js";
 import {
   readMarketplaceListingState,
+  readListingFeeRates,
   type MarketplaceListingAccounts,
 } from "./marketplace.js";
 import * as market from "./generated/marketplace/index.js";
@@ -69,10 +70,7 @@ export async function readMarketplacePurchaseTerms(
     ledger.saleKind === market.SaleKind.Primary
       ? ("PRIMARY" as const)
       : ("SECONDARY" as const);
-  const fees = {
-    platformCommissionBps: config.commissionBps,
-    secondaryRoyaltyBps: config.secondaryRoyaltyBps,
-  };
+  const fees = await readListingFeeRates(accounts, ledger);
   const recipients = {
     seller: ledger.seller,
     artistPayout: ledger.artistPayout,

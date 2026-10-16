@@ -663,7 +663,13 @@ export function readArtworkMintState(
       if (core.name !== kathaId || core.uri !== metadata.current.uri)
         throw new TypeError("Core metadata mismatch");
       owner = nonzeroAddress(core.owner);
-    } else if (accounts.assetAccount.exists)
+    } else if (
+      accounts.assetAccount.exists &&
+      (accounts.assetAccount.programAddress !==
+        address("11111111111111111111111111111111") ||
+        accounts.assetAccount.executable ||
+        accounts.assetAccount.data.length !== 0)
+    )
       throw new TypeError("Unbound canonical asset already exists");
     return {
       prepared,

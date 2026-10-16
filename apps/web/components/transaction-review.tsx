@@ -294,6 +294,15 @@ export function TransactionReviewView({
                   <dt>Listing ends</dt>
                   <dd>{localDateTime(unixSecondsIso(operation.expiresAt))}</dd>
                 </div>
+                {operation.kind === "CREATE_LISTING" && operation.fees && (
+                  <div className="kv">
+                    <dt>Sale fees</dt>
+                    <dd>
+                      {operation.fees.platformCommissionBps / 100}% Katha commission ·{" "}
+                      {operation.fees.secondaryRoyaltyBps / 100}% artist resale royalty
+                    </dd>
+                  </div>
+                )}
               </>
             )}
             <div className="kv">

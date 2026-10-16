@@ -74,10 +74,19 @@ export const KATHA_MARKETPLACE_ERROR__INVALID_BUYER = 0x178b; // 6027
 export const KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_ACCOUNT = 0x178c; // 6028
 /** InsufficientPaymentFunds: Buyer has insufficient test-token funds */
 export const KATHA_MARKETPLACE_ERROR__INSUFFICIENT_PAYMENT_FUNDS = 0x178d; // 6029
+/** InvalidFeeSchedule: Fee schedule does not belong to this Marketplace */
+export const KATHA_MARKETPLACE_ERROR__INVALID_FEE_SCHEDULE = 0x178e; // 6030
+/** StaleFeeSchedule: Fee schedule revision is stale or exhausted */
+export const KATHA_MARKETPLACE_ERROR__STALE_FEE_SCHEDULE = 0x178f; // 6031
+/** InvalidListingFees: Listing fee snapshot is missing, invalid or stale */
+export const KATHA_MARKETPLACE_ERROR__INVALID_LISTING_FEES = 0x1790; // 6032
+/** FeeScheduleRequired: Create listings with a reviewed fee schedule revision */
+export const KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED = 0x1791; // 6033
 
 export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS
   | typeof KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION
+  | typeof KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED
   | typeof KATHA_MARKETPLACE_ERROR__INSUFFICIENT_PAYMENT_FUNDS
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK
@@ -86,10 +95,12 @@ export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_BUYER
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_CUSTODY
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_FEES
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_FEE_SCHEDULE
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_SCOPE
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_VALIDITY
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_DELEGATES
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_FEES
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_ACCOUNT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT
@@ -101,6 +112,7 @@ export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_NOT_ACTIVE
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_NOT_EXPIRED
   | typeof KATHA_MARKETPLACE_ERROR__PAYMENT_ARITHMETIC_OVERFLOW
+  | typeof KATHA_MARKETPLACE_ERROR__STALE_FEE_SCHEDULE
   | typeof KATHA_MARKETPLACE_ERROR__STALE_LISTING_PRICE
   | typeof KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY
@@ -112,6 +124,7 @@ if (process.env["NODE_ENV"] !== "production") {
   kathaMarketplaceErrorMessages = {
     [KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS]: `Pre-existing Core plugins conflict with marketplace delegation`,
     [KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION]: `Collector inspection is expired or has an invalid timestamp`,
+    [KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED]: `Create listings with a reviewed fee schedule revision`,
     [KATHA_MARKETPLACE_ERROR__INSUFFICIENT_PAYMENT_FUNDS]: `Buyer has insufficient test-token funds`,
     [KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT]: `Artist payout must be configured and immutable`,
     [KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK]: `Artwork or Registry account does not match Marketplace configuration`,
@@ -120,10 +133,12 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_MARKETPLACE_ERROR__INVALID_BUYER]: `Buyer cannot purchase their own listing`,
     [KATHA_MARKETPLACE_ERROR__INVALID_CUSTODY]: `Custody is unknown, in transit or unrelated to the current seller`,
     [KATHA_MARKETPLACE_ERROR__INVALID_FEES]: `Combined commission and secondary royalty exceed 10000 basis points`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_FEE_SCHEDULE]: `Fee schedule does not belong to this Marketplace`,
     [KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_SCOPE]: `Inspection does not approve the current custody and owner scope`,
     [KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_VALIDITY]: `Inspection validity must be positive and fit the signed timestamp domain`,
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING]: `Listing identity, version or primary-sale classification is invalid`,
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_DELEGATES]: `Core freeze delegate does not match the active listing`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_FEES]: `Listing fee snapshot is missing, invalid or stale`,
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS]: `Listing price must be positive and expiry must be in the future`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_ACCOUNT]: `Payment account owner, mint, state or alias is invalid`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT]: `Payment mint must use six decimals and have no freeze authority`,
@@ -135,6 +150,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_MARKETPLACE_ERROR__LISTING_NOT_ACTIVE]: `Listing is not active`,
     [KATHA_MARKETPLACE_ERROR__LISTING_NOT_EXPIRED]: `Listing has not reached its expiry time`,
     [KATHA_MARKETPLACE_ERROR__PAYMENT_ARITHMETIC_OVERFLOW]: `Payment arithmetic overflow or underflow`,
+    [KATHA_MARKETPLACE_ERROR__STALE_FEE_SCHEDULE]: `Fee schedule revision is stale or exhausted`,
     [KATHA_MARKETPLACE_ERROR__STALE_LISTING_PRICE]: `Reviewed listing price no longer matches`,
     [KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION]: `Listing revision does not match the reviewed revision`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY]: `Only the configured Registry authority can initialize Marketplace`,

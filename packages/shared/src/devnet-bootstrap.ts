@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { walletAddressSchema } from "./artwork-domain.js";
 import { kathaIdSchema } from "./artwork-identity.js";
+import {
+  DEFAULT_MARKETPLACE_FEES,
+  marketplaceFeeScheduleSchema,
+} from "./marketplace.js";
 
 const publicAddress = walletAddressSchema.refine(
   (value) => value !== "11111111111111111111111111111111",
@@ -25,6 +29,7 @@ export const devnetBootstrapSchema = z.strictObject({
   custodyAuthority: publicAddress,
   treasury: publicAddress,
   paymentMint: publicAddress,
+  feeRates: marketplaceFeeScheduleSchema.default(DEFAULT_MARKETPLACE_FEES),
 });
 export type DevnetBootstrap = z.infer<typeof devnetBootstrapSchema>;
 export const devnetSaleTermsSchema = z.strictObject({
@@ -36,6 +41,8 @@ export const devnetBootstrapSteps = [
   "collection",
   "registry",
   "marketplace",
+  "fees",
+  "update-fees",
   "sale-terms",
 ] as const;
 export type DevnetBootstrapStep = (typeof devnetBootstrapSteps)[number];

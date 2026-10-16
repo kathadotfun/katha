@@ -166,6 +166,7 @@ export function createArtworkListings(
       ? snapshot.state.ledger!.expiresAt.toString()
       : creation!.expiresAt;
     const response = listingPreparationResponseSchema.parse({
+      ...("fees" in prepared ? { fees: prepared.fees } : {}),
       ...artifact,
       operationId: "00000000-0000-4000-8000-000000000000",
       preparationId: "00000000-0000-4000-8000-000000000000",

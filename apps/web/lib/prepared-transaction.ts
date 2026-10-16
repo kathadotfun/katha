@@ -262,8 +262,9 @@ export async function inspectPreparedTransaction(
       token,
       ...tokens,
       address("11111111111111111111111111111111"),
+      (await market.findListingFeesPda({ listing }))[0],
     ];
-    const roles = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 3, 0, 0, 1, 1, 1, 1, 0];
+    const roles = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 3, 0, 0, 1, 1, 1, 1, 0, 0];
     if (
       quote.asset !== asset ||
       quote.listing !== listing ||
@@ -363,10 +364,10 @@ export async function inspectPreparedTransaction(
       !expected ||
       instruction.programAddress !== market.KATHA_MARKETPLACE_PROGRAM_ADDRESS ||
       market.identifyKathaMarketplaceInstruction(instruction.data!) !==
-        market.KathaMarketplaceInstruction.CreateListing
+        market.KathaMarketplaceInstruction.CreateListingWithFees
     )
       throw new Error("Listing operation mismatch");
-    const parsed = market.parseCreateListingInstruction({
+    const parsed = market.parseCreateListingWithFeesInstruction({
       ...instruction,
       accounts: instruction.accounts ?? [],
       data: instruction.data!,
@@ -407,8 +408,10 @@ export async function inspectPreparedTransaction(
       address(expected.collection),
       CORE_PROGRAM_ADDRESS,
       address("11111111111111111111111111111111"),
+      (await market.findFeeSchedulePda())[0],
+      (await market.findListingFeesPda({ listing }))[0],
     ];
-    const roles = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 1, 1, 0, 0];
+    const roles = [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 1, 1, 0, 0, 0, 1];
     if (
       asset !== expected.asset ||
       parsed.data.price !== BigInt(expected.price) ||
@@ -418,12 +421,16 @@ export async function inspectPreparedTransaction(
       operation.expiresAt !== expected.expiresAt ||
       operation.currentRevision !== expected.expectedRevision ||
       BigInt(operation.nextRevision) !== BigInt(expected.expectedRevision) + 1n ||
-      instruction.accounts?.length !== 15 ||
+      !operation.fees ||
+      parsed.data.expectedFeeRevision !== BigInt(operation.fees.scheduleRevision) ||
+      parsed.data.expectedCommissionBps !== operation.fees.platformCommissionBps ||
+      parsed.data.expectedSecondaryRoyaltyBps !== operation.fees.secondaryRoyaltyBps ||
+      instruction.accounts?.length !== 17 ||
       instruction.accounts.some(
         (value, index) =>
           value.address !== accounts[index] || value.role !== roles[index],
       ) ||
-      instruction.data!.length !== 32
+      instruction.data!.length !== 44
     )
       throw new Error("Listing terms or account binding mismatch");
     return {

@@ -12,6 +12,7 @@ export async function createDevnetDeploymentPlan(input) {
   const [registryConfig] = await registry.findConfigPda();
   const [collectionAuthority] = await registry.findCollectionAuthorityPda();
   const [marketplaceConfig] = await marketplace.findConfigPda();
+  const [feeSchedule] = await marketplace.findFeeSchedulePda();
   return {
     mode: "review-only",
     cluster: "devnet",
@@ -22,7 +23,7 @@ export async function createDevnetDeploymentPlan(input) {
       registry: registry.KATHA_REGISTRY_PROGRAM_ADDRESS,
       marketplace: marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
     },
-    addresses: { registryConfig, collectionAuthority, marketplaceConfig },
+    addresses: { registryConfig, collectionAuthority, marketplaceConfig, feeSchedule },
     deployment: [
       {
         name: "registry",
@@ -43,12 +44,14 @@ export async function createDevnetDeploymentPlan(input) {
       "approve Core collection creation",
       "approve Registry initialization",
       "approve Marketplace initialization",
+      "approve fee schedule initialization before creating listings",
       "configure matching API/web/indexer Devnet settings",
       "register artwork through existing admin workflow",
       "approve immutable artist payout binding",
       "fund collector test token accounts",
     ],
     defaults: {
+      feeRates: config.feeRates,
       commissionBps: 250,
       secondaryRoyaltyBps: 500,
       inspectionValiditySeconds: "2592000",

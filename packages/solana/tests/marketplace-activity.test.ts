@@ -242,3 +242,44 @@ it("binds Marketplace initialization to the generated account positions", () => 
     event: { name: "MarketplaceInitialized" },
   });
 });
+
+it("binds fee schedule events to their signed rates, authority and revision", () => {
+  for (const update of [false, true]) {
+    const f = purchase();
+    const instruction = f.transaction.message.instructions[0]!;
+    instruction.accounts = [2, 3, 4, 2];
+    const rates = {
+      primaryCommissionBps: 1000,
+      secondaryCommissionBps: 250,
+      secondaryRoyaltyBps: 500,
+    };
+    instruction.data = base58(
+      update
+        ? m
+            .getUpdateFeeScheduleInstructionDataEncoder()
+            .encode({ ...rates, expectedRevision: 1n })
+        : m.getInitializeFeeScheduleInstructionDataEncoder().encode(rates),
+    );
+    f.meta.innerInstructions = [];
+    const event = {
+      config: SYSTEM,
+      schedule: ARTWORK,
+      collection: COLLECTION,
+      authority: OWNER,
+      revision: update ? 2n : 1n,
+      ...rates,
+    };
+    const logs = (primaryCommissionBps: number) => [
+      `Program ${m.KATHA_MARKETPLACE_PROGRAM_ADDRESS} invoke [1]`,
+      `Program data: ${Buffer.from(m.getFeeScheduleChangedEventEncoder().encode({ ...event, primaryCommissionBps })).toString("base64")}`,
+      `Program ${m.KATHA_MARKETPLACE_PROGRAM_ADDRESS} success`,
+    ];
+    f.meta.logMessages = logs(1000);
+    expect(decodeFinalizedActivity(f, SIG, SLOT).activities[0]).toMatchObject({
+      collection: COLLECTION,
+      event: { name: "FeeScheduleChanged", value: { revision: event.revision } },
+    });
+    f.meta.logMessages = logs(1500);
+    expect(() => decodeFinalizedActivity(f, SIG, SLOT)).toThrow();
+  }
+});

@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+export const DEFAULT_MARKETPLACE_FEES = Object.freeze({
+  primaryCommissionBps: 1000,
+  secondaryCommissionBps: 250,
+  secondaryRoyaltyBps: 500,
+});
+export const marketplaceFeeScheduleSchema = z
+  .strictObject({
+    primaryCommissionBps: z.number().int().min(0).max(10_000),
+    secondaryCommissionBps: z.number().int().min(0).max(10_000),
+    secondaryRoyaltyBps: z.number().int().min(0).max(10_000),
+  })
+  .refine(
+    (value) => value.secondaryCommissionBps + value.secondaryRoyaltyBps <= 10_000,
+    "Combined resale deductions exceed 10000 basis points",
+  );
+
 // Time can make an ACTIVE listing ineligible before expiry recovery records EXPIRED.
 export const listingStatusSchema = z.enum([
   "ACTIVE",

@@ -13,6 +13,7 @@ import * as registry from "../src/generated/registry/index.js";
 async function setup() {
   const f = await setupMarketplaceConfiguration();
   await f.client.sendTransaction([await f.initialize()]);
+  await f.client.sendTransaction([await f.initializeFees()]);
   await f.client.sendTransaction([
     await market.getInitializeSaleTermsInstructionAsync({
       artwork: f.artwork.artwork,
@@ -21,8 +22,20 @@ async function setup() {
     }),
   ]);
   const [listing] = await market.findListingPda({ asset: f.artwork.asset });
+  const rates = () => {
+    const ledger = f.client.svm.getAccount(listing);
+    const secondary =
+      ledger.exists &&
+      market.getListingRecordDecoder().decode(ledger.data).completedSales > 0n;
+    return {
+      expectedCommissionBps: secondary ? 250 : 1000,
+      expectedSecondaryRoyaltyBps: secondary ? 500 : 0,
+    };
+  };
   const create = (expectedRevision = 0n) =>
-    market.getCreateListingInstructionAsync({
+    market.getCreateListingWithFeesInstructionAsync({
+      expectedFeeRevision: 1n,
+      ...rates(),
       artwork: f.artwork.artwork,
       seller: f.roles.seller,
       conditionReport: f.artwork.initialCondition,
@@ -235,7 +248,7 @@ it("rejects invalid ledger versions and revision overflow before CPI, preserving
   const record = f.record();
   // Synthetic ledger mutations exercise invariants; no prior purchase is claimed.
   for (const patch of [
-    { version: 2 },
+    { version: 3 },
     { revision: (1n << 64n) - 1n },
     { asset: f.secondArtwork.asset },
     { config: f.artwork.artwork },

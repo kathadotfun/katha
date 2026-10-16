@@ -48,7 +48,11 @@ async function fixture(purchase = false) {
       clock,
     ),
   ].map((a) => encoded(a as typeof f.accounts.assetAccount));
-  if (purchase) values.push(encoded(f.accounts.saleTermsAccount));
+  values.push(
+    encoded(f.accounts.saleTermsAccount),
+    encoded(f.accounts.feeScheduleAccount as typeof f.accounts.assetAccount),
+    null,
+  );
   const getMultipleAccounts = vi.fn(() => ({
     send: async () => ({ context: { slot: 9007199254740993n }, value: values }),
   }));
@@ -150,7 +154,7 @@ it("rejects nonsensical ledger state and accepts maximum revision for read-only 
 it("includes sale terms in the same finalized purchase snapshot and rejects missing terms", async () => {
   const f = await fixture(true);
   const result = await f.read(f.kathaId);
-  expect(f.values).toHaveLength(9);
+  expect(f.values).toHaveLength(11);
   expect(f.getMultipleAccounts.mock.calls[0]).toMatchObject([
     expect.arrayContaining([f.saleTerms]),
     { commitment: "finalized", encoding: "base64" },

@@ -26,10 +26,21 @@ const marketplaceEventNames: Partial<
   [marketplace.KathaMarketplaceInstruction.InitializeMarketplace]:
     "MarketplaceInitialized",
   [marketplace.KathaMarketplaceInstruction.CreateListing]: "ListingCreated",
+  [marketplace.KathaMarketplaceInstruction.CreateListingWithFees]: "ListingCreated",
+  [marketplace.KathaMarketplaceInstruction.InitializeFeeSchedule]: "FeeScheduleChanged",
+  [marketplace.KathaMarketplaceInstruction.UpdateFeeSchedule]: "FeeScheduleChanged",
   [marketplace.KathaMarketplaceInstruction.CancelListing]: "ListingReleased",
   [marketplace.KathaMarketplaceInstruction.ExpireListing]: "ListingReleased",
   [marketplace.KathaMarketplaceInstruction.PurchaseListing]: "ArtworkPurchased",
 };
+function readInstruction<A, T extends A>(
+  codec: { decode(data: Uint8Array): T; encode(value: A): ArrayLike<number> },
+  data: Uint8Array,
+): T {
+  const value = codec.decode(data);
+  if (!Buffer.from(codec.encode(value)).equals(data)) fail();
+  return value;
+}
 const registryEventNames: Record<
   KathaRegistryInstruction,
   RegistryActivityEvent["name"]
@@ -352,7 +363,31 @@ export function decodeFinalizedActivity(
         );
         if (event.name !== marketplaceEventNames[kind]) fail();
         const accounts = frame.invocation.accounts;
-        if (event.name === "MarketplaceInitialized") {
+        if (event.name === "FeeScheduleChanged") {
+          const value =
+            kind === marketplace.KathaMarketplaceInstruction.InitializeFeeSchedule
+              ? {
+                  ...readInstruction(
+                    marketplace.getInitializeFeeScheduleInstructionDataCodec(),
+                    frame.invocation.data,
+                  ),
+                  expectedRevision: 0n,
+                }
+              : readInstruction(
+                  marketplace.getUpdateFeeScheduleInstructionDataCodec(),
+                  frame.invocation.data,
+                );
+          if (
+            event.value.config !== accounts[0] ||
+            event.value.schedule !== accounts[1] ||
+            event.value.authority !== accounts[2] ||
+            value.primaryCommissionBps !== event.value.primaryCommissionBps ||
+            value.secondaryCommissionBps !== event.value.secondaryCommissionBps ||
+            value.secondaryRoyaltyBps !== event.value.secondaryRoyaltyBps ||
+            event.value.revision !== value.expectedRevision + 1n
+          )
+            fail();
+        } else if (event.name === "MarketplaceInitialized") {
           const codec = marketplace.getInitializeMarketplaceInstructionDataCodec(),
             value = codec.decode(frame.invocation.data);
           if (
@@ -380,10 +415,17 @@ export function decodeFinalizedActivity(
           )
             fail();
           if (event.name === "ListingCreated") {
-            const codec = marketplace.getCreateListingInstructionDataCodec(),
-              value = codec.decode(frame.invocation.data);
+            const value =
+              kind === marketplace.KathaMarketplaceInstruction.CreateListingWithFees
+                ? readInstruction(
+                    marketplace.getCreateListingWithFeesInstructionDataCodec(),
+                    frame.invocation.data,
+                  )
+                : readInstruction(
+                    marketplace.getCreateListingInstructionDataCodec(),
+                    frame.invocation.data,
+                  );
             if (
-              !Buffer.from(codec.encode(value)).equals(frame.invocation.data) ||
               value.expectedRevision + 1n !== event.value.revision ||
               value.price !== event.value.price ||
               value.expiresAt !== event.value.expiresAt ||
@@ -426,7 +468,8 @@ export function decodeFinalizedActivity(
           programAddress: marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
           kind: "MARKETPLACE",
           collection:
-            event.name === "MarketplaceInitialized"
+            event.name === "MarketplaceInitialized" ||
+            event.name === "FeeScheduleChanged"
               ? event.value.collection
               : accounts[event.name === "ListingReleased" ? 7 : 12]!,
           event,

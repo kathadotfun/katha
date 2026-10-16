@@ -43,7 +43,7 @@ test("create listing wire binds all reviewed amounts, accounts and seller before
   const { operation, expected } = await listingFixture();
   const parsed = await inspectPreparedTransaction(operation, expected);
   assert.equal(parsed.operation.kind, "CREATE_LISTING");
-  assert.equal(parsed.accounts.length, 15);
+  assert.equal(parsed.accounts.length, 17);
 });
 for (const mutation of [
   "price",
@@ -429,5 +429,18 @@ test("finalized listing observation requires matching asset, ledger, seller and 
   assert.equal(
     await listingObservationMatches(operation, { ...current, listing: null }),
     false,
+  );
+});
+
+test("listing review rejects fee disclosures that differ from the signed rate/revision", async () => {
+  const { operation, expected } = await listingFixture();
+  for (const fees of [
+    { ...operation.fees!, platformCommissionBps: 2000 },
+    { ...operation.fees!, secondaryRoyaltyBps: 500 },
+    { ...operation.fees!, scheduleRevision: "2" },
+  ])
+    await assert.rejects(inspectPreparedTransaction({ ...operation, fees }, expected));
+  await assert.rejects(
+    inspectPreparedTransaction({ ...operation, fees: undefined }, expected),
   );
 });

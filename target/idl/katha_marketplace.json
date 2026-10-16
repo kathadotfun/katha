@@ -191,6 +191,74 @@
       ]
     },
     {
+      "name": "check_listing_fees",
+      "discriminator": [
+        48,
+        112,
+        172,
+        127,
+        0,
+        92,
+        90,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "listing",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "listing.asset",
+                "account": "ListingRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing_fees",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103,
+                  45,
+                  102,
+                  101,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "listing"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "check_sale_eligibility",
       "discriminator": [
         36,
@@ -785,6 +853,59 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "fee_schedule",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  45,
+                  115,
+                  99,
+                  104,
+                  101,
+                  100,
+                  117,
+                  108,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing_fees",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103,
+                  45,
+                  102,
+                  101,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "listing"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -799,6 +920,379 @@
         {
           "name": "expected_revision",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_listing_with_fees",
+      "discriminator": [
+        213,
+        143,
+        101,
+        138,
+        5,
+        81,
+        51,
+        236
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry_program",
+          "address": "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr"
+        },
+        {
+          "name": "registry_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "verification",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "condition_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  100,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "condition_report"
+        },
+        {
+          "name": "custody_head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  117,
+                  115,
+                  116,
+                  111,
+                  100,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "sale_terms",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  97,
+                  108,
+                  101,
+                  45,
+                  116,
+                  101,
+                  114,
+                  109,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  114,
+                  101,
+                  45,
+                  97,
+                  115,
+                  115,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "registry_program"
+            }
+          }
+        },
+        {
+          "name": "seller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "listing",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "asset"
+              }
+            ]
+          }
+        },
+        {
+          "name": "collection",
+          "writable": true
+        },
+        {
+          "name": "core_program",
+          "address": "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "fee_schedule",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  45,
+                  115,
+                  99,
+                  104,
+                  101,
+                  100,
+                  117,
+                  108,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "listing_fees",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103,
+                  45,
+                  102,
+                  101,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "listing"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "price",
+          "type": "u64"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        },
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        },
+        {
+          "name": "expected_fee_revision",
+          "type": "u64"
+        },
+        {
+          "name": "expected_commission_bps",
+          "type": "u16"
+        },
+        {
+          "name": "expected_secondary_royalty_bps",
+          "type": "u16"
         }
       ]
     },
@@ -982,6 +1476,99 @@
         {
           "name": "expected_revision",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_fee_schedule",
+      "discriminator": [
+        125,
+        35,
+        60,
+        135,
+        23,
+        192,
+        56,
+        185
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_schedule",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  45,
+                  115,
+                  99,
+                  104,
+                  101,
+                  100,
+                  117,
+                  108,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "primary_commission_bps",
+          "type": "u16"
+        },
+        {
+          "name": "secondary_commission_bps",
+          "type": "u16"
+        },
+        {
+          "name": "secondary_royalty_bps",
+          "type": "u16"
         }
       ]
     },
@@ -1540,6 +2127,37 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "listing_fees",
+          "docs": [
+            "listings use their immutable initialization settings, even after fee updates."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  105,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103,
+                  45,
+                  102,
+                  101,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "listing"
+              }
+            ]
+          }
         }
       ],
       "args": [
@@ -1550,6 +2168,98 @@
         {
           "name": "expected_price",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_fee_schedule",
+      "discriminator": [
+        190,
+        103,
+        25,
+        122,
+        142,
+        37,
+        230,
+        81
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "fee_schedule",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  101,
+                  101,
+                  45,
+                  115,
+                  99,
+                  104,
+                  101,
+                  100,
+                  117,
+                  108,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        },
+        {
+          "name": "primary_commission_bps",
+          "type": "u16"
+        },
+        {
+          "name": "secondary_commission_bps",
+          "type": "u16"
+        },
+        {
+          "name": "secondary_royalty_bps",
+          "type": "u16"
         }
       ]
     }
@@ -1566,6 +2276,32 @@
         39,
         122,
         125
+      ]
+    },
+    {
+      "name": "FeeSchedule",
+      "discriminator": [
+        250,
+        80,
+        88,
+        27,
+        206,
+        216,
+        50,
+        199
+      ]
+    },
+    {
+      "name": "ListingFees",
+      "discriminator": [
+        127,
+        230,
+        171,
+        17,
+        202,
+        93,
+        231,
+        143
       ]
     },
     {
@@ -1607,6 +2343,19 @@
         233,
         125,
         109
+      ]
+    },
+    {
+      "name": "FeeScheduleChanged",
+      "discriminator": [
+        122,
+        149,
+        14,
+        30,
+        14,
+        161,
+        198,
+        191
       ]
     },
     {
@@ -1799,6 +2548,26 @@
       "code": 6029,
       "name": "InsufficientPaymentFunds",
       "msg": "Buyer has insufficient test-token funds"
+    },
+    {
+      "code": 6030,
+      "name": "InvalidFeeSchedule",
+      "msg": "Fee schedule does not belong to this Marketplace"
+    },
+    {
+      "code": 6031,
+      "name": "StaleFeeSchedule",
+      "msg": "Fee schedule revision is stale or exhausted"
+    },
+    {
+      "code": 6032,
+      "name": "InvalidListingFees",
+      "msg": "Listing fee snapshot is missing, invalid or stale"
+    },
+    {
+      "code": 6033,
+      "name": "FeeScheduleRequired",
+      "msg": "Create listings with a reviewed fee schedule revision"
     }
   ],
   "types": [
@@ -2269,6 +3038,82 @@
       }
     },
     {
+      "name": "FeeSchedule",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "primary_commission_bps",
+            "type": "u16"
+          },
+          {
+            "name": "secondary_commission_bps",
+            "type": "u16"
+          },
+          {
+            "name": "secondary_royalty_bps",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeScheduleChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "schedule",
+            "type": "pubkey"
+          },
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "collection",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "primary_commission_bps",
+            "type": "u16"
+          },
+          {
+            "name": "secondary_commission_bps",
+            "type": "u16"
+          },
+          {
+            "name": "secondary_royalty_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
       "name": "KathaConfig",
       "type": {
         "kind": "struct",
@@ -2385,6 +3230,42 @@
           {
             "name": "expires_at",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ListingFees",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "listing",
+            "type": "pubkey"
+          },
+          {
+            "name": "listing_revision",
+            "type": "u64"
+          },
+          {
+            "name": "schedule_revision",
+            "type": "u64"
+          },
+          {
+            "name": "commission_bps",
+            "type": "u16"
+          },
+          {
+            "name": "secondary_royalty_bps",
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

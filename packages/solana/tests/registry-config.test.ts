@@ -2312,6 +2312,15 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
     client.svm.setAccount(originalRegistrationAccount);
     notMinted();
     client.svm.expireBlockhash();
+    // Permissionless dust transfers to the deterministic address must not block minting.
+    client.svm.setAccount({
+      address: coreAsset,
+      programAddress: SYSTEM,
+      data: new Uint8Array(),
+      space: 0n,
+      executable: false,
+      lamports: lamports(1_000_000n),
+    });
     const preparedMint = await buildMintArtworkTransaction(
       await lifecycleContext(registration.address),
       {
@@ -2328,6 +2337,17 @@ describe("Registry platform and artwork identity in LiteSVM", () => {
       kathaId,
     );
     expect(Array.from(preparedMint.instruction.data)).toEqual(Array.from(mint().data));
+    const dustBefore = client.svm.getAccount(coreAsset);
+    const artworkBefore = client.svm.getAccount(artwork);
+    const signedMint = addSignersToInstruction(
+      [registration],
+      preparedMint.instruction,
+    );
+    // A later failure also rolls back the dust reclaim and Core creation.
+    await expect(client.sendTransaction([signedMint, signedMint])).rejects.toThrow();
+    expect(client.svm.getAccount(coreAsset)).toEqual(dustBefore);
+    expect(client.svm.getAccount(artwork)).toEqual(artworkBefore);
+    client.svm.expireBlockhash();
     await client.sendTransaction([
       addSignersToInstruction([registration], preparedMint.instruction),
     ]);

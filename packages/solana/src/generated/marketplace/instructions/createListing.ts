@@ -49,6 +49,8 @@ import {
   findConditionHeadPda,
   findConfigPda,
   findCustodyHeadPda,
+  findFeeSchedulePda,
+  findListingFeesPda,
   findListingPda,
   findRegistryConfigPda,
   findSaleTermsPda,
@@ -84,6 +86,8 @@ export type CreateListingInstruction<
     "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d",
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
+  TAccountFeeSchedule extends string | AccountMeta<string> = string,
+  TAccountListingFees extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -130,6 +134,12 @@ export type CreateListingInstruction<
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
+      TAccountFeeSchedule extends string
+        ? ReadonlyAccount<TAccountFeeSchedule>
+        : TAccountFeeSchedule,
+      TAccountListingFees extends string
+        ? WritableAccount<TAccountListingFees>
+        : TAccountListingFees,
       ...TRemainingAccounts,
     ]
   >;
@@ -194,6 +204,8 @@ export type CreateListingAsyncInput<
   TAccountCollection extends InstructionAccountInput = InstructionAccountInput,
   TAccountCoreProgram extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput = InstructionAccountInput,
+  TAccountFeeSchedule extends InstructionAccountInput = InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput = InstructionAccountInput,
 > = {
   config?: TAccountConfig;
   registryProgram?: TAccountRegistryProgram;
@@ -210,6 +222,8 @@ export type CreateListingAsyncInput<
   collection: TAccountCollection;
   coreProgram?: TAccountCoreProgram;
   systemProgram?: TAccountSystemProgram;
+  feeSchedule?: TAccountFeeSchedule;
+  listingFees?: TAccountListingFees;
   price: CreateListingInstructionDataArgs["price"];
   expiresAt: CreateListingInstructionDataArgs["expiresAt"];
   expectedRevision: CreateListingInstructionDataArgs["expectedRevision"];
@@ -231,6 +245,8 @@ export async function getCreateListingInstructionAsync<
   TAccountCollection extends InstructionAccountInput,
   TAccountCoreProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
+  TAccountFeeSchedule extends InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput,
   TProgramAddress extends Address = typeof KATHA_MARKETPLACE_PROGRAM_ADDRESS,
 >(
   input: CreateListingAsyncInput<
@@ -248,7 +264,9 @@ export async function getCreateListingInstructionAsync<
     TAccountListing,
     TAccountCollection,
     TAccountCoreProgram,
-    TAccountSystemProgram
+    TAccountSystemProgram,
+    TAccountFeeSchedule,
+    TAccountListingFees
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -313,6 +331,14 @@ export async function getCreateListingInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountFeeSchedule,
+      InstructionAccountInputAddress<TAccountFeeSchedule>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListingFees,
+      InstructionAccountInputAddress<TAccountListingFees>
     >
   >
 > {
@@ -370,6 +396,16 @@ export async function getCreateListingInstructionAsync<
       value: input.systemProgram ?? null,
       isSigner: false,
       isWritable: false,
+    },
+    feeSchedule: {
+      value: input.feeSchedule ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+    listingFees: {
+      value: input.listingFees ?? null,
+      isSigner: false,
+      isWritable: true,
     },
   };
   const accounts = originalAccounts as Record<
@@ -487,6 +523,20 @@ export async function getCreateListingInstructionAsync<
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
   }
+  if (!accounts.feeSchedule.value) {
+    accounts.feeSchedule.value = await findFeeSchedulePda({ programAddress });
+  }
+  if (!accounts.listingFees.value) {
+    accounts.listingFees.value = await findListingFeesPda(
+      {
+        listing: getAddressFromResolvedInstructionAccount(
+          "listing",
+          accounts.listing.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
 
   return Object.freeze({
     accounts: [
@@ -505,6 +555,8 @@ export async function getCreateListingInstructionAsync<
       getAccountMeta("collection", accounts.collection),
       getAccountMeta("coreProgram", accounts.coreProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
+      getAccountMeta("feeSchedule", accounts.feeSchedule),
+      getAccountMeta("listingFees", accounts.listingFees),
     ],
     data: getCreateListingInstructionDataEncoder().encode(
       args as CreateListingInstructionDataArgs,
@@ -571,6 +623,14 @@ export async function getCreateListingInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountFeeSchedule,
+      InstructionAccountInputAddress<TAccountFeeSchedule>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListingFees,
+      InstructionAccountInputAddress<TAccountListingFees>
     >
   >);
 }
@@ -591,6 +651,8 @@ export type CreateListingInput<
   TAccountCollection extends InstructionAccountInput = InstructionAccountInput,
   TAccountCoreProgram extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput = InstructionAccountInput,
+  TAccountFeeSchedule extends InstructionAccountInput = InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput = InstructionAccountInput,
 > = {
   config: TAccountConfig;
   registryProgram?: TAccountRegistryProgram;
@@ -607,6 +669,8 @@ export type CreateListingInput<
   collection: TAccountCollection;
   coreProgram?: TAccountCoreProgram;
   systemProgram?: TAccountSystemProgram;
+  feeSchedule: TAccountFeeSchedule;
+  listingFees: TAccountListingFees;
   price: CreateListingInstructionDataArgs["price"];
   expiresAt: CreateListingInstructionDataArgs["expiresAt"];
   expectedRevision: CreateListingInstructionDataArgs["expectedRevision"];
@@ -628,6 +692,8 @@ export function getCreateListingInstruction<
   TAccountCollection extends InstructionAccountInput,
   TAccountCoreProgram extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
+  TAccountFeeSchedule extends InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput,
   TProgramAddress extends Address = typeof KATHA_MARKETPLACE_PROGRAM_ADDRESS,
 >(
   input: CreateListingInput<
@@ -645,7 +711,9 @@ export function getCreateListingInstruction<
     TAccountListing,
     TAccountCollection,
     TAccountCoreProgram,
-    TAccountSystemProgram
+    TAccountSystemProgram,
+    TAccountFeeSchedule,
+    TAccountListingFees
   >,
   config?: { programAddress?: TProgramAddress },
 ): CreateListingInstruction<
@@ -709,6 +777,14 @@ export function getCreateListingInstruction<
   ResolvedInstructionAccountMeta<
     TAccountSystemProgram,
     InstructionAccountInputAddress<TAccountSystemProgram>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountFeeSchedule,
+    InstructionAccountInputAddress<TAccountFeeSchedule>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountListingFees,
+    InstructionAccountInputAddress<TAccountListingFees>
   >
 > {
   // Program address.
@@ -766,6 +842,16 @@ export function getCreateListingInstruction<
       isSigner: false,
       isWritable: false,
     },
+    feeSchedule: {
+      value: input.feeSchedule ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+    listingFees: {
+      value: input.listingFees ?? null,
+      isSigner: false,
+      isWritable: true,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -806,6 +892,8 @@ export function getCreateListingInstruction<
       getAccountMeta("collection", accounts.collection),
       getAccountMeta("coreProgram", accounts.coreProgram),
       getAccountMeta("systemProgram", accounts.systemProgram),
+      getAccountMeta("feeSchedule", accounts.feeSchedule),
+      getAccountMeta("listingFees", accounts.listingFees),
     ],
     data: getCreateListingInstructionDataEncoder().encode(
       args as CreateListingInstructionDataArgs,
@@ -872,6 +960,14 @@ export function getCreateListingInstruction<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountFeeSchedule,
+      InstructionAccountInputAddress<TAccountFeeSchedule>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListingFees,
+      InstructionAccountInputAddress<TAccountListingFees>
     >
   >);
 }
@@ -897,6 +993,8 @@ export type ParsedCreateListingInstruction<
     collection: TAccountMetas[12];
     coreProgram: TAccountMetas[13];
     systemProgram: TAccountMetas[14];
+    feeSchedule: TAccountMetas[15];
+    listingFees: TAccountMetas[16];
   };
   data: CreateListingInstructionData;
 };
@@ -909,10 +1007,10 @@ export function parseCreateListingInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCreateListingInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 15) {
+  if (instruction.accounts.length < 17) {
     throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS, {
       actualAccountMetas: instruction.accounts.length,
-      expectedAccountMetas: 15,
+      expectedAccountMetas: 17,
     });
   }
   let accountIndex = 0;
@@ -939,6 +1037,8 @@ export function parseCreateListingInstruction<
       collection: getNextAccount(),
       coreProgram: getNextAccount(),
       systemProgram: getNextAccount(),
+      feeSchedule: getNextAccount(),
+      listingFees: getNextAccount(),
     },
     data: getCreateListingInstructionDataDecoder().decode(instruction.data),
   };

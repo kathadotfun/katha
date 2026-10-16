@@ -1,5 +1,14 @@
 import { expect, it } from "vitest";
-import { AccountRole, address, generateKeyPairSigner } from "@solana/kit";
+import {
+  AccountRole,
+  address,
+  generateKeyPairSigner,
+  type Instruction,
+  createTransactionMessage,
+  setTransactionMessageFeePayerSigner,
+  setTransactionMessageLifetimeUsingBlockhash,
+  appendTransactionMessageInstruction,
+} from "@solana/kit";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { setupMarketplaceConfiguration as setup } from "./fixtures/marketplace-configuration.js";
 import * as marketplace from "../src/generated/marketplace/index.js";
@@ -155,4 +164,82 @@ it("rejects excessive deductions and invalid inspection validity while accepting
     secondaryRoyaltyBps: 0,
     inspectionValiditySeconds: 1n,
   });
+}, 30_000);
+
+it("allows only the configured authority to initialize and revise fees, preserving legacy configuration", async () => {
+  const f = await setup();
+  await f.client.sendTransaction([await f.initialize()]);
+  const baseline = f.client.svm.getAccount(f.config);
+  const send = async (ix: Instruction) => {
+    f.client.svm.expireBlockhash();
+    return f.client.sendTransaction([ix]);
+  };
+  await expect(
+    send(await f.initializeFees({ authority: f.roles.outsider })),
+  ).rejects.toThrow();
+  expect(f.client.svm.getAccount(f.feeSchedule).exists).toBe(false);
+  await send(await f.initializeFees());
+  const initial = f.client.svm.getAccount(f.feeSchedule);
+  if (!initial.exists) throw new Error("Missing fee schedule");
+  expect(marketplace.getFeeScheduleDecoder().decode(initial.data)).toMatchObject({
+    primaryCommissionBps: 1000,
+    secondaryCommissionBps: 250,
+    secondaryRoyaltyBps: 500,
+    revision: 1n,
+    config: f.config,
+  });
+  await expect(send(await f.initializeFees())).rejects.toThrow();
+  const update = (overrides: Partial<marketplace.UpdateFeeScheduleAsyncInput> = {}) =>
+    marketplace.getUpdateFeeScheduleInstructionAsync({
+      authority: f.roles.bootstrap,
+      expectedRevision: 1n,
+      primaryCommissionBps: 1200,
+      secondaryCommissionBps: 300,
+      secondaryRoyaltyBps: 600,
+      ...overrides,
+    });
+  for (const overrides of [
+    { authority: f.roles.outsider },
+    { expectedRevision: 0n },
+    { primaryCommissionBps: 10001 },
+    { secondaryCommissionBps: 9501 },
+    { secondaryRoyaltyBps: 10001 },
+    { config: f.registryConfig },
+    { feeSchedule: f.config },
+  ]) {
+    await expect(send(await update(overrides))).rejects.toThrow();
+    expect(f.client.svm.getAccount(f.feeSchedule)).toEqual(initial);
+  }
+  const unsigned = await update();
+  const unsignedInstruction = {
+    ...unsigned,
+    accounts: unsigned.accounts.map((a) =>
+      a.address === f.roles.bootstrap.address
+        ? { address: a.address, role: AccountRole.READONLY }
+        : a,
+    ),
+  };
+  const missingSignatureMessage = appendTransactionMessageInstruction(
+    unsignedInstruction,
+    setTransactionMessageLifetimeUsingBlockhash(
+      { blockhash: f.client.svm.latestBlockhash(), lastValidBlockHeight: 1000n },
+      setTransactionMessageFeePayerSigner(
+        f.roles.seller,
+        createTransactionMessage({ version: 0 }),
+      ),
+    ),
+  );
+  await expect(f.client.sendTransaction(missingSignatureMessage)).rejects.toThrow();
+  expect(f.client.svm.getAccount(f.feeSchedule)).toEqual(initial);
+  await send(await update());
+  const updated = f.client.svm.getAccount(f.feeSchedule);
+  if (!updated.exists) throw new Error("Missing updated schedule");
+  expect(marketplace.getFeeScheduleDecoder().decode(updated.data)).toMatchObject({
+    revision: 2n,
+    primaryCommissionBps: 1200,
+    secondaryCommissionBps: 300,
+    secondaryRoyaltyBps: 600,
+  });
+  await expect(send(await update())).rejects.toThrow();
+  expect(f.client.svm.getAccount(f.config)).toEqual(baseline);
 }, 30_000);

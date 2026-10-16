@@ -44,6 +44,8 @@ export interface MarketplaceArtworkAccounts {
 }
 export interface MarketplaceListingAccounts extends MarketplaceArtworkAccounts {
   conditionHeadAccount: EncodedAccount;
+  feeScheduleAccount?: MaybeEncodedAccount | undefined;
+  listingFeesAccount?: MaybeEncodedAccount | undefined;
 }
 export interface MarketplacePurchaseAccounts extends MarketplaceListingAccounts {
   saleTermsAccount: EncodedAccount;
@@ -208,7 +210,7 @@ async function artworkState(
       const purchased = ledger.status === market.ListingStatus.Purchased;
       const priorSales = ledger.completedSales - (purchased ? 1n : 0n);
       if (
-        ledger.version !== 1 ||
+        ![1, 2].includes(ledger.version) ||
         ledger.bump !== listingBump ||
         ledger.config !== config ||
         ledger.artwork !== artwork ||
@@ -308,13 +310,25 @@ export async function buildCreateListingTransaction(
   )
     throw new TypeError("Primary listing requires the registered original owner");
   const head = await conditionHead(accounts, state.addresses.artwork);
-  const instruction = await market.getCreateListingInstructionAsync({
+  const feeSchedule = await readMarketplaceFeeSchedule(accounts.feeScheduleAccount);
+  const primary = !state.ledger || state.ledger.completedSales === 0n;
+  const fees = {
+    scheduleRevision: feeSchedule.revision.toString(),
+    platformCommissionBps: primary
+      ? feeSchedule.primaryCommissionBps
+      : feeSchedule.secondaryCommissionBps,
+    secondaryRoyaltyBps: primary ? 0 : feeSchedule.secondaryRoyaltyBps,
+  };
+  const instruction = await market.getCreateListingWithFeesInstructionAsync({
     ...state.addresses,
     conditionReport: head.currentReport,
     seller: createNoopSigner(state.actor),
     price,
     expiresAt,
     expectedRevision: state.revision,
+    expectedFeeRevision: feeSchedule.revision,
+    expectedCommissionBps: fees.platformCommissionBps,
+    expectedSecondaryRoyaltyBps: fees.secondaryRoyaltyBps,
   });
   return Object.freeze({
     ...unsignedMessage(context, instruction),
@@ -323,6 +337,75 @@ export async function buildCreateListingTransaction(
       conditionReport: head.currentReport,
     }),
     nextRevision: state.revision + 1n,
+    fees,
+  });
+}
+
+export async function readMarketplaceFeeSchedule(account?: MaybeEncodedAccount) {
+  const [schedule, bump] = await market.findFeeSchedulePda();
+  if (!account?.exists) throw new TypeError("Marketplace fee schedule is unavailable");
+  marketAccount(
+    account,
+    schedule,
+    market.KathaMarketplaceAccount.FeeSchedule,
+    market.getFeeScheduleSize(),
+  );
+  const value = market.getFeeScheduleDecoder().decode(account.data);
+  const [config] = await market.findConfigPda();
+  if (
+    value.version !== 1 ||
+    value.bump !== bump ||
+    value.config !== config ||
+    value.revision === 0n
+  )
+    throw new TypeError("Marketplace fee schedule binding is invalid");
+  marketplaceFeeRatesSchema.parse({
+    platformCommissionBps: value.primaryCommissionBps,
+    secondaryRoyaltyBps: 0,
+  });
+  marketplaceFeeRatesSchema.parse({
+    platformCommissionBps: value.secondaryCommissionBps,
+    secondaryRoyaltyBps: value.secondaryRoyaltyBps,
+  });
+  return value;
+}
+
+export async function readListingFeeRates(
+  accounts: MarketplaceListingAccounts,
+  ledger: market.ListingRecord,
+) {
+  if (ledger.version === 1) {
+    const config = market
+      .getMarketplaceConfigDecoder()
+      .decode(accounts.marketplaceConfigAccount.data);
+    return {
+      platformCommissionBps: config.commissionBps,
+      secondaryRoyaltyBps: config.secondaryRoyaltyBps,
+    };
+  }
+  const [listing] = await market.findListingPda({ asset: ledger.asset });
+  const [fees, bump] = await market.findListingFeesPda({ listing });
+  const account = accounts.listingFeesAccount;
+  if (!account?.exists) throw new TypeError("Listing fee snapshot is unavailable");
+  marketAccount(
+    account,
+    fees,
+    market.KathaMarketplaceAccount.ListingFees,
+    market.getListingFeesSize(),
+  );
+  const value = market.getListingFeesDecoder().decode(account.data);
+  if (
+    ledger.version !== 2 ||
+    value.version !== 1 ||
+    value.listing !== listing ||
+    value.bump !== bump ||
+    value.listingRevision !== ledger.revision ||
+    value.scheduleRevision === 0n
+  )
+    throw new TypeError("Listing fee snapshot binding is invalid");
+  return marketplaceFeeRatesSchema.parse({
+    platformCommissionBps: value.commissionBps,
+    secondaryRoyaltyBps: value.secondaryRoyaltyBps,
   });
 }
 
@@ -388,6 +471,7 @@ export async function buildPurchaseListingTransaction(
 ): Promise<PreparedMarketplaceTransaction<MarketplacePurchaseAddresses>> {
   const state = await artworkState(context, accounts, input);
   const ledger = active(state);
+  await readListingFeeRates(accounts, ledger);
   const price = BigInt(listingPriceSchema.parse(input.expectedPrice));
   if (
     nonzeroAddress(input.buyerAddress) !== state.actor ||

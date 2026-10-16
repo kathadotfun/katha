@@ -12,6 +12,11 @@ export function decodeMarketplaceEvent(data: Uint8Array) {
       throw new Error("Invalid event bytes");
     return value;
   };
+  if (prefix.equals(Buffer.from(marketplace.FEE_SCHEDULE_CHANGED_EVENT_DISCRIMINATOR)))
+    return {
+      name: "FeeScheduleChanged" as const,
+      value: read(marketplace.getFeeScheduleChangedEventCodec()),
+    };
   if (
     prefix.equals(Buffer.from(marketplace.MARKETPLACE_INITIALIZED_EVENT_DISCRIMINATOR))
   )

@@ -7,5 +7,10 @@
   "verifierAuthority": "REPLACE_WITH_PUBLIC_VERIFIER_AUTHORITY",
   "custodyAuthority": "REPLACE_WITH_PUBLIC_CUSTODY_AUTHORITY",
   "treasury": "REPLACE_WITH_PUBLIC_TEST_TREASURY",
-  "paymentMint": "REPLACE_WITH_PUBLIC_SIX_DECIMAL_TEST_MINT"
+  "paymentMint": "REPLACE_WITH_PUBLIC_SIX_DECIMAL_TEST_MINT",
+  "feeRates": {
+    "primaryCommissionBps": 1000,
+    "secondaryCommissionBps": 250,
+    "secondaryRoyaltyBps": 500
+  }
 }

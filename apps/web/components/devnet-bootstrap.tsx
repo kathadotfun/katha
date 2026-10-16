@@ -7,7 +7,11 @@ import {
   type TransactionPartialSigner,
 } from "@solana/kit";
 import { walletSigner } from "@solana/kit-plugin-wallet";
-import { devnetBootstrapSteps, type DevnetBootstrapStep } from "@katha/shared";
+import {
+  devnetBootstrapSteps,
+  DEFAULT_MARKETPLACE_FEES,
+  type DevnetBootstrapStep,
+} from "@katha/shared";
 import {
   createDevnetBootstrapClient,
   publicBootstrapFailure,
@@ -30,6 +34,7 @@ const example = JSON.stringify(
     custodyAuthority: "REPLACE_WITH_PUBLIC_ADDRESS",
     treasury: "REPLACE_WITH_PUBLIC_ADDRESS",
     paymentMint: "REPLACE_WITH_PUBLIC_TEST_MINT",
+    feeRates: DEFAULT_MARKETPLACE_FEES,
   },
   null,
   2,

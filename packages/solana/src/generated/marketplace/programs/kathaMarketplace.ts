@@ -35,10 +35,16 @@ import {
 } from "@solana/kit/program-client-core";
 import {
   getArtworkSaleTermsCodec,
+  getFeeScheduleCodec,
+  getListingFeesCodec,
   getListingRecordCodec,
   getMarketplaceConfigCodec,
   type ArtworkSaleTerms,
   type ArtworkSaleTermsArgs,
+  type FeeSchedule,
+  type FeeScheduleArgs,
+  type ListingFees,
+  type ListingFeesArgs,
   type ListingRecord,
   type ListingRecordArgs,
   type MarketplaceConfig,
@@ -46,39 +52,57 @@ import {
 } from "../accounts/index.js";
 import {
   getCancelListingInstructionAsync,
+  getCheckListingFeesInstructionAsync,
   getCheckSaleEligibilityInstructionAsync,
   getCreateListingInstructionAsync,
+  getCreateListingWithFeesInstructionAsync,
   getExpireListingInstructionAsync,
+  getInitializeFeeScheduleInstructionAsync,
   getInitializeMarketplaceInstructionAsync,
   getInitializeSaleTermsInstructionAsync,
   getPurchaseListingInstructionAsync,
+  getUpdateFeeScheduleInstructionAsync,
   parseCancelListingInstruction,
+  parseCheckListingFeesInstruction,
   parseCheckSaleEligibilityInstruction,
   parseCreateListingInstruction,
+  parseCreateListingWithFeesInstruction,
   parseExpireListingInstruction,
+  parseInitializeFeeScheduleInstruction,
   parseInitializeMarketplaceInstruction,
   parseInitializeSaleTermsInstruction,
   parsePurchaseListingInstruction,
+  parseUpdateFeeScheduleInstruction,
   type CancelListingAsyncInput,
+  type CheckListingFeesAsyncInput,
   type CheckSaleEligibilityAsyncInput,
   type CreateListingAsyncInput,
+  type CreateListingWithFeesAsyncInput,
   type ExpireListingAsyncInput,
+  type InitializeFeeScheduleAsyncInput,
   type InitializeMarketplaceAsyncInput,
   type InitializeSaleTermsAsyncInput,
   type ParsedCancelListingInstruction,
+  type ParsedCheckListingFeesInstruction,
   type ParsedCheckSaleEligibilityInstruction,
   type ParsedCreateListingInstruction,
+  type ParsedCreateListingWithFeesInstruction,
   type ParsedExpireListingInstruction,
+  type ParsedInitializeFeeScheduleInstruction,
   type ParsedInitializeMarketplaceInstruction,
   type ParsedInitializeSaleTermsInstruction,
   type ParsedPurchaseListingInstruction,
+  type ParsedUpdateFeeScheduleInstruction,
   type PurchaseListingAsyncInput,
+  type UpdateFeeScheduleAsyncInput,
 } from "../instructions/index.js";
 import {
   findAssetPda,
   findConditionHeadPda,
   findConfigPda,
   findCustodyHeadPda,
+  findFeeSchedulePda,
+  findListingFeesPda,
   findListingPda,
   findRegistryConfigPda,
   findSaleTermsPda,
@@ -90,6 +114,8 @@ export const KATHA_MARKETPLACE_PROGRAM_ADDRESS =
 
 export enum KathaMarketplaceAccount {
   ArtworkSaleTerms,
+  FeeSchedule,
+  ListingFees,
   ListingRecord,
   MarketplaceConfig,
 }
@@ -108,6 +134,28 @@ export function identifyKathaMarketplaceAccount(
     )
   ) {
     return KathaMarketplaceAccount.ArtworkSaleTerms;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([250, 80, 88, 27, 206, 216, 50, 199]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceAccount.FeeSchedule;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([127, 230, 171, 17, 202, 93, 231, 143]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceAccount.ListingFees;
   }
   if (
     containsBytes(
@@ -139,6 +187,7 @@ export function identifyKathaMarketplaceAccount(
 
 export enum KathaMarketplaceEvent {
   ArtworkPurchased,
+  FeeScheduleChanged,
   ListingCreated,
   ListingReleased,
   MarketplaceInitialized,
@@ -158,6 +207,17 @@ export function identifyKathaMarketplaceEvent(
     )
   ) {
     return KathaMarketplaceEvent.ArtworkPurchased;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([122, 149, 14, 30, 14, 161, 198, 191]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceEvent.FeeScheduleChanged;
   }
   if (
     containsBytes(
@@ -199,12 +259,16 @@ export function identifyKathaMarketplaceEvent(
 
 export enum KathaMarketplaceInstruction {
   CancelListing,
+  CheckListingFees,
   CheckSaleEligibility,
   CreateListing,
+  CreateListingWithFees,
   ExpireListing,
+  InitializeFeeSchedule,
   InitializeMarketplace,
   InitializeSaleTerms,
   PurchaseListing,
+  UpdateFeeSchedule,
 }
 
 export function identifyKathaMarketplaceInstruction(
@@ -221,6 +285,17 @@ export function identifyKathaMarketplaceInstruction(
     )
   ) {
     return KathaMarketplaceInstruction.CancelListing;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([48, 112, 172, 127, 0, 92, 90, 69]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.CheckListingFees;
   }
   if (
     containsBytes(
@@ -248,12 +323,34 @@ export function identifyKathaMarketplaceInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([213, 143, 101, 138, 5, 81, 51, 236]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.CreateListingWithFees;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([206, 60, 47, 146, 232, 175, 14, 182]),
       ),
       0,
     )
   ) {
     return KathaMarketplaceInstruction.ExpireListing;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([125, 35, 60, 135, 23, 192, 56, 185]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.InitializeFeeSchedule;
   }
   if (
     containsBytes(
@@ -288,6 +385,17 @@ export function identifyKathaMarketplaceInstruction(
   ) {
     return KathaMarketplaceInstruction.PurchaseListing;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([190, 103, 25, 122, 142, 37, 230, 81]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.UpdateFeeSchedule;
+  }
   throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION, {
     instructionData: data,
     programName: "kathaMarketplace",
@@ -301,14 +409,23 @@ export type ParsedKathaMarketplaceInstruction<
       instructionType: KathaMarketplaceInstruction.CancelListing;
     } & ParsedCancelListingInstruction<TProgram>)
   | ({
+      instructionType: KathaMarketplaceInstruction.CheckListingFees;
+    } & ParsedCheckListingFeesInstruction<TProgram>)
+  | ({
       instructionType: KathaMarketplaceInstruction.CheckSaleEligibility;
     } & ParsedCheckSaleEligibilityInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.CreateListing;
     } & ParsedCreateListingInstruction<TProgram>)
   | ({
+      instructionType: KathaMarketplaceInstruction.CreateListingWithFees;
+    } & ParsedCreateListingWithFeesInstruction<TProgram>)
+  | ({
       instructionType: KathaMarketplaceInstruction.ExpireListing;
     } & ParsedExpireListingInstruction<TProgram>)
+  | ({
+      instructionType: KathaMarketplaceInstruction.InitializeFeeSchedule;
+    } & ParsedInitializeFeeScheduleInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.InitializeMarketplace;
     } & ParsedInitializeMarketplaceInstruction<TProgram>)
@@ -317,7 +434,10 @@ export type ParsedKathaMarketplaceInstruction<
     } & ParsedInitializeSaleTermsInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.PurchaseListing;
-    } & ParsedPurchaseListingInstruction<TProgram>);
+    } & ParsedPurchaseListingInstruction<TProgram>)
+  | ({
+      instructionType: KathaMarketplaceInstruction.UpdateFeeSchedule;
+    } & ParsedUpdateFeeScheduleInstruction<TProgram>);
 
 export function parseKathaMarketplaceInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
@@ -329,6 +449,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
       return {
         instructionType: KathaMarketplaceInstruction.CancelListing,
         ...parseCancelListingInstruction(instruction),
+      };
+    }
+    case KathaMarketplaceInstruction.CheckListingFees: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.CheckListingFees,
+        ...parseCheckListingFeesInstruction(instruction),
       };
     }
     case KathaMarketplaceInstruction.CheckSaleEligibility: {
@@ -345,11 +472,25 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
         ...parseCreateListingInstruction(instruction),
       };
     }
+    case KathaMarketplaceInstruction.CreateListingWithFees: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.CreateListingWithFees,
+        ...parseCreateListingWithFeesInstruction(instruction),
+      };
+    }
     case KathaMarketplaceInstruction.ExpireListing: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: KathaMarketplaceInstruction.ExpireListing,
         ...parseExpireListingInstruction(instruction),
+      };
+    }
+    case KathaMarketplaceInstruction.InitializeFeeSchedule: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.InitializeFeeSchedule,
+        ...parseInitializeFeeScheduleInstruction(instruction),
       };
     }
     case KathaMarketplaceInstruction.InitializeMarketplace: {
@@ -373,6 +514,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
         ...parsePurchaseListingInstruction(instruction),
       };
     }
+    case KathaMarketplaceInstruction.UpdateFeeSchedule: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.UpdateFeeSchedule,
+        ...parseUpdateFeeScheduleInstruction(instruction),
+      };
+    }
     default:
       throw new SolanaError(
         SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
@@ -393,6 +541,10 @@ export type KathaMarketplacePlugin = {
 export type KathaMarketplacePluginAccounts = {
   artworkSaleTerms: ReturnType<typeof getArtworkSaleTermsCodec> &
     SelfFetchFunctions<ArtworkSaleTermsArgs, ArtworkSaleTerms>;
+  feeSchedule: ReturnType<typeof getFeeScheduleCodec> &
+    SelfFetchFunctions<FeeScheduleArgs, FeeSchedule>;
+  listingFees: ReturnType<typeof getListingFeesCodec> &
+    SelfFetchFunctions<ListingFeesArgs, ListingFees>;
   listingRecord: ReturnType<typeof getListingRecordCodec> &
     SelfFetchFunctions<ListingRecordArgs, ListingRecord>;
   marketplaceConfig: ReturnType<typeof getMarketplaceConfigCodec> &
@@ -403,6 +555,10 @@ export type KathaMarketplacePluginInstructions = {
   cancelListing: (
     input: CancelListingAsyncInput,
   ) => ReturnType<typeof getCancelListingInstructionAsync> & SelfPlanAndSendFunctions;
+  checkListingFees: (
+    input: CheckListingFeesAsyncInput,
+  ) => ReturnType<typeof getCheckListingFeesInstructionAsync> &
+    SelfPlanAndSendFunctions;
   checkSaleEligibility: (
     input: CheckSaleEligibilityAsyncInput,
   ) => ReturnType<typeof getCheckSaleEligibilityInstructionAsync> &
@@ -410,9 +566,17 @@ export type KathaMarketplacePluginInstructions = {
   createListing: (
     input: CreateListingAsyncInput,
   ) => ReturnType<typeof getCreateListingInstructionAsync> & SelfPlanAndSendFunctions;
+  createListingWithFees: (
+    input: CreateListingWithFeesAsyncInput,
+  ) => ReturnType<typeof getCreateListingWithFeesInstructionAsync> &
+    SelfPlanAndSendFunctions;
   expireListing: (
     input: ExpireListingAsyncInput,
   ) => ReturnType<typeof getExpireListingInstructionAsync> & SelfPlanAndSendFunctions;
+  initializeFeeSchedule: (
+    input: InitializeFeeScheduleAsyncInput,
+  ) => ReturnType<typeof getInitializeFeeScheduleInstructionAsync> &
+    SelfPlanAndSendFunctions;
   initializeMarketplace: (
     input: InitializeMarketplaceAsyncInput,
   ) => ReturnType<typeof getInitializeMarketplaceInstructionAsync> &
@@ -424,6 +588,10 @@ export type KathaMarketplacePluginInstructions = {
   purchaseListing: (
     input: PurchaseListingAsyncInput,
   ) => ReturnType<typeof getPurchaseListingInstructionAsync> & SelfPlanAndSendFunctions;
+  updateFeeSchedule: (
+    input: UpdateFeeScheduleAsyncInput,
+  ) => ReturnType<typeof getUpdateFeeScheduleInstructionAsync> &
+    SelfPlanAndSendFunctions;
 };
 
 export type KathaMarketplacePluginPdas = {
@@ -431,10 +599,12 @@ export type KathaMarketplacePluginPdas = {
   registryConfig: typeof findRegistryConfigPda;
   asset: typeof findAssetPda;
   listing: typeof findListingPda;
+  listingFees: typeof findListingFeesPda;
   verification: typeof findVerificationPda;
   conditionHead: typeof findConditionHeadPda;
   custodyHead: typeof findCustodyHeadPda;
   saleTerms: typeof findSaleTermsPda;
+  feeSchedule: typeof findFeeSchedulePda;
 };
 
 export type KathaMarketplacePluginRequirements = ClientWithRpc<
@@ -451,6 +621,8 @@ export function kathaMarketplaceProgram() {
       kathaMarketplace: <KathaMarketplacePlugin>{
         accounts: {
           artworkSaleTerms: addSelfFetchFunctions(client, getArtworkSaleTermsCodec()),
+          feeSchedule: addSelfFetchFunctions(client, getFeeScheduleCodec()),
+          listingFees: addSelfFetchFunctions(client, getListingFeesCodec()),
           listingRecord: addSelfFetchFunctions(client, getListingRecordCodec()),
           marketplaceConfig: addSelfFetchFunctions(client, getMarketplaceConfigCodec()),
         },
@@ -459,6 +631,11 @@ export function kathaMarketplaceProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getCancelListingInstructionAsync(input),
+            ),
+          checkListingFees: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCheckListingFeesInstructionAsync(input),
             ),
           checkSaleEligibility: (input) =>
             addSelfPlanAndSendFunctions(
@@ -470,10 +647,20 @@ export function kathaMarketplaceProgram() {
               client,
               getCreateListingInstructionAsync(input),
             ),
+          createListingWithFees: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCreateListingWithFeesInstructionAsync(input),
+            ),
           expireListing: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getExpireListingInstructionAsync(input),
+            ),
+          initializeFeeSchedule: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getInitializeFeeScheduleInstructionAsync(input),
             ),
           initializeMarketplace: (input) =>
             addSelfPlanAndSendFunctions(
@@ -490,16 +677,23 @@ export function kathaMarketplaceProgram() {
               client,
               getPurchaseListingInstructionAsync(input),
             ),
+          updateFeeSchedule: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getUpdateFeeScheduleInstructionAsync(input),
+            ),
         },
         pdas: {
           config: findConfigPda,
           registryConfig: findRegistryConfigPda,
           asset: findAssetPda,
           listing: findListingPda,
+          listingFees: findListingFeesPda,
           verification: findVerificationPda,
           conditionHead: findConditionHeadPda,
           custodyHead: findCustodyHeadPda,
           saleTerms: findSaleTermsPda,
+          feeSchedule: findFeeSchedulePda,
         },
         identifyAccount: identifyKathaMarketplaceAccount,
         identifyInstruction: identifyKathaMarketplaceInstruction,

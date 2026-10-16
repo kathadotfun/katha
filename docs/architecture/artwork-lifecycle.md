@@ -94,7 +94,10 @@ on cancellation, expiry recovery, purchase, and attempted duplicate purchase.
 [Solana transaction failure rolls back instruction state changes, while network fees may still be charged.](https://solana.com/docs/core/transactions)
 
 The six-decimal Devnet test token uses integer amounts. The configured simulation
-defaults are 250 basis points commission and 500 basis points secondary royalty.
+defaults are 1,000 basis points primary commission, 250 basis points resale
+commission and 500 basis points artist resale royalty. The authority can update
+the fee schedule for future listings; seller signatures commit to exact rates
+and new listings snapshot them. Legacy listings retain their initialization fees.
 Primary settlement sends artist proceeds after commission; secondary settlement
 splits seller, artist, and treasury proceeds. Fee arithmetic, rounding, and recipient
 overlap are checked independently from ownership and physical custody.

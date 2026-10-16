@@ -45,6 +45,14 @@ async function setup(
     }),
   ]);
   await f.client.sendTransaction([
+    await f.initializeFees({
+      primaryCommissionBps: options.commissionBps ?? 1000,
+      secondaryCommissionBps: options.commissionBps ?? f.settings.commissionBps,
+      secondaryRoyaltyBps:
+        options.secondaryRoyaltyBps ?? f.settings.secondaryRoyaltyBps,
+    }),
+  ]);
+  await f.client.sendTransaction([
     await market.getInitializeSaleTermsInstructionAsync({
       artwork: f.artwork.artwork,
       authority: f.roles.bootstrap,
@@ -94,7 +102,10 @@ async function setup(
   }
   const [listing] = await market.findListingPda({ asset: f.artwork.asset });
   await f.client.sendTransaction([
-    await market.getCreateListingInstructionAsync({
+    await market.getCreateListingWithFeesInstructionAsync({
+      expectedFeeRevision: 1n,
+      expectedCommissionBps: options.commissionBps ?? 1000,
+      expectedSecondaryRoyaltyBps: 0,
       artwork: f.artwork.artwork,
       seller: f.roles.seller,
       conditionReport,
@@ -155,7 +166,7 @@ it("atomically pays primary artist/treasury and transfers Core ownership without
   const originalCustody = f.client.svm.getAccount(custody),
     originalArtwork = f.client.svm.getAccount(f.artwork.artwork);
   await f.send();
-  expect(await f.balances()).toEqual([900_000_000n, 0n, 97_500_000n, 2_500_000n]);
+  expect(await f.balances()).toEqual([900_000_000n, 0n, 90_000_000n, 10_000_000n]);
   expect(readListingDelegates(f.state().asset)).toEqual({
     owner: f.roles.buyerA.address,
     freeze: { frozen: false, authority: "Owner", address: null },
@@ -181,7 +192,10 @@ it("settles a secondary sale with current owner approval and preserves primary h
   await f.send();
   f.client.svm.expireBlockhash();
   await f.client.sendTransaction([
-    await market.getCreateListingInstructionAsync({
+    await market.getCreateListingWithFeesInstructionAsync({
+      expectedFeeRevision: 1n,
+      expectedCommissionBps: 250,
+      expectedSecondaryRoyaltyBps: 500,
       artwork: f.artwork.artwork,
       seller: f.roles.buyerA,
       conditionReport: f.artwork.initialCondition,
@@ -199,7 +213,7 @@ it("settles a secondary sale with current owner approval and preserves primary h
     expectedRevision: 3n,
   });
   expect(await f.amount(f.tokenAccounts.buyerB)).toBe(900_000_000n);
-  expect(await f.balances()).toEqual([992_500_000n, 0n, 102_500_000n, 5_000_000n]);
+  expect(await f.balances()).toEqual([992_500_000n, 0n, 95_000_000n, 12_500_000n]);
   expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerB.address);
   expect(market.getListingRecordDecoder().decode(f.state().ledger.data)).toMatchObject({
     status: market.ListingStatus.Purchased,
@@ -427,7 +441,10 @@ it("serializes purchase/cancel in both orders and rejects stale quotes after rel
     expect(delegates.freeze?.frozen).toBe(false);
     if (first === "cancel") {
       await f.client.sendTransaction([
-        await market.getCreateListingInstructionAsync({
+        await market.getCreateListingWithFeesInstructionAsync({
+          expectedFeeRevision: 1n,
+          expectedCommissionBps: 1000,
+          expectedSecondaryRoyaltyBps: 0,
           artwork: f.artwork.artwork,
           seller: f.roles.seller,
           conditionReport: f.artwork.initialCondition,
@@ -463,7 +480,7 @@ it("conserves tiny rounded payments and full u64 prices through real token CPIs"
     }
     const source = await f.amount(f.tokenAccounts.buyerA);
     await f.send();
-    const commission = (price * 250n) / 10_000n;
+    const commission = (price * 1000n) / 10_000n;
     expect(await f.balances()).toEqual([
       source - price,
       0n,
@@ -475,7 +492,10 @@ it("conserves tiny rounded payments and full u64 prices through real token CPIs"
   const f = await setup(false, false, { price: 101n });
   await f.send();
   await f.client.sendTransaction([
-    await market.getCreateListingInstructionAsync({
+    await market.getCreateListingWithFeesInstructionAsync({
+      expectedFeeRevision: 1n,
+      expectedCommissionBps: 250,
+      expectedSecondaryRoyaltyBps: 500,
       artwork: f.artwork.artwork,
       seller: f.roles.buyerA,
       conditionReport: f.artwork.initialCondition,
@@ -493,7 +513,7 @@ it("conserves tiny rounded payments and full u64 prices through real token CPIs"
     expectedRevision: 3n,
   });
   // Floor fees independently: 2 commission + 5 royalty, seller keeps 94.
-  expect(await f.balances()).toEqual([999_999_993n, 0n, 104n, 4n]);
+  expect(await f.balances()).toEqual([999_999_993n, 0n, 96n, 12n]);
   expect(await f.amount(f.tokenAccounts.buyerB)).toBe(999_999_899n);
 }, 30_000);
 
@@ -539,7 +559,10 @@ it("merges every secondary seller/artist/treasury overlap without losing role pr
       ]);
     }
     await f.client.sendTransaction([
-      await market.getCreateListingInstructionAsync({
+      await market.getCreateListingWithFeesInstructionAsync({
+        expectedFeeRevision: 1n,
+        expectedCommissionBps: 250,
+        expectedSecondaryRoyaltyBps: 500,
         artwork: f.artwork.artwork,
         seller,
         conditionReport: f.artwork.initialCondition,
@@ -626,7 +649,7 @@ it.each(["token", "core"] as const)(
     expect(readListingDelegates(f.state().asset).freeze?.frozen).toBe(true);
     // The failed transaction must not consume the listing or duplicate payouts.
     await f.send();
-    expect(await f.balances()).toEqual([900_000_000n, 0n, 97_500_000n, 2_500_000n]);
+    expect(await f.balances()).toEqual([900_000_000n, 0n, 90_000_000n, 10_000_000n]);
     expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
   },
   30_000,
@@ -682,6 +705,8 @@ it("executes marketplace builder instructions with real seller/buyer signatures 
   const [saleTerms] = await market.findSaleTermsPda({ artwork: f.artwork.artwork });
   const accounts = () => ({
     marketplaceConfigAccount: required(f.config),
+    feeScheduleAccount: required(f.feeSchedule),
+    listingFeesAccount: f.client.svm.getAccount(f.listingFees),
     registryConfigAccount: required(f.registryConfig),
     artworkAccount: required(f.artwork.artwork),
     assetAccount: required(f.artwork.asset),
@@ -763,11 +788,73 @@ it("executes marketplace builder instructions with real seller/buyer signatures 
   await f.client.sendTransaction([
     addSignersToInstruction([f.roles.buyerA], buy.instruction),
   ]);
-  expect(await f.balances()).toEqual([900_000_000n, 0n, 97_500_000n, 2_500_000n]);
+  expect(await f.balances()).toEqual([900_000_000n, 0n, 90_000_000n, 10_000_000n]);
   expect(readListingDelegates(f.state().asset).owner).toBe(f.roles.buyerA.address);
   expect(market.getListingRecordDecoder().decode(f.state().ledger.data)).toMatchObject({
     status: market.ListingStatus.Purchased,
     revision: 6n,
     completedSales: 1n,
   });
+}, 30_000);
+
+it("locks reviewed listing fees across schedule changes and rejects forged/missing fee snapshots", async () => {
+  const f = await setup();
+  const before = f.state();
+  const config = f.client.svm.getAccount(f.config);
+  f.client.svm.expireBlockhash();
+  await f.client.sendTransaction([
+    await market.getUpdateFeeScheduleInstructionAsync({
+      authority: f.roles.bootstrap,
+      expectedRevision: 1n,
+      primaryCommissionBps: 2000,
+      secondaryCommissionBps: 400,
+      secondaryRoyaltyBps: 700,
+    }),
+  ]);
+  expect(f.client.svm.getAccount(f.config)).toEqual(config);
+  for (const listingFees of [f.config, f.roles.outsider.address, f.feeSchedule]) {
+    await expect(f.send({ listingFees })).rejects.toThrow();
+    expect(f.state()).toEqual(before);
+  }
+  await f.send();
+  expect(await f.balances()).toEqual([900_000_000n, 0n, 90_000_000n, 10_000_000n]);
+  f.client.svm.expireBlockhash();
+  await f.client.sendTransaction([
+    await market.getCreateListingWithFeesInstructionAsync({
+      artwork: f.artwork.artwork,
+      seller: f.roles.buyerA,
+      conditionReport: f.artwork.initialCondition,
+      collection: f.collection,
+      price: f.settings.examplePrice,
+      expiresAt: f.clock + 3600n,
+      expectedRevision: 2n,
+      expectedFeeRevision: 2n,
+      expectedCommissionBps: 400,
+      expectedSecondaryRoyaltyBps: 700,
+    }),
+  ]);
+  await f.send({
+    buyer: f.roles.buyerB,
+    buyerTokens: f.tokenAccounts.buyerB,
+    seller: f.roles.buyerA.address,
+    sellerTokens: f.tokenAccounts.buyerA,
+    expectedRevision: 3n,
+  });
+  expect(await f.balances()).toEqual([989_000_000n, 0n, 97_000_000n, 14_000_000n]);
+}, 30_000);
+
+it("keeps deployed version-1 listings purchasable at their original initialization fees", async () => {
+  const f = await setup();
+  const old = f.state().ledger;
+  f.client.svm.setAccount({
+    ...old,
+    data: Uint8Array.from(
+      market.getListingRecordEncoder().encode({
+        ...market.getListingRecordDecoder().decode(old.data),
+        version: 1,
+      }),
+    ),
+  });
+  await f.send();
+  expect(await f.balances()).toEqual([900_000_000n, 0n, 97_500_000n, 2_500_000n]);
 }, 30_000);

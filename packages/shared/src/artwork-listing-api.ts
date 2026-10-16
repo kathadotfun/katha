@@ -2,7 +2,11 @@ import { z } from "zod";
 import { kathaIdSchema } from "./artwork-identity.js";
 import { walletAddressSchema } from "./artwork-domain.js";
 import { walletClusterSchema } from "./wallet-session.js";
-import { listingPriceSchema, tokenAmountSchema } from "./marketplace.js";
+import {
+  listingPriceSchema,
+  tokenAmountSchema,
+  marketplaceFeeRatesSchema,
+} from "./marketplace.js";
 import {
   operationIntentSchema,
   unsignedOperationResponseSchema,
@@ -28,6 +32,9 @@ export const listingCancelRequestSchema = listingCreateRequestSchema.omit({
   expiresAt: true,
 });
 export const listingPreparationResponseSchema = unsignedOperationResponseSchema.extend({
+  fees: marketplaceFeeRatesSchema
+    .safeExtend({ scheduleRevision: tokenAmountSchema })
+    .optional(),
   kind: listingOperationKindSchema,
   currentRevision: tokenAmountSchema,
   nextRevision: tokenAmountSchema,

@@ -237,10 +237,18 @@ The MVP supports fixed-price primary and secondary sales using a clearly labeled
 six-decimal Devnet test token. JSON payment amounts are integer decimal strings.
 Development defaults are:
 
-- platform commission: 250 basis points;
+- primary platform commission: 1,000 basis points (10%);
+- secondary platform commission: 250 basis points (2.5%);
 - secondary artist royalty: 500 basis points.
 
 These values simulate the lifecycle and are not production economic commitments.
+The Marketplace authority can initialize and update a separate, versioned fee
+schedule. Primary commission is bounded at 10,000 basis points; secondary
+commission plus royalty cannot exceed 10,000. Seller signatures commit to the
+schedule revision and exact rates. Each new listing snapshots those rates;
+later changes affect future listings. Existing version-1 listings retain their
+original initialization settings. The existing Devnet deployment must be upgraded
+and its fee schedule initialized before using the new listing instruction.
 Primary proceeds go to the artist after commission. Secondary proceeds are split
 among seller, artist, and treasury using checked integer arithmetic.
 

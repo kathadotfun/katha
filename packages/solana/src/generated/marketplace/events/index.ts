@@ -7,6 +7,7 @@
  */
 
 export * from "./artworkPurchased.js";
+export * from "./feeScheduleChanged.js";
 export * from "./listingCreated.js";
 export * from "./listingReleased.js";
 export * from "./marketplaceInitialized.js";

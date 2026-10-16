@@ -47,6 +47,7 @@ import {
   findConditionHeadPda,
   findConfigPda,
   findCustodyHeadPda,
+  findListingFeesPda,
   findListingPda,
   findRegistryConfigPda,
   findSaleTermsPda,
@@ -90,6 +91,7 @@ export type PurchaseListingInstruction<
   TAccountTreasuryTokens extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
+  TAccountListingFees extends string | AccountMeta<string> = string,
   TRemainingAccounts extends readonly AccountMeta<string>[] = [],
 > = Instruction<TProgram> &
   InstructionWithData<ReadonlyUint8Array> &
@@ -155,6 +157,9 @@ export type PurchaseListingInstruction<
       TAccountSystemProgram extends string
         ? ReadonlyAccount<TAccountSystemProgram>
         : TAccountSystemProgram,
+      TAccountListingFees extends string
+        ? ReadonlyAccount<TAccountListingFees>
+        : TAccountListingFees,
       ...TRemainingAccounts,
     ]
   >;
@@ -222,6 +227,7 @@ export type PurchaseListingAsyncInput<
   TAccountArtistTokens extends InstructionAccountInput = InstructionAccountInput,
   TAccountTreasuryTokens extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput = InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput = InstructionAccountInput,
 > = {
   config?: TAccountConfig;
   registryProgram?: TAccountRegistryProgram;
@@ -245,6 +251,8 @@ export type PurchaseListingAsyncInput<
   artistTokens: TAccountArtistTokens;
   treasuryTokens: TAccountTreasuryTokens;
   systemProgram?: TAccountSystemProgram;
+  /** listings use their immutable initialization settings, even after fee updates. */
+  listingFees?: TAccountListingFees;
   expectedRevision: PurchaseListingInstructionDataArgs["expectedRevision"];
   expectedPrice: PurchaseListingInstructionDataArgs["expectedPrice"];
 };
@@ -272,6 +280,7 @@ export async function getPurchaseListingInstructionAsync<
   TAccountArtistTokens extends InstructionAccountInput,
   TAccountTreasuryTokens extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput,
   TProgramAddress extends Address = typeof KATHA_MARKETPLACE_PROGRAM_ADDRESS,
 >(
   input: PurchaseListingAsyncInput<
@@ -296,7 +305,8 @@ export async function getPurchaseListingInstructionAsync<
     TAccountSellerTokens,
     TAccountArtistTokens,
     TAccountTreasuryTokens,
-    TAccountSystemProgram
+    TAccountSystemProgram,
+    TAccountListingFees
   >,
   config?: { programAddress?: TProgramAddress },
 ): Promise<
@@ -389,6 +399,10 @@ export async function getPurchaseListingInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListingFees,
+      InstructionAccountInputAddress<TAccountListingFees>
     >
   >
 > {
@@ -475,6 +489,11 @@ export async function getPurchaseListingInstructionAsync<
     },
     systemProgram: {
       value: input.systemProgram ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
+    listingFees: {
+      value: input.listingFees ?? null,
       isSigner: false,
       isWritable: false,
     },
@@ -598,6 +617,17 @@ export async function getPurchaseListingInstructionAsync<
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
   }
+  if (!accounts.listingFees.value) {
+    accounts.listingFees.value = await findListingFeesPda(
+      {
+        listing: getAddressFromResolvedInstructionAccount(
+          "listing",
+          accounts.listing.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
 
   return Object.freeze({
     accounts: [
@@ -623,6 +653,7 @@ export async function getPurchaseListingInstructionAsync<
       getAccountMeta("artistTokens", accounts.artistTokens),
       getAccountMeta("treasuryTokens", accounts.treasuryTokens),
       getAccountMeta("systemProgram", accounts.systemProgram),
+      getAccountMeta("listingFees", accounts.listingFees),
     ],
     data: getPurchaseListingInstructionDataEncoder().encode(
       args as PurchaseListingInstructionDataArgs,
@@ -717,6 +748,10 @@ export async function getPurchaseListingInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListingFees,
+      InstructionAccountInputAddress<TAccountListingFees>
     >
   >);
 }
@@ -744,6 +779,7 @@ export type PurchaseListingInput<
   TAccountArtistTokens extends InstructionAccountInput = InstructionAccountInput,
   TAccountTreasuryTokens extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput = InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput = InstructionAccountInput,
 > = {
   config: TAccountConfig;
   registryProgram?: TAccountRegistryProgram;
@@ -767,6 +803,8 @@ export type PurchaseListingInput<
   artistTokens: TAccountArtistTokens;
   treasuryTokens: TAccountTreasuryTokens;
   systemProgram?: TAccountSystemProgram;
+  /** listings use their immutable initialization settings, even after fee updates. */
+  listingFees: TAccountListingFees;
   expectedRevision: PurchaseListingInstructionDataArgs["expectedRevision"];
   expectedPrice: PurchaseListingInstructionDataArgs["expectedPrice"];
 };
@@ -794,6 +832,7 @@ export function getPurchaseListingInstruction<
   TAccountArtistTokens extends InstructionAccountInput,
   TAccountTreasuryTokens extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
+  TAccountListingFees extends InstructionAccountInput,
   TProgramAddress extends Address = typeof KATHA_MARKETPLACE_PROGRAM_ADDRESS,
 >(
   input: PurchaseListingInput<
@@ -818,7 +857,8 @@ export function getPurchaseListingInstruction<
     TAccountSellerTokens,
     TAccountArtistTokens,
     TAccountTreasuryTokens,
-    TAccountSystemProgram
+    TAccountSystemProgram,
+    TAccountListingFees
   >,
   config?: { programAddress?: TProgramAddress },
 ): PurchaseListingInstruction<
@@ -910,6 +950,10 @@ export function getPurchaseListingInstruction<
   ResolvedInstructionAccountMeta<
     TAccountSystemProgram,
     InstructionAccountInputAddress<TAccountSystemProgram>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountListingFees,
+    InstructionAccountInputAddress<TAccountListingFees>
   >
 > {
   // Program address.
@@ -998,6 +1042,11 @@ export function getPurchaseListingInstruction<
       isSigner: false,
       isWritable: false,
     },
+    listingFees: {
+      value: input.listingFees ?? null,
+      isSigner: false,
+      isWritable: false,
+    },
   };
   const accounts = originalAccounts as Record<
     keyof typeof originalAccounts,
@@ -1049,6 +1098,7 @@ export function getPurchaseListingInstruction<
       getAccountMeta("artistTokens", accounts.artistTokens),
       getAccountMeta("treasuryTokens", accounts.treasuryTokens),
       getAccountMeta("systemProgram", accounts.systemProgram),
+      getAccountMeta("listingFees", accounts.listingFees),
     ],
     data: getPurchaseListingInstructionDataEncoder().encode(
       args as PurchaseListingInstructionDataArgs,
@@ -1143,6 +1193,10 @@ export function getPurchaseListingInstruction<
     ResolvedInstructionAccountMeta<
       TAccountSystemProgram,
       InstructionAccountInputAddress<TAccountSystemProgram>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountListingFees,
+      InstructionAccountInputAddress<TAccountListingFees>
     >
   >);
 }
@@ -1175,6 +1229,8 @@ export type ParsedPurchaseListingInstruction<
     artistTokens: TAccountMetas[19];
     treasuryTokens: TAccountMetas[20];
     systemProgram: TAccountMetas[21];
+    /** listings use their immutable initialization settings, even after fee updates. */
+    listingFees: TAccountMetas[22];
   };
   data: PurchaseListingInstructionData;
 };
@@ -1187,10 +1243,10 @@ export function parsePurchaseListingInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedPurchaseListingInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 22) {
+  if (instruction.accounts.length < 23) {
     throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS, {
       actualAccountMetas: instruction.accounts.length,
-      expectedAccountMetas: 22,
+      expectedAccountMetas: 23,
     });
   }
   let accountIndex = 0;
@@ -1224,6 +1280,7 @@ export function parsePurchaseListingInstruction<
       artistTokens: getNextAccount(),
       treasuryTokens: getNextAccount(),
       systemProgram: getNextAccount(),
+      listingFees: getNextAccount(),
     },
     data: getPurchaseListingInstructionDataDecoder().decode(instruction.data),
   };

@@ -64,6 +64,35 @@ stored objects. Preserve finalized document history.
 
 ## Artwork workflow
 
+### Fee settings
+
+The Marketplace fee schedule defaults to 1,000 bps primary platform commission,
+250 bps resale platform commission and 500 bps artist resale royalty. A 100-token
+first sale pays 90 to the artist and 10 to Katha; a 100-token resale pays 92.5 to
+the seller, 5 to the artist and 2.5 to Katha. Integer deductions round down;
+the remaining units go to the artist on a primary sale and seller on resale.
+
+After the operator upgrades Marketplace to the reviewed binary, use `/admin/devnet`
+with the configured Marketplace authority. Existing Registry/Marketplace
+singletons must not be reinitialized. Select **fees** once to initialize its
+separate schedule. For later changes, edit `feeRates` in the public input JSON,
+select **update-fees**, then prepare, inspect the displayed rates and approve
+in the wallet. No program redeployment is needed for subsequent rate changes.
+The signed instruction includes the expected schedule revision; a concurrent
+update requires preparation again.
+
+Only future listings use changed rates. A seller must cancel and relist to adopt
+new terms. Old version-1 listings keep the original Marketplace config rates;
+new version-2 listings use their canonical `ListingFees` snapshot. Cancellation
+and expiry recovery remain available for both versions. Fees apply only to
+sales executed through Katha, not external transfers or off-platform sales.
+
+Payment mint, token program, treasury, authorities, collection and inspection
+validity remain initialization settings. Changing those safely requires a
+separate migration design, especially for historical attestations and custody.
+
+### Registration and collecting
+
 The [ordered demonstration](devnet-demo.md#4-document-the-artist-and-artwork)
 contains route-by-route instructions. Keep these checkpoints distinct:
 

@@ -42,5 +42,28 @@ export async function setupMarketplaceConfiguration() {
       inspectionValiditySeconds: f.settings.inspectionValiditySeconds,
       ...overrides,
     });
-  return { ...f, config, bump, registryConfig, programDataAddress, initialize };
+  const [feeSchedule] = await marketplace.findFeeSchedulePda();
+  const [listing] = await marketplace.findListingPda({ asset: f.artwork.asset });
+  const [listingFees] = await marketplace.findListingFeesPda({ listing });
+  const initializeFees = (
+    overrides: Partial<marketplace.InitializeFeeScheduleAsyncInput> = {},
+  ) =>
+    marketplace.getInitializeFeeScheduleInstructionAsync({
+      authority: f.roles.bootstrap,
+      primaryCommissionBps: 1000,
+      secondaryCommissionBps: f.settings.commissionBps,
+      secondaryRoyaltyBps: f.settings.secondaryRoyaltyBps,
+      ...overrides,
+    });
+  return {
+    ...f,
+    config,
+    bump,
+    registryConfig,
+    programDataAddress,
+    initialize,
+    initializeFees,
+    feeSchedule,
+    listingFees,
+  };
 }

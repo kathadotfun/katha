@@ -7,5 +7,7 @@
  */
 
 export * from "./artworkSaleTerms.js";
+export * from "./feeSchedule.js";
+export * from "./listingFees.js";
 export * from "./listingRecord.js";
 export * from "./marketplaceConfig.js";

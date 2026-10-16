@@ -64,7 +64,7 @@ function fixture() {
     },
   };
   mocked.terms.mockReset().mockImplementation(async () => terms);
-  const accounts = Array.from({ length: 22 }, () => ({
+  const accounts = Array.from({ length: 23 }, () => ({
     address: temporaryWallet().address,
     role: 0,
   }));

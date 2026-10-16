@@ -82,6 +82,8 @@ async function setup() {
   });
   const snapshots = () => ({
     marketplaceConfigAccount: account(f.config),
+    feeScheduleAccount: account(f.feeSchedule),
+    listingFeesAccount: f.client.svm.getAccount(f.listingFees),
     registryConfigAccount: account(f.registryConfig),
     artworkAccount: account(f.artwork.artwork),
     assetAccount: account(f.artwork.asset),
@@ -191,7 +193,10 @@ async function setup() {
     };
   };
   const rawCreate = (seller = f.roles.buyerA) =>
-    market.getCreateListingInstructionAsync({
+    market.getCreateListingWithFeesInstructionAsync({
+      expectedFeeRevision: 1n,
+      expectedCommissionBps: 250,
+      expectedSecondaryRoyaltyBps: 500,
       artwork: f.artwork.artwork,
       seller,
       collection: f.collection,
@@ -231,6 +236,7 @@ async function setup() {
     assertHistory();
   };
   await send(await f.initialize());
+  await send(await f.initializeFees());
   await send(
     await market.getInitializeSaleTermsInstructionAsync({
       artwork: f.artwork.artwork,
@@ -255,8 +261,8 @@ async function setup() {
       992_500_000n,
       900_000_000n,
       0n,
-      102_500_000n,
-      5_000_000n,
+      95_000_000n,
+      12_500_000n,
     ]);
     expect(readListingDelegates(account(f.artwork.asset))).toEqual({
       owner: f.roles.buyerB.address,

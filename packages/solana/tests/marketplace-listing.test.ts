@@ -13,6 +13,7 @@ import * as registry from "../src/generated/registry/index.js";
 async function setup() {
   const f = await setupMarketplaceConfiguration();
   await f.client.sendTransaction([await f.initialize()]);
+  await f.client.sendTransaction([await f.initializeFees()]);
   await f.client.sendTransaction([
     await marketplace.getInitializeSaleTermsInstructionAsync({
       artwork: f.artwork.artwork,
@@ -23,8 +24,13 @@ async function setup() {
   const [listing, bump] = await marketplace.findListingPda({
     asset: f.artwork.asset,
   });
-  const create = (overrides: Partial<marketplace.CreateListingAsyncInput> = {}) =>
-    marketplace.getCreateListingInstructionAsync({
+  const create = (
+    overrides: Partial<marketplace.CreateListingWithFeesAsyncInput> = {},
+  ) =>
+    marketplace.getCreateListingWithFeesInstructionAsync({
+      expectedFeeRevision: 1n,
+      expectedCommissionBps: 1000,
+      expectedSecondaryRoyaltyBps: 0,
       artwork: f.artwork.artwork,
       seller: f.roles.seller,
       conditionReport: f.artwork.initialCondition,
@@ -34,7 +40,9 @@ async function setup() {
       expectedRevision: 0n,
       ...overrides,
     });
-  const send = async (overrides: Partial<marketplace.CreateListingAsyncInput> = {}) => {
+  const send = async (
+    overrides: Partial<marketplace.CreateListingWithFeesAsyncInput> = {},
+  ) => {
     f.client.svm.expireBlockhash();
     return f.client.sendTransaction([await create(overrides)]);
   };
@@ -67,7 +75,7 @@ it("creates one active fixed-price listing with both PDA delegates while preserv
   expect(account.programAddress).toBe(marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS);
   expect(account.data.length).toBe(320);
   expect(marketplace.getListingRecordDecoder().decode(account.data)).toMatchObject({
-    version: 1,
+    version: 2,
     config: f.config,
     artwork: f.artwork.artwork,
     asset: f.artwork.asset,
@@ -217,7 +225,7 @@ it("preserves completed-sale history and increments the expected revision when r
   const f = await setup();
   // Synthetic prior ledger until actual cancellation/purchase instructions exist.
   const value: marketplace.ListingRecordArgs = {
-    version: 1,
+    version: 2,
     config: f.config,
     artwork: f.artwork.artwork,
     asset: f.artwork.asset,
@@ -249,7 +257,11 @@ it("preserves completed-sale history and increments the expected revision when r
   const before = f.client.svm.getAccount(f.listing);
   await expect(f.send({ expectedRevision: 3n })).rejects.toThrow();
   expect(f.client.svm.getAccount(f.listing)).toEqual(before);
-  await f.send({ expectedRevision: 4n });
+  await f.send({
+    expectedRevision: 4n,
+    expectedCommissionBps: 250,
+    expectedSecondaryRoyaltyBps: 500,
+  });
   const after = f.client.svm.getAccount(f.listing);
   if (!after.exists) throw new Error("Missing reopened ledger");
   expect(marketplace.getListingRecordDecoder().decode(after.data)).toMatchObject({
@@ -259,5 +271,30 @@ it("preserves completed-sale history and increments the expected revision when r
     status: marketplace.ListingStatus.Active,
     seller: f.roles.seller.address,
     price: f.settings.examplePrice,
+  });
+}, 30_000);
+
+it("requires a seller-reviewed fee revision and snapshots changed rates on the next listing", async () => {
+  const f = await setup();
+  await f.client.sendTransaction([
+    await marketplace.getUpdateFeeScheduleInstructionAsync({
+      authority: f.roles.bootstrap,
+      expectedRevision: 1n,
+      primaryCommissionBps: 1500,
+      secondaryCommissionBps: 300,
+      secondaryRoyaltyBps: 800,
+    }),
+  ]);
+  await expect(f.send()).rejects.toThrow();
+  expect(f.client.svm.getAccount(f.listing).exists).toBe(false);
+  await f.send({ expectedFeeRevision: 2n, expectedCommissionBps: 1500 });
+  const account = f.client.svm.getAccount(f.listingFees);
+  if (!account.exists) throw new Error("Missing fee snapshot");
+  expect(marketplace.getListingFeesDecoder().decode(account.data)).toMatchObject({
+    listing: f.listing,
+    listingRevision: 1n,
+    scheduleRevision: 2n,
+    commissionBps: 1500,
+    secondaryRoyaltyBps: 0,
   });
 }, 30_000);

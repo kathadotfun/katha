@@ -138,7 +138,7 @@ impl<'info> CheckSaleEligibility<'info> {
         let kind = match &self.listing {
             Some(listing) => {
                 require!(
-                    listing.version == 1
+                    matches!(listing.version, 1 | 2)
                         && listing.artist_payout == self.sale_terms.artist_payout
                         && listing.payment_mint == self.config.payment_mint,
                     MarketplaceError::InvalidListing

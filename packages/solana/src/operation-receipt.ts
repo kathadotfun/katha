@@ -30,10 +30,13 @@ import {
   identifyKathaMarketplaceInstruction,
   KathaMarketplaceInstruction,
 } from "./generated/marketplace/index.js";
-const marketplaceKinds: Record<string, KathaMarketplaceInstruction> = {
-  CREATE_LISTING: KathaMarketplaceInstruction.CreateListing,
-  CANCEL_LISTING: KathaMarketplaceInstruction.CancelListing,
-  PURCHASE_ARTWORK: KathaMarketplaceInstruction.PurchaseListing,
+const marketplaceKinds: Record<string, readonly KathaMarketplaceInstruction[]> = {
+  CREATE_LISTING: [
+    KathaMarketplaceInstruction.CreateListing,
+    KathaMarketplaceInstruction.CreateListingWithFees,
+  ],
+  CANCEL_LISTING: [KathaMarketplaceInstruction.CancelListing],
+  PURCHASE_ARTWORK: [KathaMarketplaceInstruction.PurchaseListing],
 };
 export class ReceiptValidationError extends Error {
   constructor() {
@@ -171,8 +174,9 @@ export async function validateSignedPreparation(
       instruction.programAddress !== programAddress ||
       !instruction.data ||
       !(isMarketplace
-        ? identifyKathaMarketplaceInstruction(instruction.data) ===
-          marketplaceKinds[intent.kind]
+        ? marketplaceKinds[intent.kind]?.includes(
+            identifyKathaMarketplaceInstruction(instruction.data),
+          )
         : kinds[intent.kind]?.includes(
             identifyKathaRegistryInstruction(instruction.data),
           ))

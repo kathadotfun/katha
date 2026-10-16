@@ -328,3 +328,62 @@ describe("Devnet operator bootstrap", () => {
     ).rejects.toThrow();
   });
 });
+
+it("prepares editable fees from public inputs with a fresh reviewed revision", async () => {
+  const f = await fixture();
+  f.installRegistry();
+  f.installMarket();
+  const feeRates = {
+    primaryCommissionBps: 1000,
+    secondaryCommissionBps: 250,
+    secondaryRoyaltyBps: 500,
+  };
+  const created = market.parseInitializeFeeScheduleInstruction(
+    checkedInstruction(
+      await prepareDevnetBootstrapInstruction("fees", { ...config, feeRates }, f.read),
+    ),
+  );
+  expect(created.data).toMatchObject(feeRates);
+  const [feeSchedule, bump] = await market.findFeeSchedulePda();
+  f.put(
+    feeSchedule,
+    market.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+    Uint8Array.from(
+      market.getFeeScheduleEncoder().encode({
+        version: 1,
+        config: f.marketConfig,
+        revision: 7n,
+        bump,
+        ...feeRates,
+      }),
+    ),
+  );
+  await expect(
+    prepareDevnetBootstrapInstruction("fees", config, f.read),
+  ).rejects.toThrow(/already exists/);
+  const changedRates = {
+    primaryCommissionBps: 1200,
+    secondaryCommissionBps: 200,
+    secondaryRoyaltyBps: 400,
+  };
+  const updated = market.parseUpdateFeeScheduleInstruction(
+    checkedInstruction(
+      await prepareDevnetBootstrapInstruction(
+        "update-fees",
+        { ...config, feeRates: changedRates },
+        f.read,
+      ),
+    ),
+  );
+  expect(updated.data).toMatchObject({ ...changedRates, expectedRevision: 7n });
+  await expect(
+    prepareDevnetBootstrapInstruction(
+      "update-fees",
+      {
+        ...config,
+        feeRates: { ...feeRates, secondaryRoyaltyBps: 10000 },
+      },
+      f.read,
+    ),
+  ).rejects.toThrow();
+});

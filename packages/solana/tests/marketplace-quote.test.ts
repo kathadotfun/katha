@@ -136,3 +136,53 @@ it("builds quotes only from validated active bound listing state and actual conf
     readMarketplacePurchaseTerms(f.accounts, f.kathaId, f.context.chainTime),
   ).rejects.toThrow();
 });
+
+it("quotes version-2 listings from their own fees and rejects missing or stale snapshots", async () => {
+  const f = await marketplaceTransactionFixture();
+  f.accounts.listingAccount = snapshot(
+    f.listing,
+    market.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+    Uint8Array.from(
+      market.getListingRecordEncoder().encode({ ...f.ledger, version: 2 }),
+    ),
+  );
+  const [fees, bump] = await market.findListingFeesPda({ listing: f.listing });
+  const set = (
+    listingRevision: bigint,
+    owner = market.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+  ) => {
+    f.accounts.listingFeesAccount = snapshot(
+      fees,
+      owner,
+      Uint8Array.from(
+        market.getListingFeesEncoder().encode({
+          version: 1,
+          listing: f.listing,
+          listingRevision,
+          scheduleRevision: 1n,
+          commissionBps: 1000,
+          secondaryRoyaltyBps: 0,
+          bump,
+        }),
+      ),
+    );
+  };
+  await expect(
+    readMarketplacePurchaseTerms(f.accounts, f.kathaId, f.context.chainTime),
+  ).rejects.toThrow();
+  set(1n);
+  const quote = await readMarketplacePurchaseTerms(
+    f.accounts,
+    f.kathaId,
+    f.context.chainTime,
+  );
+  expect(quote.fees).toEqual({ platformCommissionBps: 1000, secondaryRoyaltyBps: 0 });
+  expect(quote.distribution).toMatchObject({
+    artistProceeds: "90000000",
+    treasuryFee: "10000000",
+  });
+  set(2n);
+  await expect(
+    readMarketplacePurchaseTerms(f.accounts, f.kathaId, f.context.chainTime),
+  ).rejects.toThrow();
+}, 30_000);

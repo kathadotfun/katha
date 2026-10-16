@@ -23,7 +23,8 @@ Katha keeps that link explicit and public:
 
 The holder gets the onchain asset, can request delivery of the painting or leave
 it in Katha's care, and can resell it onchain. The artist's
-attribution never changes, and the artist receives a royalty on every resale.
+attribution never changes, and the artist receives a royalty on resales settled
+through Katha.
 
 A token transfer alone does not move a painting. Katha separates authorship,
 digital ownership, physical custody, verification, and listing status, and records
@@ -71,8 +72,11 @@ records those steps instead of assuming them.
 - **Indexed provenance:** finalized activity is indexed into PostgreSQL with
   replay, backfill, and visible gaps.
 
-Development settings on Devnet are a 2.5% commission, a 5% artist resale royalty,
-and 30-day inspection validity. These are not production commitments.
+The fee defaults are a 10% platform commission on the first sale, a 2.5% platform
+commission on resale, and a 5% artist resale royalty. An authorized operator can
+change fees for future listings; active listings retain their reviewed rates.
+Inspection validity defaults to 30 days. These remain development settings;
+the recorded Devnet deployment predates the editable fee schedule.
 
 ## Market context
 

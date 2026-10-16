@@ -23,9 +23,12 @@ import {
 import { nonzeroAddress, readRegistryConfiguration } from "./registration.js";
 import * as registry from "./generated/registry/index.js";
 import * as market from "./generated/marketplace/index.js";
+import { readMarketplaceFeeSchedule } from "./marketplace.js";
 
 const LOADER = address("BPFLoaderUpgradeab1e11111111111111111111111");
 const TOKEN = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+// Immutable version-1 config values preserve legacy offers. New listings use
+// config.feeRates through the separately editable FeeSchedule account.
 export const DEVNET_TEST_SETTINGS = Object.freeze({
   commissionBps: 250,
   secondaryRoyaltyBps: 500,
@@ -181,8 +184,6 @@ export async function prepareDevnetBootstrapInstruction(
       ...DEVNET_TEST_SETTINGS,
     });
   }
-  if (step !== "sale-terms") throw new TypeError("Unsupported bootstrap operation");
-  const sale = devnetSaleTermsSchema.parse(saleInput);
   const account = await read(marketConfig);
   assertOwnedEncodedAccount(
     account,
@@ -209,15 +210,31 @@ export async function prepareDevnetBootstrapInstruction(
     settings.treasury !== platform.treasury ||
     settings.paymentMint !== config.paymentMint ||
     settings.tokenProgram !== TOKEN ||
-    settings.paymentDecimals !== 6 ||
-    settings.commissionBps !== DEVNET_TEST_SETTINGS.commissionBps ||
-    settings.secondaryRoyaltyBps !== DEVNET_TEST_SETTINGS.secondaryRoyaltyBps ||
-    settings.inspectionValiditySeconds !==
-      DEVNET_TEST_SETTINGS.inspectionValiditySeconds
+    settings.paymentDecimals !== 6
   )
-    throw new TypeError(
-      "Marketplace configuration does not match the reviewed Devnet defaults",
-    );
+    throw new TypeError("Marketplace configuration binding is invalid");
+  if (step === "fees" || step === "update-fees") {
+    const [feeSchedule] = await market.findFeeSchedulePda();
+    if (step === "fees") {
+      await assertEmptyBootstrapAccount(feeSchedule, read);
+      return market.getInitializeFeeScheduleInstruction({
+        config: marketConfig,
+        feeSchedule,
+        authority: signer,
+        ...config.feeRates,
+      });
+    }
+    const current = await readMarketplaceFeeSchedule(await read(feeSchedule));
+    return market.getUpdateFeeScheduleInstruction({
+      config: marketConfig,
+      feeSchedule,
+      authority: signer,
+      expectedRevision: current.revision,
+      ...config.feeRates,
+    });
+  }
+  if (step !== "sale-terms") throw new TypeError("Unsupported bootstrap operation");
+  const sale = devnetSaleTermsSchema.parse(saleInput);
   const [artwork] = await registry.findArtworkPda({ kathaId: sale.kathaId });
   const record = await read(artwork);
   assertOwnedEncodedAccount(

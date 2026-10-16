@@ -57,6 +57,12 @@ pub struct CreateListing<'info> {
     #[account(address = mpl_core::ID, executable)]
     pub core_program: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
+    #[account(seeds = [FEE_SCHEDULE_SEED], bump = fee_schedule.bump,
+        constraint = fee_schedule.config == config.key() && fee_schedule.version == 1 @ MarketplaceError::InvalidFeeSchedule)]
+    pub fee_schedule: Account<'info, FeeSchedule>,
+    /// CHECK: Canonical snapshot is allocated/validated by snapshot_listing_fees.
+    #[account(mut, seeds = [LISTING_FEES_SEED, listing.key().as_ref()], bump)]
+    pub listing_fees: UncheckedAccount<'info>,
 }
 
 impl<'info> CreateListing<'info> {
@@ -66,6 +72,9 @@ impl<'info> CreateListing<'info> {
         expires_at: i64,
         expected_revision: u64,
         bump: u8,
+        fees_bump: u8,
+        expected_commission_bps: u16,
+        expected_secondary_royalty_bps: u16,
     ) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         validate_listing_terms(price, expires_at, now)?;
@@ -77,7 +86,7 @@ impl<'info> CreateListing<'info> {
             );
             let record = ListingRecord::try_deserialize(&mut &data[..])?;
             require!(
-                record.version == 1
+                matches!(record.version, 1 | 2)
                     && record.config == self.config.key()
                     && record.artwork == self.artwork.key()
                     && record.asset == self.asset.key()
@@ -119,6 +128,18 @@ impl<'info> CreateListing<'info> {
         } else {
             SaleKind::Secondary
         };
+        let (commission, royalty) = if kind == SaleKind::Primary {
+            (self.fee_schedule.primary_commission_bps, 0)
+        } else {
+            (
+                self.fee_schedule.secondary_commission_bps,
+                self.fee_schedule.secondary_royalty_bps,
+            )
+        };
+        require!(
+            commission == expected_commission_bps && royalty == expected_secondary_royalty_bps,
+            MarketplaceError::StaleFeeSchedule
+        );
         LiveEligibility {
             config: &self.config,
             registry_config: &self.registry_config,
@@ -132,6 +153,15 @@ impl<'info> CreateListing<'info> {
             seller: self.seller.key(),
         }
         .validate(kind, now)?;
+        snapshot_listing_fees(
+            &self.listing_fees,
+            &self.seller,
+            self.listing.key(),
+            revision,
+            kind,
+            &self.fee_schedule,
+            fees_bump,
+        )?;
         let reusable = {
             let data = self.asset.try_borrow_data()?;
             let asset = mpl_core::Asset::from_bytes(&data)
@@ -251,7 +281,7 @@ impl<'info> CreateListing<'info> {
             }
         }
         let record = ListingRecord {
-            version: 1,
+            version: 2,
             config: self.config.key(),
             artwork: self.artwork.key(),
             asset: asset_key,

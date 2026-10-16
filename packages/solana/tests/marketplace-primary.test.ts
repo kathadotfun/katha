@@ -102,6 +102,7 @@ it("completes a primary sale while preserving artist attribution, custody and al
   );
 
   await f.client.sendTransaction([await f.initialize()]);
+  await f.client.sendTransaction([await f.initializeFees()]);
   const terms = (authority: TransactionSigner) =>
     market.getInitializeSaleTermsInstructionAsync({
       artwork: f.artwork.artwork,
@@ -115,6 +116,8 @@ it("completes a primary sale while preserving artist attribution, custody and al
   const immutableTerms = account(saleTerms);
   const snapshots = () => ({
     marketplaceConfigAccount: account(f.config),
+    feeScheduleAccount: account(f.feeSchedule),
+    listingFeesAccount: f.client.svm.getAccount(f.listingFees),
     registryConfigAccount: account(f.registryConfig),
     artworkAccount: account(f.artwork.artwork),
     assetAccount: account(f.artwork.asset),
@@ -214,7 +217,7 @@ it("completes a primary sale while preserving artist attribution, custody and al
 
   const result = await send(prepared.instruction, f.roles.buyerA);
   const afterAmounts = await amounts();
-  expect(afterAmounts).toEqual([900_000_000n, 0n, 97_500_000n, 2_500_000n]);
+  expect(afterAmounts).toEqual([900_000_000n, 0n, 90_000_000n, 10_000_000n]);
   expect(beforeAmounts[0]! - afterAmounts[0]!).toBe(f.settings.examplePrice);
   expect(
     afterAmounts[2]! - beforeAmounts[2]! + (afterAmounts[3]! - beforeAmounts[3]!),
@@ -262,8 +265,8 @@ it("completes a primary sale while preserving artist attribution, custody and al
       paymentMint: f.mint,
       price: 100_000_000n,
       sellerProceeds: 0n,
-      artistProceeds: 97_500_000n,
-      treasuryFee: 2_500_000n,
+      artistProceeds: 90_000_000n,
+      treasuryFee: 10_000_000n,
       saleKind: market.SaleKind.Primary,
       revision: 2n,
       completedSales: 1n,

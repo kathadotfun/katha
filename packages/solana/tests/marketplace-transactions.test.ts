@@ -256,7 +256,9 @@ it("creates first and replacement listings only for the current owner and exact 
   };
   f.accounts.listingAccount = { exists: false, address: f.listing };
   const first = await buildCreateListingTransaction(context, f.accounts, input);
-  expect(market.parseCreateListingInstruction(first.instruction).data).toMatchObject({
+  expect(
+    market.parseCreateListingWithFeesInstruction(first.instruction).data,
+  ).toMatchObject({
     price: (1n << 64n) - 1n,
     expectedRevision: 0n,
     expiresAt: input.expiresAt,

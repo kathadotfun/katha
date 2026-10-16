@@ -19,7 +19,6 @@ const SYSVAR = address("Sysvar1111111111111111111111111111111111111");
 export function createMarketplaceListingReaderFromRpc(
   rpc: Rpc<GetAccountInfoApi & GetMultipleAccountsApi & GetGenesisHashApi>,
   cluster: KathaRpcConfig["cluster"],
-  includeSaleTerms = false,
 ) {
   return async (identity: string) => {
     const kathaId = kathaIdSchema.parse(identity),
@@ -41,6 +40,8 @@ export function createMarketplaceListingReaderFromRpc(
       [listing] = await market.findListingPda({ asset });
     const [condition] = await registry.findHeadPda({ artwork });
     const [saleTerms] = await market.findSaleTermsPda({ artwork });
+    const [feeSchedule] = await market.findFeeSchedulePda();
+    const [listingFees] = await market.findListingFeesPda({ listing });
     const keys = [
       config,
       registryConfig,
@@ -50,7 +51,9 @@ export function createMarketplaceListingReaderFromRpc(
       listing,
       condition,
       CLOCK,
-      ...(includeSaleTerms ? [saleTerms] : []),
+      saleTerms,
+      feeSchedule,
+      listingFees,
     ];
     const response = await rpc
       .getMultipleAccounts(keys, { commitment: "finalized", encoding: "base64" })
@@ -94,6 +97,8 @@ export function createMarketplaceListingReaderFromRpc(
       true,
     );
     const snapshot = {
+      feeScheduleAccount: accounts[9],
+      listingFeesAccount: accounts[10],
       marketplaceConfigAccount,
       registryConfigAccount,
       artworkAccount,
@@ -126,7 +131,7 @@ export function createMarketplacePurchaseReaderFromRpc(
   rpc: Rpc<GetAccountInfoApi & GetMultipleAccountsApi & GetGenesisHashApi>,
   cluster: KathaRpcConfig["cluster"],
 ) {
-  const read = createMarketplaceListingReaderFromRpc(rpc, cluster, true);
+  const read = createMarketplaceListingReaderFromRpc(rpc, cluster);
   return async (identity: string) => {
     const snapshot = await read(identity);
     if (!snapshot.saleTermsAccount?.exists)

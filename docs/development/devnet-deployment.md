@@ -178,9 +178,15 @@ Select the intended wallet and account. Fund that public operator with test SOL.
    and approve again. Registry validates the deployed upgrade authority and a
    fresh Core collection controlled by its collection-authority PDA.
 5. Repeat for **marketplace**. Its copied Registry settings and classic mint must
-   match. Simulation defaults are 250 commission basis points, 500 secondary
-   royalty basis points and 2,592,000 seconds of inspection validity (30 days).
-   These are development settings, not production promises.
+   match. The original config retains 250 commission basis points, 500 secondary
+   royalty basis points and 2,592,000 seconds of inspection validity (30 days)
+   for legacy listings.
+6. Select **fees** to initialize the fee schedule: 1,000 bps primary commission,
+   250 bps resale commission and 500 bps artist resale royalty. Review `feeRates`
+   in the public JSON before wallet approval. This is a separate account and can
+   also be initialized after upgrading an existing deployment; do not recreate
+   its singletons. Later **update-fees** changes future listings without a binary
+   upgrade. Existing listings retain their rates. See [fee settings](operations.md#fee-settings).
 
 The browser verifies Devnet's genesis hash, canonical public accounts, owners,
 program authority relationships and existing configuration. It rejects duplicate

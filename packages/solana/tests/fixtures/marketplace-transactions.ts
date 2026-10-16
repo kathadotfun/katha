@@ -106,6 +106,21 @@ export async function marketplaceTransactionFixture() {
   const artworkBytes = new Uint8Array(246);
   artworkBytes.set(registry.getArtworkRecordEncoder().encode(record));
   const accounts: MarketplacePurchaseAccounts = {
+    feeScheduleAccount: snapshot(
+      (await market.findFeeSchedulePda())[0],
+      market.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+      Uint8Array.from(
+        market.getFeeScheduleEncoder().encode({
+          version: 1,
+          config,
+          revision: 1n,
+          primaryCommissionBps: 1000,
+          secondaryCommissionBps: 250,
+          secondaryRoyaltyBps: 500,
+          bump: (await market.findFeeSchedulePda())[1],
+        }),
+      ),
+    ),
     marketplaceConfigAccount: snapshot(
       config,
       market.KATHA_MARKETPLACE_PROGRAM_ADDRESS,

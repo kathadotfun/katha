@@ -2,6 +2,7 @@ import {
   KATHA_MARKETPLACE_PROGRAM_ADDRESS,
   findConfigPda as findMarketplaceConfigPda,
   findListingPda,
+  findFeeSchedulePda,
   SaleKind,
   ListingStatus,
 } from "@katha/solana/marketplace";
@@ -78,6 +79,16 @@ export async function prepareActivityEvents(
         const { name, value } = activity.event;
         if (activity.collection !== collection)
           throw new Error("Unexpected marketplace collection");
+        if (name === "FeeScheduleChanged") {
+          if (
+            value.config !== (await findMarketplaceConfigPda())[0] ||
+            value.schedule !== (await findFeeSchedulePda())[0] ||
+            value.collection !== collection ||
+            value.revision < 1n
+          )
+            throw new Error("Unexpected fee schedule configuration");
+          continue;
+        }
         if (name === "MarketplaceInitialized") {
           if (
             value.config !== (await findMarketplaceConfigPda())[0] ||

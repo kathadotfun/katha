@@ -12,6 +12,8 @@ pub mod purchase;
 pub use purchase::*;
 pub mod release;
 pub use release::*;
+pub mod fees;
+pub use fees::*;
 
 declare_id!("B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq");
 
@@ -22,6 +24,70 @@ pub const BASIS_POINTS_DENOMINATOR: u32 = 10_000;
 #[program]
 pub mod katha_marketplace {
     use super::*;
+
+    pub fn check_listing_fees(ctx: Context<CheckListingFees>) -> Result<()> {
+        require!(
+            ctx.accounts.listing.version == 2
+                && ctx.accounts.listing.status == ListingStatus::Active,
+            MarketplaceError::InvalidListingFees
+        );
+        ctx.accounts
+            .listing_fees
+            .validate(ctx.accounts.listing.key(), ctx.accounts.listing.revision)
+    }
+
+    pub fn initialize_fee_schedule(
+        ctx: Context<InitializeFeeSchedule>,
+        primary_commission_bps: u16,
+        secondary_commission_bps: u16,
+        secondary_royalty_bps: u16,
+    ) -> Result<()> {
+        let schedule = &mut ctx.accounts.fee_schedule;
+        schedule.set_rates(
+            primary_commission_bps,
+            secondary_commission_bps,
+            secondary_royalty_bps,
+        )?;
+        schedule.version = 1;
+        schedule.config = ctx.accounts.config.key();
+        schedule.revision = 1;
+        schedule.bump = ctx.bumps.fee_schedule;
+        schedule.changed(
+            schedule.key(),
+            ctx.accounts.config.collection,
+            ctx.accounts.authority.key(),
+        );
+        Ok(())
+    }
+
+    pub fn update_fee_schedule(
+        ctx: Context<UpdateFeeSchedule>,
+        expected_revision: u64,
+        primary_commission_bps: u16,
+        secondary_commission_bps: u16,
+        secondary_royalty_bps: u16,
+    ) -> Result<()> {
+        let schedule = &mut ctx.accounts.fee_schedule;
+        require!(
+            schedule.revision == expected_revision,
+            MarketplaceError::StaleFeeSchedule
+        );
+        schedule.set_rates(
+            primary_commission_bps,
+            secondary_commission_bps,
+            secondary_royalty_bps,
+        )?;
+        schedule.revision = schedule
+            .revision
+            .checked_add(1)
+            .ok_or(MarketplaceError::StaleFeeSchedule)?;
+        schedule.changed(
+            schedule.key(),
+            ctx.accounts.config.collection,
+            ctx.accounts.authority.key(),
+        );
+        Ok(())
+    }
 
     pub fn purchase_listing(
         ctx: Context<PurchaseListing>,
@@ -45,8 +111,34 @@ pub mod katha_marketplace {
         expires_at: i64,
         expected_revision: u64,
     ) -> Result<()> {
-        ctx.accounts
-            .create(price, expires_at, expected_revision, ctx.bumps.listing)
+        // Keep the discriminator and wire format for historical decoding. New
+        // seller signatures must commit to a reviewed fee schedule revision.
+        let _ = (ctx, price, expires_at, expected_revision);
+        err!(MarketplaceError::FeeScheduleRequired)
+    }
+
+    pub fn create_listing_with_fees(
+        ctx: Context<CreateListing>,
+        price: u64,
+        expires_at: i64,
+        expected_revision: u64,
+        expected_fee_revision: u64,
+        expected_commission_bps: u16,
+        expected_secondary_royalty_bps: u16,
+    ) -> Result<()> {
+        require!(
+            ctx.accounts.fee_schedule.revision == expected_fee_revision,
+            MarketplaceError::StaleFeeSchedule
+        );
+        ctx.accounts.create(
+            price,
+            expires_at,
+            expected_revision,
+            ctx.bumps.listing,
+            ctx.bumps.listing_fees,
+            expected_commission_bps,
+            expected_secondary_royalty_bps,
+        )
     }
 
     pub fn initialize_sale_terms(
@@ -261,6 +353,14 @@ pub enum MarketplaceError {
     InvalidPaymentAccount,
     #[msg("Buyer has insufficient test-token funds")]
     InsufficientPaymentFunds,
+    #[msg("Fee schedule does not belong to this Marketplace")]
+    InvalidFeeSchedule,
+    #[msg("Fee schedule revision is stale or exhausted")]
+    StaleFeeSchedule,
+    #[msg("Listing fee snapshot is missing, invalid or stale")]
+    InvalidListingFees,
+    #[msg("Create listings with a reviewed fee schedule revision")]
+    FeeScheduleRequired,
 }
 
 #[cfg(test)]

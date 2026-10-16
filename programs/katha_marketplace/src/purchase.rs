@@ -77,13 +77,17 @@ pub struct PurchaseListing<'info> {
     #[account(mut, dup, owner = anchor_spl::token::ID @ MarketplaceError::InvalidPaymentAccount)]
     pub treasury_tokens: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
+    /// CHECK: Version-2 listings require the owned canonical fee snapshot. Legacy
+    /// listings use their immutable initialization settings, even after fee updates.
+    #[account(seeds = [LISTING_FEES_SEED, listing.key().as_ref()], bump)]
+    pub listing_fees: UncheckedAccount<'info>,
 }
 
 impl<'info> PurchaseListing<'info> {
     pub fn purchase(&mut self, expected_revision: u64, expected_price: u64) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         require!(
-            self.listing.version == 1 && self.listing.status == ListingStatus::Active,
+            matches!(self.listing.version, 1 | 2) && self.listing.status == ListingStatus::Active,
             MarketplaceError::ListingNotActive
         );
         require!(
@@ -175,12 +179,24 @@ impl<'info> PurchaseListing<'info> {
                 );
             }
         }
-        let distribution = calculate_sale_distribution(
-            self.listing.price,
-            kind,
-            self.config.commission_bps,
-            self.config.secondary_royalty_bps,
-        )?;
+        let (commission, royalty) = if self.listing.version == 2 {
+            require!(
+                *self.listing_fees.owner == crate::ID
+                    && self.listing_fees.data_len() == ListingFees::SPACE,
+                MarketplaceError::InvalidListingFees
+            );
+            let data = self.listing_fees.try_borrow_data()?;
+            let fees = ListingFees::try_deserialize(&mut &data[..])?;
+            fees.validate(self.listing.key(), self.listing.revision)?;
+            (fees.commission_bps, fees.secondary_royalty_bps)
+        } else {
+            (
+                self.config.commission_bps,
+                self.config.secondary_royalty_bps,
+            )
+        };
+        let distribution =
+            calculate_sale_distribution(self.listing.price, kind, commission, royalty)?;
         for payment in distribution.recipient_payments(
             self.listing.seller,
             self.listing.artist_payout,
