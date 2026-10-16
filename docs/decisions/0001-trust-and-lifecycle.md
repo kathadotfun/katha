@@ -73,7 +73,9 @@ history availability, and indexer freshness must be reported honestly.
 A Registry-controlled collection authority still depends on the Registry program
 and its Devnet upgrade authority. Program deployment/upgrade authority and role
 configuration are reviewed during bootstrap; a PDA alone is not an immutability
-guarantee. Production authority governance is outside this MVP.
+guarantee. Production authority governance is outside the original MVP.
+[ADR 0002](0002-authority-and-settings-migration.md) defines the requested Devnet
+authority/settings migration design; its protections are not yet implemented.
 
 The implementation must demonstrate unauthorized initialization rejection, stable
 PDA derivation, duplicate mint prevention, Core URI/commitment rollback, delegate

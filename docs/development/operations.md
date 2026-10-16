@@ -6,6 +6,13 @@ Use [local setup](getting-started.md) for first startup, the
 [Deployment and bootstrap](devnet-deployment.md) is a separate operator procedure;
 existing singleton configurations must not be initialized again.
 
+The requested 2-of-3 governance and operational-wallet migration is specified in
+[ADR 0002](../decisions/0002-authority-and-settings-migration.md), including artist
+consent, incident recovery and transaction grouping. It is a design, not an
+available rotation command. Current role wallets, treasury, payment mint,
+inspection validity and artist payout still have their existing initialization
+constraints. Changing `.env` does not rotate those on-chain authorities.
+
 ## Configuration and service health
 
 [`.env.example`](../../.env.example) lists operator settings;

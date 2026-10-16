@@ -84,6 +84,12 @@ Admin and verifier session roles grant API access, not arbitrary chain privilege
 Before preparing an operation, the API checks that the connected wallet can perform
 the corresponding configured chain role. Programs repeat the essential checks.
 
+[ADR 0002](../decisions/0002-authority-and-settings-migration.md) designs a
+2-of-3 governance vault, revocable operational roles, artist-approved terms and
+versioned settings migration. That migration is not implemented; the table above
+describes current authorization. It also identifies inventory ownership and
+historical-attestation checks that must change before wallet rotation is safe.
+
 Collection metadata authority is held through a Registry-controlled PDA. The
 Registry's mint and metadata instructions are the intended path for setting the
 Core URI and its matching commitment; unrelated update delegates must not provide
