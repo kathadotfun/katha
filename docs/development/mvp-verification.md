@@ -6,13 +6,13 @@ is deferred. No completed physical-artwork lifecycle is claimed.
 
 ## Evidence boundaries
 
-| Evidence                                                                                                  | What it establishes                                                                                                             | What it does not establish                                        |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [Devnet network snapshot](devnet-network.md)                                                              | Recorded successful program deployment, collection and singleton initialization, public account relationships and binary hashes | Live health, artwork verification, purchases or physical custody  |
-| [Primary browser journey](primary-journey-tests.md)                                                       | Synthetic local-chain onboarding and first purchase assertions                                                                  | A real artist's consent or an actual collector purchase on Devnet |
-| [Retained-custody resale](custody-resale-tests.md) and [collector-held resale](collector-resale-tests.md) | Automated custody/inspection rules and sale assertions                                                                          | Physical inspection, shipment or receipt                          |
-| [Trust and recovery suite](trust-boundary-tests.md)                                                       | Automated rejection, rollback, privacy and recovery assertions                                                                  | Audit certification or production readiness                       |
-| [Manual demonstration guide](devnet-demo.md)                                                              | Ordered operator instructions and unchecked evidence requirements                                                               | Completion merely because the guide exists                        |
+| Evidence                                                                                              | What it establishes                                                                                                             | What it does not establish                                        |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [Devnet network snapshot](devnet-network.md)                                                          | Recorded successful program deployment, collection and singleton initialization, public account relationships and binary hashes | Live health, artwork verification, purchases or physical custody  |
+| [Primary browser journey](README.md#verification)                                                     | Synthetic local-chain onboarding and first purchase assertions                                                                  | A real artist's consent or an actual collector purchase on Devnet |
+| [Retained-custody resale](README.md#verification) and [collector-held resale](README.md#verification) | Automated custody/inspection rules and sale assertions                                                                          | Physical inspection, shipment or receipt                          |
+| [Trust and recovery suite](README.md#verification)                                                    | Automated rejection, rollback, privacy and recovery assertions                                                                  | Audit certification or production readiness                       |
+| [Manual demonstration guide](devnet-demo.md)                                                          | Ordered operator instructions and unchecked evidence requirements                                                               | Completion merely because the guide exists                        |
 
 The [product specification](../product/mvp.md#14-acceptance-criteria) remains the
 acceptance contract. Previous automated journey results describe synthetic tests
@@ -57,7 +57,7 @@ freshness was rechecked against the regenerated IDLs.
 
 ## Reviewed Core fixture refresh
 
-The fresh [program harness](program-testing.md) download initially failed its
+The fresh [program harness](README.md#verification) download initially failed its
 integrity check. The public Devnet Core program
 `CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d` is owned by the upgradeable
 loader, with ProgramData `9ZC25KLUrfgSoFVgjE1rrydZBbZns58UXi8A8ZhTdGfr`.

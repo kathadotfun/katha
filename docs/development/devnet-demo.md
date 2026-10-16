@@ -78,7 +78,7 @@ KATHA_PUBLIC_API_ORIGIN=http://localhost:3001
 
 For a laptop rehearsal, use localhost. For an actual phone tap, both API and web
 origins must be reachable from the phone; `localhost` on the phone is the phone.
-Follow [LAN configuration and tag writing](nfc-tag-writing.md) **before** preparing
+Follow [LAN configuration and tag writing](operations.md#nfc-and-lan-demonstration) **before** preparing
 metadata. API, web, CORS and sign-in origins must agree. Operator wallet signing
 needs a browser/wallet context that supports the required cryptography; public
 HTTP LAN viewing alone does not establish wallet compatibility. Verify connection
@@ -125,7 +125,7 @@ That start is the verified Registry initialization slot, before this deployment'
 artwork registration. The RPC must retain the needed history. Alternatively,
 record a finalized slot before the first registration in a genuinely fresh run
 and use it consistently. Never move the start forward to hide a gap or change it
-after acknowledgement. Follow [backfill and recovery](chain-activity-ingestion.md#run-backfill-and-inspect-recovery)
+after acknowledgement. Follow [backfill and recovery](operations.md#indexer-recovery)
 for page limits, pruned history or missing activity. Public RPC is rate-limited;
 the worker must report gaps rather than invent completeness.
 
@@ -204,7 +204,7 @@ owner and canonical address of every account before preparing a purchase.
 These actions save local records/files. No Core asset or sale exists yet. Public
 artwork discovery remains hidden until publication; approved public file bytes can
 be accessible before catalogue publication. Public approval is therefore a real
-disclosure decision. See [media administration](artwork-media-administration.md).
+disclosure decision. See [media administration](operations.md#artwork-workflow).
 
 ## 5. Register, authenticate and commit metadata
 
@@ -225,10 +225,9 @@ indexing. UNKNOWN is not failure or permission to send a replacement.
    using the saved document. Confirm finalized version, hash and URI. Preparing
    JSON alone did not write this commitment.
 
-Inspect [registration](artwork-registration-web.md),
-[verification](artwork-verification-web.md) and
-[metadata contracts](metadata-revisions-api.md) if a gate fails. Never edit the
-database or generated clients to bypass a prerequisite.
+If a gate fails, check the [workflow prerequisites](operations.md#artwork-workflow)
+and the corresponding source schemas. Never edit the database or generated clients
+to bypass a prerequisite.
 
 ## 6. Inspect, record custody, mint and publish
 
@@ -252,8 +251,7 @@ database or generated clients to bypass a prerequisite.
    provenance, document integrity and links to Devnet evidence. No private notes,
    inspection photos or delivery contacts should appear.
 
-Use [inspection](condition-inspection-web.md),
-[custody](custody-administration-web.md) and [minting](minting-administration-web.md).
+See the [workflow checkpoints](operations.md#artwork-workflow) for prerequisites.
 If testing a metadata revision, use `/admin/artworks/{id}/metadata`; save approved
 story changes and finalize the atomic Core URI/Registry commitment revision.
 Earlier commitments and attribution must remain preserved.
@@ -266,9 +264,8 @@ across both sales. Return to this checkpoint after each ownership change.
 Assign tags from the **NFC tag** panel at the bottom of the artwork's
 documentation page (`/admin/artworks/{id}`): enter a new lowercase UUID as the tag
 reference and choose **Assign tag**. **Look up binding** reads an existing tag,
-and the panel offers retirement with a confirmation. The API has no "list this
-artwork's tags" read, so the panel shows tags assigned or looked up in the current
-session. The underlying operations are:
+and the panel offers retirement with a confirmation. Review the saved binding
+before writing hardware. The underlying operations are:
 
 ```text
 POST /admin/artworks/{id}/nfc-tags        {"tagId":"<new-lowercase-uuid>"}
@@ -293,7 +290,7 @@ POST /admin/nfc-tags/{tagId}/retire       {}
 The artwork page must explain that basic NFC can be copied. Tag UUID is not chip
 UID. A scan locates a record; it proves neither physical authenticity nor delivery.
 `katha.fun` ownership alone does not provide hosted resolver routing.
-See [NFC contracts](nfc-administration.md) and [hardware instructions](nfc-tag-writing.md).
+See [NFC and LAN instructions](operations.md#nfc-and-lan-demonstration).
 
 ## 8. Bind the approved payout and make a primary offer
 
@@ -326,7 +323,7 @@ The program's separate permissionless expiry instruction is not that browser flo
    identity/artist remain unchanged. Custody remains KATHA_HELD; purchase did not
    deliver the painting. Payments and Core transfer settled atomically.
 
-See [purchase workflow](purchase-web.md). Preparation reserves neither quote nor
+See [purchase workflow](operations.md#transaction-recovery). Preparation reserves neither quote nor
 asset; execution must recheck eligibility. Recipient overlap merges payouts,
 so inspect the actual quote/balance deltas rather than assuming distinct accounts.
 
@@ -362,8 +359,8 @@ simulated movement belong to a separately labeled rehearsal.
 Inspection validity is 30 days from inspection time, not request time. Stale
 owner/custody scope, expired inspection or transit blocks eligibility at listing
 and purchase. Requests are private coordination; approval is derived from the
-finalized attestation. See [delivery](delivery-web.md) and
-[inspection/resale](resale-inspection-web.md).
+finalized attestation. Follow the [workflow checkpoints](operations.md#artwork-workflow)
+when reviewing custody and inspection prerequisites.
 
 ## 11. Verify the retained-custody resale situation separately
 
@@ -396,7 +393,7 @@ automatically revive an old unscoped condition report.
 Default storage is `apps/api/.storage/` when using the API package command. An
 explicit server-only storage override can change it. There is no configured remote
 archival storage provider; back up database and storage together privately.
-See [storage behavior](local-storage.md) and [document preparation](document-preparation.md).
+See [storage behavior](operations.md#database-and-storage) and [document preparation](../product/mvp.md#5-canonical-documents-and-integrity).
 
 Test cancellation, rejected approval, invalid price and wrong-wallet access using
 the existing controls. Verify no successful sale/provenance is created by a failed

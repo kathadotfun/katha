@@ -133,14 +133,17 @@ outside the current scope.
 
 ## Documentation
 
+- [Fresh local setup](docs/development/getting-started.md)
+- [Developer guide and verification commands](docs/development/README.md)
+- [Operations, recovery and NFC](docs/development/operations.md)
 - [MVP specification](docs/product/mvp.md)
 - [Architecture and trust boundaries](docs/architecture/overview.md)
-- [Artwork lifecycle](docs/architecture/artwork-lifecycle.md)
-- [Fresh local setup](docs/development/getting-started.md)
-- [Verification results and remaining acceptance](docs/development/mvp-verification.md)
-- [Public Devnet network snapshot](docs/development/devnet-network.md)
 - [Two-wallet and NFC demonstration](docs/development/devnet-demo.md) — manual checks pending
-- [All development, API, program and test guides](docs/development/README.md)
+- [Verification record](docs/development/mvp-verification.md) and [Devnet network snapshot](docs/development/devnet-network.md)
+
+Exact API contracts, configuration and behavior live in source and tests. Update
+the guides when setup, usage, operations or design assumptions change; internal
+implementation changes do not need a separate documentation update.
 
 ## Repository policy
 

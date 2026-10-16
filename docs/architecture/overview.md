@@ -1,6 +1,8 @@
 # Katha architecture
 
-Status: accepted design for the Devnet MVP; implementation is planned.
+Scope: local/Devnet MVP architecture. See the
+[verification record](../development/mvp-verification.md) for implementation evidence
+and remaining manual acceptance.
 
 The [MVP specification](../product/mvp.md) defines product requirements. This
 document assigns responsibilities and trust boundaries. The
@@ -48,7 +50,7 @@ A custody attestation records an operator's physical claim. Core ownership does
 not establish present physical possession. A database ownership projection must
 not replace live account validation during listing or purchase.
 
-## Planned repository responsibilities
+## Repository responsibilities
 
 | Location                     | Responsibility                                                                    |
 | ---------------------------- | --------------------------------------------------------------------------------- |

@@ -1,129 +1,137 @@
-# Katha documentation
+# Developer guide
 
-Start with [fresh local setup](getting-started.md), then read the
-[verification record](mvp-verification.md) and
-[ordered Devnet demonstration](devnet-demo.md). The physical demonstration remains
-pending. Individual guides below explain implemented boundaries, operations and
-synthetic tests; the product specification defines the acceptance contract.
+Start with [local setup](getting-started.md). Use the [operations guide](operations.md)
+for running services, transaction recovery, indexing and NFC. The
+[MVP specification](../product/mvp.md) defines scope; the
+[architecture](../architecture/overview.md), [lifecycle](../architecture/artwork-lifecycle.md)
+and [trust decision](../decisions/0001-trust-and-lifecycle.md) explain the design.
 
-## Guides and contracts
+## Where to make changes
 
-- [MVP specification](../product/mvp.md)
-- [Architecture overview](../architecture/overview.md)
-- [Artwork lifecycle and state separation](../architecture/artwork-lifecycle.md)
-- [Trust and lifecycle decision](../decisions/0001-trust-and-lifecycle.md)
-- [MVP verification and remaining acceptance](mvp-verification.md)
-- [Fresh-checkout local setup](getting-started.md)
-- [Workspace setup](workspace.md)
-- [TypeScript configuration](typescript.md)
-- [Linting and formatting](code-quality.md)
-- [Workspace task orchestration](turborepo.md)
-- [Next.js web application](nextjs.md)
-- [Hono API service](api.md)
-- [Content API contracts and privacy boundaries](content-api-contracts.md)
-- [Unsigned blockchain operation preparation](blockchain-operation-preparation.md)
-- [Artwork registration preparation](artwork-registration-api.md)
-- [Artwork registration administration](artwork-registration-web.md)
-- [Artwork verification preparation](artwork-verification-api.md)
-- [Artwork authenticity administration](artwork-verification-web.md)
-- [Condition attestation preparation](condition-attestation-api.md)
-- [Custody and manual fulfillment API](custody-operations-api.md)
-- [Artwork mint preparation](artwork-minting-api.md)
-- [Metadata commitment preparation](metadata-revisions-api.md)
-- [Finalized operation receipts](operation-receipts-api.md)
-- [Finalized Registry/Core/Marketplace activity ingestion](chain-activity-ingestion.md)
-- [API environment and public configuration](api-configuration.md)
-- [API errors and logging](api-errors-logging.md)
-- [API health and shutdown](api-health.md)
-- [REST validation, CORS and limits](api-rest.md)
-- [Signed wallet authentication](wallet-authentication.md)
-- [Administrative authorization](api-authorization.md)
-- [Artist creation and manual verification](artist-management-api.md)
-- [Public artist profiles](public-artists-api.md)
-- [Artwork draft creation](artwork-drafts-api.md)
-- [Artwork draft editing](artwork-draft-editing-api.md)
-- [Public artwork discovery](artwork-discovery-api.md)
-- [Public artwork details](artwork-details-api.md)
-- [Web design system](design-system.md)
-- [Public application shell](application-shell.md)
-- [Public web API client](public-api-client.md)
-- [Public artist profile pages](artist-profiles-web.md)
-- [Cultural homepage and featured artworks](homepage.md)
-- [Public browsing and accessibility checks](public-browsing-tests.md)
-- [Wallet Standard connection](wallet-connection.md)
-- [Wallet sign-in and session handling](wallet-sign-in-web.md)
-- [Wallet transaction lifecycle](transaction-lifecycle-web.md)
-- [Artist onboarding administration](artist-onboarding-web.md)
-- [Artwork draft administration](artwork-draft-list-web.md)
-- [Structured artwork documentation editor](artwork-draft-editor-web.md)
-- [Condition inspection administration](condition-inspection-web.md)
-- [Custody and fulfillment administration](custody-administration-web.md)
-- [Minting and public publication](minting-administration-web.md)
-- [Metadata revision review and submission](metadata-administration-web.md)
-- [Authorized artwork onboarding integration](admin-lifecycle-tests.md)
-- [Local primary collecting browser journey](primary-journey-tests.md)
-- [Katha-custody resale browser journey](custody-resale-tests.md)
-- [Collector-held resale and delivery browser journey](collector-resale-tests.md)
-- [Cross-system trust and recovery tests](trust-boundary-tests.md)
-- [Artwork media administration](artwork-media-administration.md)
-- [NFC tag administration](nfc-administration.md)
-- [NFC writing and local/LAN demonstration](nfc-tag-writing.md)
-- [Artwork exploration and category filtering](artwork-exploration.md)
-- [Canonical artwork page, provenance and metadata integrity](artwork-page.md)
-- [Public provenance and condition timelines](artwork-provenance-api.md)
-- [Local content-addressed storage](local-storage.md)
-- [Canonical document preparation](document-preparation.md)
-- [Shared TypeScript package](shared-package.md)
-- [Database package boundary](database-package.md)
-- [Artist profiles and database constraints](artist-profiles.md)
-- [Artwork identities and ID allocation](artwork-identities.md)
-- [Artwork media and materials](artwork-media-materials.md)
-- [Preserved artwork attestations](artwork-attestations.md)
-- [Manual custody and private fulfillment](custody-fulfillment.md)
-- [Wallet challenge and session persistence](wallet-sessions.md)
-- [Pending blockchain operations and receipts](blockchain-operations.md)
-- [Blockchain events and query projections](blockchain-read-models.md)
-- [Fictional database fixtures and phase checks](database-fixtures.md)
-- [Local PostgreSQL service](local-services.md)
-- [Foundation CI](ci.md)
-- [Solana package boundary](solana-package.md)
-- [Anchor program workspace](anchor-workspace.md)
-- [Local program testing](program-testing.md)
-- [Local marketplace settlement fixtures](marketplace-fixtures.md)
-- [Authorized Marketplace configuration](marketplace-configuration.md)
-- [Listing records and sale eligibility](marketplace-eligibility.md)
-- [Fixed-price listing creation and Core locking](marketplace-listings.md)
-- [Listing cancellation and expiry recovery](marketplace-cancellation.md)
-- [Checked primary and secondary sale distributions](marketplace-distributions.md)
-- [Atomic test-token purchases and Core transfer](marketplace-purchase.md)
-- [Marketplace transaction preparation](marketplace-transactions.md)
-- [Complete local primary sale](marketplace-primary-sale.md)
-- [Inspected resale in both custody situations](marketplace-resale.md)
-- [Devnet payment provider](devnet-payment-provider.md)
-- [Artwork listing API](artwork-listings-api.md)
-- [Buyer purchase quotes and preparation](artwork-purchases-api.md)
-- [Authenticated collector account and holdings](collector-api.md)
-- [Collector account page](collector-account-web.md)
-- [Collector collection page](collector-collection-web.md)
-- [Owner listing form](owner-listing-web.md)
-- [Listing cancellation and expiry recovery controls](listing-management-web.md)
-- [Purchase quotes and sale distributions](purchase-quotes-web.md)
-- [Buyer purchase signing and confirmation](purchase-web.md)
-- [Complete local Registry lifecycle](registry-lifecycle.md)
-- [Devnet deployment and operator bootstrap](devnet-deployment.md)
-- [Two-wallet and NFC Devnet demonstration guide (manual verification pending)](devnet-demo.md)
-- [Registry platform bootstrap](registry-bootstrap.md)
-- [Registry artwork identities](registry-artwork.md)
-- [Registry artwork authentication](registry-verification.md)
-- [Registry metadata commitments](registry-metadata.md)
-- [Registry condition attestations](registry-condition.md)
-- [Registry physical custody attestations](registry-custody.md)
-- [Registry Core asset minting](registry-mint.md)
-- [Generated Solana program clients](program-clients.md)
-- [Registry registration transactions](registration-transactions.md)
-- [Verifier transaction preparation](attestation-transactions.md)
-- [Artwork lifecycle transaction preparation](lifecycle-transactions.md)
+| Concern                                         | Source of truth                                                                                                                                |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Routes, validation and access guards            | [API router](../../apps/api/src/app.ts) and its domain modules                                                                                 |
+| Request/response shapes and domain rules        | [Shared schemas](../../packages/shared/src)                                                                                                    |
+| Tables and forward migrations                   | [Schema](../../packages/db/src/schema) and [migration SQL](../../packages/db/drizzle)                                                          |
+| Public, collector and admin UI                  | [Routes](../../apps/web/app), [components](../../apps/web/components) and [controllers](../../apps/web/lib)                                    |
+| Visual tokens and reusable UI                   | [Styles](../../apps/web/app/globals.css) and [UI components](../../apps/web/components/ui)                                                     |
+| Chain reads, unsigned builders and Core adapter | [Solana package](../../packages/solana/src)                                                                                                    |
+| Registry and Marketplace enforcement            | [Registry](../../programs/katha_registry/src/lib.rs) and [Marketplace](../../programs/katha_marketplace/src)                                   |
+| Commands, dependencies and toolchain pins       | [Manifest](../../package.json), workspace manifests, [Anchor configuration](../../Anchor.toml) and [Rust toolchain](../../rust-toolchain.toml) |
 
-- [Physical delivery and receipt](delivery-web.md)
-- [Collector-held inspection requests](resale-inspection-web.md)
-- [Artwork sale and condition history](artwork-history-web.md)
+Read source contracts and nearby tests for exact fields, limits, errors and
+instruction layouts. They are maintained with the implementation; this guide
+does not duplicate an endpoint catalogue or a guide for every component.
+
+Application code uses Kit types. Keep Umi and compatibility types inside the Core
+adapter. HTTP/domain contracts belong in shared Zod schemas rather than copied
+TypeScript interfaces. Preserve artist attribution and permanent Katha IDs; keep
+ownership, custody, verification, listing and inspection approval independent.
+
+UI changes should keep artwork photography, the artist and story prominent. Use
+existing visual tokens and reviewed brand assets. Preserve keyboard access,
+visible focus, reduced motion, responsive layouts and text labels for status.
+Private records must clear when a wallet/session changes.
+
+## Database changes
+
+After changing a schema, generate and review a forward migration:
+
+```bash
+pnpm db:generate
+pnpm db:migrate
+pnpm db:test
+```
+
+Run migrations serially against the intended database. Include reviewed SQL,
+snapshots and journal changes together; preserve custom trigger/function SQL.
+Applied migrations are historical records. Add a forward migration rather than
+rewriting applied SQL, using schema push or migrating automatically at startup.
+
+`pnpm db:seed` creates fictional, unverified drafts in supported local rehearsal
+databases. It consumes permanent IDs and does not create verification, custody or
+sales. Use a disposable database for fixtures and preserve real database/storage
+pairs; see [data preservation](operations.md#database-and-storage).
+
+## Program and generated-client changes
+
+Keep the coupled toolchain pins in [local setup](getting-started.md). Use Core's
+standard Rust CPI interface without its optional older Anchor integration.
+After a Rust instruction or account change:
+
+```bash
+pnpm program:build
+pnpm codegen
+pnpm codegen:check
+pnpm --filter @katha/solana typecheck
+pnpm --filter @katha/solana test
+pnpm program:test
+```
+
+The normal build emits [Anchor IDLs](../../target/idl); Codama generates
+[Registry](../../packages/solana/src/generated/registry) and
+[Marketplace](../../packages/solana/src/generated/marketplace) clients from them.
+Never edit generated clients or IDLs manually. Include affected IDLs and generated
+source with program changes. Keypairs and compiled binaries remain ignored.
+
+`codegen:check` compares generated filenames and bytes without repairing source.
+CI runs it against committed IDLs; it does not prove that IDLs match Rust.
+Rebuild IDLs locally when program source changes. Generated decoders do not
+replace account-owner, PDA, collection, authority or lifecycle validation.
+
+## Verification
+
+Run checks appropriate to the change. Include authorization, invalid-input and
+failure/rollback cases with trust-critical changes. Use nearby tests for detailed
+scenarios rather than maintaining a second written list of assertions.
+
+| Check                              | Command                                                                                   | Requirements / scope                                     |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Formatting                         | `pnpm format:check`                                                                       | Public source and docs                                   |
+| Generated client freshness         | `pnpm codegen:check`                                                                      | Reviewed IDLs and installed dependencies                 |
+| Lint and types                     | `pnpm lint`, `pnpm typecheck`                                                             | Workspace checks                                         |
+| Production compilation             | `pnpm build`                                                                              | All application packages                                 |
+| Unit tests                         | `pnpm test`                                                                               | Synthetic tests; no development database required        |
+| Database/API integration           | `pnpm db:test`                                                                            | Docker and `postgres:18.6`; disposable database          |
+| Public configuration               | `pnpm devnet:test`                                                                        | Read-only plan/configuration tests                       |
+| Browser and accessibility          | `pnpm --filter @katha/web test:public-journeys`                                           | Chromium; synthetic HTTP fixtures                        |
+| Collector and shell browser checks | `pnpm --filter @katha/web test:account`, `pnpm --filter @katha/web test:responsive-shell` | Chromium; synthetic HTTP fixtures                        |
+| Rust format and compile            | `cargo fmt --all -- --check`, `cargo check --workspace --locked`                          | Pinned Rust toolchain                                    |
+| SBF build / Core compatibility     | `pnpm program:build`, `pnpm program:test`                                                 | Pinned program tools, Surfpool and reviewed Core fixture |
+| Authorized admin integration       | `pnpm admin:test`                                                                         | Disposable database and built API                        |
+| Primary collecting                 | `pnpm test:e2e`                                                                           | Local-chain browser journey                              |
+| Katha-held resale                  | `pnpm test:e2e:custody`                                                                   | Local-chain browser journey                              |
+| Collector-held resale/delivery     | `pnpm test:e2e:collector`                                                                 | Local-chain browser journey                              |
+| Trust failures and recovery        | `pnpm test:e2e:trust`                                                                     | Program tests and local-chain browser journey            |
+
+Browser journeys need Docker, Chromium, Surfpool, program build tools and the
+reviewed Core fixture. Install Chromium if absent with
+`pnpm --filter @katha/web exec playwright install chromium`; system dependencies
+may also be required. Browser scripts build/start local services, so avoid running
+them against a checkout whose build output serves an active demonstration.
+
+`program:test` downloads a public Core binary on first use and checks its pinned
+SHA-256 before loading it into isolated local runners. A changed hash must stop
+the test for review. Move an outdated cached fixture aside only after reviewing
+its replacement; never bypass integrity checks. The `core-cpi-test` feature adds
+a local probe in a separate test build; do not deploy that binary. See the
+[fixture review record](mvp-verification.md#reviewed-core-fixture-refresh).
+
+See [test harnesses](../../scripts) and package test directories for the actual
+scenarios. [CI](../../.github/workflows/ci.yml) is authoritative for GitHub Actions
+checks; it does not run SBF builds, Core program tests or the complete local-chain
+browser journeys. The [verification record](mvp-verification.md) distinguishes
+recorded results from pending real-artwork acceptance.
+
+## Documentation maintenance
+
+Update docs when setup, usage, public contracts, operating procedures, product
+scope or design assumptions change. Internal refactors normally need code and
+appropriate tests. Keep precise fields, defaults, dependency versions and test
+assertions in their source files unless developers need them to run the project
+or make a decision.
+
+Keep setup in one place, recovery recipes in the operations guide and substantial
+design rationale in architecture decisions. Add a separate document only for a
+distinct need these guides cannot cover. Working notes, screenshots, test logs
+and private evidence stay outside public Git history.

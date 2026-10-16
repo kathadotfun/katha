@@ -223,7 +223,7 @@ Replace placeholders with the exact authorized addresses. API roles are an
 additional access boundary; they do not substitute for the on-chain signer.
 Restart the API, worker and web with matching cluster settings. Never mix localnet
 and Devnet projections in the same demonstration database: select a fresh
-database using the [database setup](database-package.md) and migrations rather
+database using the [database setup](operations.md#database-and-storage) and migrations rather
 than deleting an existing database. Both default RPC endpoints are public and
 rate-limited; custom browser RPC URLs must contain no credentials.
 
@@ -242,7 +242,7 @@ The API and indexer load root `.env` through their package commands. Media and
 private fulfillment details stay in configured local storage/database; they do
 not become public merely because the programs use Devnet. Public metadata URIs
 must be reachable by intended demonstration viewers. See
-[storage](local-storage.md) and [indexer operation](chain-activity-ingestion.md).
+[storage](operations.md#database-and-storage) and [indexer operation](operations.md#indexer-recovery).
 
 The worker start above includes the verified Registry initialization. Confirm RPC
 history is retained through the first artwork registration; follow the indexer
@@ -306,5 +306,5 @@ manual acceptance journey are separate completion gates.
 
 Sources: [Solana program deployment](https://solana.com/docs/programs/deploying),
 [Metaplex Core collections](https://www.metaplex.com/docs/smart-contracts/core/collections),
-[Registry bootstrap](registry-bootstrap.md),
-[Marketplace configuration](marketplace-configuration.md).
+[Registry bootstrap](../../programs/katha_registry/src/lib.rs),
+[Marketplace configuration](../../programs/katha_marketplace/src/lib.rs).

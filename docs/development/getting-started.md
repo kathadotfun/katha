@@ -21,8 +21,9 @@ Keep the coupled Solana toolchain pins; do not substitute global defaults.
 | Solana CLI | 4.1.2            | `avm solana resolve`        |
 | Surfpool   | 1.6.0            | `surfpool --version`        |
 
-See [workspace setup](workspace.md), [Anchor workspace](anchor-workspace.md) and
-[program testing](program-testing.md). Start Docker Engine; `docker info` must
+Pins live in `package.json`, `.nvmrc`, `Anchor.toml` and `rust-toolchain.toml`.
+See the [developer guide](README.md#program-and-generated-client-changes) for program
+builds and tests. Start Docker Engine; `docker info` must
 report a server before database checks. On systemd Linux this may require
 `sudo systemctl start docker` in your own terminal.
 
@@ -39,8 +40,9 @@ pnpm install --frozen-lockfile
 ```
 
 Expected runtime versions are `v24.21.0` and `12.6.0`. If pnpm is missing,
-use the pinned install command in [workspace setup](workspace.md). Allow the
-reviewed native install scripts. The frozen install must preserve the lockfile.
+install it into the selected user-managed Node with
+`npm install --global pnpm@12.6.0 --no-audit --no-fund`. Allow the reviewed native
+install scripts. The frozen install must preserve the lockfile.
 
 ## 3. Configure, migrate and build
 
@@ -154,5 +156,6 @@ acceptance. A passing automated journey does not verify a real artwork or NFC ta
 
 Only reviewed IDLs and generated clients belong in Git. Environment files,
 keypairs, compiled programs, storage, database contents, logs and test reports
-remain ignored. See [local services](local-services.md) for persistence and
-[CI](ci.md) for the narrower checks run by GitHub Actions.
+remain ignored. See [database and storage](operations.md#database-and-storage) for
+persistence and the [developer guide](README.md#verification) for test prerequisites
+and the narrower checks run by GitHub Actions.
