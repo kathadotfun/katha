@@ -21,6 +21,8 @@ export const collectorHoldingSchema = z.strictObject({
     state: physicalCustodyStateSchema,
     source: z.enum(["FINALIZED_REGISTRY", "UNKNOWN"]),
     observedAt: z.iso.datetime().nullable(),
+    // Owning the asset and physically holding the work are separate facts.
+    heldByViewer: z.boolean(),
   }),
   indexing: provenanceIndexingSchema,
 });

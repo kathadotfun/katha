@@ -29,7 +29,7 @@ type Holding = CollectorCollectionResponse["items"][number];
 const custody: Record<Holding["custody"]["state"], { tone: Tone; text: string }> = {
   UNKNOWN: { tone: "neu", text: "Not recorded" },
   KATHA_HELD: { tone: "neu", text: "Held by Katha" },
-  COLLECTOR_HELD: { tone: "warn", text: "With you" },
+  COLLECTOR_HELD: { tone: "warn", text: "With a custodian" },
   IN_TRANSIT: { tone: "info", text: "In transit" },
 };
 
@@ -62,6 +62,10 @@ function actions(item: Holding, listing: ArtworkListingResponse | null | undefin
       { label: "Manage listing", href: `/collection/${id}/list`, primary: true },
       record,
     ];
+  // Collector actions belong to whoever physically holds the work; another
+  // custodian's work is corrected through Katha's custody record instead.
+  if (item.custody.state === "COLLECTOR_HELD" && !item.custody.heldByViewer)
+    return [record];
   if (item.custody.state === "COLLECTOR_HELD")
     return [
       { label: "Request inspection", href: `/collection/${id}/resale`, primary: true },
@@ -260,7 +264,11 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
                     const listing = state.listings[artwork.kathaId];
                     const changedOwner = listing && listing.owner !== item.ownerWallet;
                     const own = ownership(item, listing);
-                    const held = custody[item.custody.state];
+                    const held =
+                      item.custody.state === "COLLECTOR_HELD" &&
+                      item.custody.heldByViewer
+                        ? { tone: "warn" as Tone, text: "With you" }
+                        : custody[item.custody.state];
                     return (
                       <li key={artwork.kathaId} className="panel cut coll-row">
                         <Link

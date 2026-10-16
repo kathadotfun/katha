@@ -8,7 +8,7 @@ import {
   inspectPreparedTransaction,
   validateSignedTransaction,
 } from "./prepared-transaction.ts";
-import type { WalletConnection } from "./wallet-connection.ts";
+import { WalletSigningError, type WalletConnection } from "./wallet-connection.ts";
 import type { WalletSessionController } from "./wallet-session.ts";
 import type { TransactionRpc } from "./transaction-rpc.ts";
 
@@ -46,6 +46,18 @@ export const idleTransactionSnapshot: TransactionSnapshot = {
   purchaseOwnerConfirmed: false,
   error: null,
 };
+// Nothing was sent in any of these cases; the stage tells the operator what to fix.
+function notCompletedMessage(signing: boolean, error: unknown) {
+  if (!signing)
+    return "The check before wallet approval could not complete (session, network or simulation). Nothing was signed or sent; prepare again.";
+  if (!(error instanceof WalletSigningError))
+    return "The session or wallet changed after approval. Nothing was sent; prepare again.";
+  if (error.reason === "MODIFIED")
+    return "The wallet altered the transaction while signing (for example by adding its own fee settings), so Katha did not send it. Nothing was submitted.";
+  if (error.reason === "WALLET_CHANGED")
+    return "The connected wallet or account changed during approval. Nothing was sent.";
+  return "The wallet did not return a signature (cancelled, rejected or unsupported). Nothing was sent.";
+}
 function failedMessage(failureCode: string | null) {
   return failureCode === "BLOCKHASH_EXPIRED"
     ? "This attempt expired without reaching Solana. Nothing changed; you can prepare a fresh transaction."
@@ -69,6 +81,9 @@ export function createTransactionLifecycle(
     slot: string,
     signal: AbortSignal,
   ) => Promise<boolean>,
+  // Automatic follow-up for an unknown outcome: rebroadcast the identical signed bytes
+  // while the blockhash is valid and reconcile until the API records a definite result.
+  followUp?: { intervalMs: number; maxChecks: number },
 ) {
   let state = idleTransactionSnapshot;
   let wire: string | null = null;
@@ -149,7 +164,7 @@ export function createTransactionLifecycle(
     }
     return true;
   }
-  async function observe(version: number) {
+  async function observe(version: number, pending = false) {
     if (!wire || !state.operation) return;
     publish({ phase: "confirming", error: null });
     const result = await session.reconcile(state.operation, wire, signal());
@@ -171,6 +186,8 @@ export function createTransactionLifecycle(
       return;
     }
     if (result.status === "UNKNOWN") {
+      // Still following up: keep showing confirmation progress rather than doubt.
+      if (pending) return;
       publish({
         phase: "unknown",
         error:
@@ -203,6 +220,53 @@ export function createTransactionLifecycle(
         publish({ phase: "indexed" });
     } catch {
       /* Finalization remains true even when the indexer's public read is unavailable. */
+    }
+  }
+  async function follow(version: number) {
+    if (!followUp) return;
+    const stop = abort.signal;
+    for (let check = 1; check <= followUp.maxChecks; check++) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, followUp.intervalMs);
+        stop.addEventListener(
+          "abort",
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+      const operation = state.operation;
+      if (
+        stop.aborted ||
+        version !== generation ||
+        disposed ||
+        active ||
+        !wire ||
+        !operation ||
+        !["unknown", "confirming"].includes(state.phase)
+      )
+        return;
+      active = true;
+      try {
+        assertIdentity(operation);
+        if ((await rpc.height(signal())) < BigInt(operation.lastValidBlockHeight)) {
+          // Same bytes, same signature: a rebroadcast can execute at most once.
+          await rpc.submit(wire, signal()).catch(() => undefined);
+        }
+        if (version !== generation || disposed) return;
+        await observe(version, check < followUp.maxChecks);
+      } catch {
+        if (version === generation && !disposed && check === followUp.maxChecks)
+          publish({
+            phase: finalized ? "indexing-delay" : "unknown",
+            error:
+              "Confirmation is unknown. Check the same signature again; do not submit a replacement.",
+          });
+      } finally {
+        if (version === generation) active = false;
+      }
     }
   }
   return {
@@ -290,6 +354,7 @@ export function createTransactionLifecycle(
       const operation = state.operation,
         version = generation;
       active = true;
+      let signing = false;
       try {
         assertIdentity(operation);
         if (!(await validLifetime(operation, version)) || version !== generation)
@@ -306,6 +371,7 @@ export function createTransactionLifecycle(
         if (!(await validLifetime(operation, version))) return;
         assertIdentity(operation);
         publish({ phase: "signing", error: null });
+        signing = true;
         const signed = await connection.signPreparedTransaction(
           operation,
           abort.signal,
@@ -346,7 +412,7 @@ export function createTransactionLifecycle(
         await rpc.submit(signed, signal());
         if (version !== generation || disposed) return;
         await observe(version);
-      } catch {
+      } catch (error) {
         if (version === generation && !disposed)
           publish({
             phase: finalized
@@ -356,11 +422,18 @@ export function createTransactionLifecycle(
                 : "not-completed",
             error: state.signature
               ? "Submission or confirmation is uncertain. Check this signature; do not resubmit."
-              : "Wallet approval or preflight was not completed. No transaction was submitted.",
+              : notCompletedMessage(signing, error),
           });
       } finally {
         if (version === generation) active = false;
       }
+      if (
+        version === generation &&
+        !disposed &&
+        wire &&
+        ["unknown", "confirming"].includes(state.phase)
+      )
+        void follow(version);
     },
     async checkConfirmation() {
       if (

@@ -149,13 +149,36 @@ it("scopes account and collection to the authenticated wallet and exposes safe c
   });
   expect(result.items[0]).toMatchObject({
     ownerWallet: f.session.walletAddress,
-    custody: { state: "KATHA_HELD", source: "FINALIZED_REGISTRY" },
+    custody: { state: "KATHA_HELD", source: "FINALIZED_REGISTRY", heldByViewer: false },
     indexing: { status: "AT_OBSERVED_HEAD", ownerCheck: { status: "MATCH" } },
   });
   expect(await f.collector.account("Bearer synthetic")).toMatchObject({
     session: f.session,
     indexedArtworkCount: 1,
   });
+});
+it("separates owning the asset from physically holding the work", async () => {
+  const f = await setup();
+  const item = f.snapshot.items[0]!;
+  const held = (subject: string) => ({
+    ...item.custody!,
+    payload: {
+      name: "CustodyUpdated",
+      toState: 2,
+      toSubject: { __option: "Some", value: subject },
+    },
+  });
+  item.custody = held(f.session.walletAddress);
+  expect(
+    (await f.collector.collection("Bearer synthetic", { limit: 20, offset: 0 }))
+      .items[0]!.custody,
+  ).toMatchObject({ state: "COLLECTOR_HELD", heldByViewer: true });
+  // The owner of the asset is not the custodian when another wallet holds the work.
+  item.custody = held("EH2PR6WDVC4U6bDAVKVS4wuSofwNi5cY9fCxU2snv5kn");
+  expect(
+    (await f.collector.collection("Bearer synthetic", { limit: 20, offset: 0 }))
+      .items[0]!.custody,
+  ).toMatchObject({ state: "COLLECTOR_HELD", heldByViewer: false });
 });
 it.each(["missing", "expired", "revoked", "wrong cluster"])(
   "rejects %s session before reading holdings",

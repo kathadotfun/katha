@@ -87,8 +87,10 @@ it("collects backwards, freezes the upper slot and acknowledges globally oldest-
     .mockResolvedValueOnce(page([transaction(3, 20n), transaction(4, 40n)], true))
     .mockResolvedValueOnce(page([transaction(1, 9n), transaction(2, 10n)]));
   await recoverActivityStream(options);
+  // Core is discovered through the collection, not the network-wide program history.
   expect(options.read.mock.calls[1]?.[0]).toEqual({
     programAddress: CORE_PROGRAM_ADDRESS,
+    discoveryAddress: collection,
     limit: 100,
     before: sig(3),
   });
@@ -96,6 +98,21 @@ it("collects backwards, freezes the upper slot and acknowledges globally oldest-
   expect(batch.events.map((e: { slot: bigint }) => e.slot)).toEqual([10n, 20n]);
   expect(batch.head).toEqual({ signature: sig(3), slot: 20n });
   expect(batch.scannedThroughSlot).toBe(30n);
+});
+it("discovers the Registry stream through its own program address", async () => {
+  const options = setup();
+  options.read.mockResolvedValueOnce({
+    ...page([]),
+    programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS,
+  });
+  await recoverActivityStream({
+    ...options,
+    stream: { ...stream, programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS },
+  });
+  expect(options.read.mock.calls[0]?.[0]).toEqual({
+    programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS,
+    limit: 100,
+  });
 });
 it("includes the saved boundary for exact replay checks across same-slot pages", async () => {
   const options = setup();

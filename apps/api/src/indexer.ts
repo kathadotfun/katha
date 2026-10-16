@@ -107,8 +107,8 @@ async function run() {
         lastExpirySweep = Date.now();
         try {
           await resolveExpiredAttempts();
-        } catch {
-          logger.activityPollingFailed();
+        } catch (error) {
+          logger.activityPollingFailed(error);
         }
       }
       try {
@@ -167,7 +167,7 @@ async function run() {
           (!(error instanceof HistoryGap) && !isRetryableRpcFailure(error))
         )
           throw error;
-        logger.activityPollingFailed();
+        logger.activityPollingFailed(error);
       }
       await setTimeout(5000, undefined, { signal: controller.signal });
     }
@@ -175,7 +175,7 @@ async function run() {
     if (!controller.signal.aborted) {
       if (error instanceof ConfigurationError)
         logger.configurationInvalid(error.fields);
-      else logger.activityPollingFailed();
+      else logger.activityPollingFailed(error);
       process.exitCode = 1;
     }
   } finally {

@@ -160,6 +160,8 @@ export function WalletProvider({
         );
       },
       createPurchaseOwnershipRpc(cluster, rpcUrl),
+      // Covers a blockhash lifetime plus the API's finalized expiry margin.
+      { intervalMs: 3000, maxChecks: 50 },
     );
     publish({ connection: current.boundary, session: auth, transactions: flow });
     return () => {

@@ -35,6 +35,7 @@ export function collectionFixture(
               state: "KATHA_HELD",
               source: "FINALIZED_REGISTRY",
               observedAt: art.ownership.observedAt,
+              heldByViewer: false,
             },
             indexing: { ...provenanceFixture.indexing, status: "LAGGING" },
           },

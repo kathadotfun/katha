@@ -32,7 +32,13 @@ configured collection before producing ownership projections. A count is not pro
 ## Discovery and exact evidence
 
 `ActivityPageRequest` selects one of the fixed Registry/Core/Marketplace program addresses,
-optional `before`/`until` signatures and a page size of 1–100 (default 25). Each
+optional `before`/`until` signatures and a page size of 1–100 (default 25). The
+worker discovers the Core stream through the configured collection address
+(`discoveryAddress`) rather than network-wide Core history: every Core instruction
+that changes an asset in a collection must pass that collection, and transfers
+outside it were already ignored. A collection-referencing transaction that does not
+invoke Core keeps its scan position with no activity, so unrelated references cannot
+stall ingestion. Each RPC call has its own 10-second bound. Each
 read verifies the configured cluster genesis with the same guard used by receipt
 reconciliation. Devnet must match its known genesis; localnet rejects known public
 network genesis hashes. The configured RPC remains a trusted evidence provider.
@@ -135,8 +141,13 @@ configuration. Registry runs before Core. Every cycle validates the initialized
 Registry collection and reads the finalized genesis, ledger floor and upper slot.
 The default budget is 100 pages of 100 signatures per stream. `--max-pages=N`
 allows 1–1000 pages; a transaction batch still has a 10,000 scoped-event limit.
-Limits produce a PAGE_LIMIT gap and preserve the previous cursor. Busy global Core
-history may need a larger budget or a more suitable configured RPC endpoint.
+Limits produce a PAGE_LIMIT gap and preserve the previous cursor. Public Devnet RPC
+rate limits (HTTP 429) can still stall a cycle; starting the worker with a dedicated
+Devnet endpoint in `KATHA_RPC_URL`/`KATHA_RPC_SUBSCRIPTIONS_URL` avoids that. Check
+the plan's batch limits before giving it to the API: some free plans cap
+`getMultipleAccounts` below the nine accounts a mint review reads from one snapshot. An existing Core
+checkpoint recorded from program-wide discovery may need a backfill, because its
+saved boundary need not reference the collection.
 
 For a one-shot full replay from the configured start:
 

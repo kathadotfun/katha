@@ -106,8 +106,27 @@ export function createLogger(
         activities: input.activities,
       });
     },
-    activityPollingFailed() {
-      write("activity_polling_failed", "error", {});
+    // Only a bounded class name, numeric RPC code and gap reason; never messages,
+    // URLs or context that could carry endpoint credentials.
+    activityPollingFailed(error?: unknown) {
+      const record =
+        error !== null && typeof error === "object"
+          ? (error as Record<string, unknown>)
+          : {};
+      const name = typeof record.name === "string" ? record.name : undefined;
+      const context = record.context;
+      const code =
+        context !== null &&
+        typeof context === "object" &&
+        typeof (context as Record<string, unknown>).__code === "number"
+          ? (context as Record<string, number>).__code
+          : undefined;
+      const reason = typeof record.reason === "string" ? record.reason : undefined;
+      write("activity_polling_failed", "error", {
+        errorName: name && /^[A-Za-z]{1,40}$/.test(name) ? name : undefined,
+        rpcErrorCode: Number.isSafeInteger(code) ? code : undefined,
+        gapReason: reason && /^[A-Z_]{1,40}$/.test(reason) ? reason : undefined,
+      });
     },
     serverStarted(port: number) {
       write("server_started", "info", {

@@ -1,3 +1,4 @@
+import { operationIdempotencyKey } from "./operation-retry.ts";
 import {
   artworkMintRequestSchema,
   artworkPublicationRequestSchema,
@@ -148,7 +149,10 @@ export function createArtworkMintingWorkflow(
         const input = artworkMintRequestSchema.parse({
           idempotencyKey:
             page.reservation?.idempotencyKey ??
-            `mint-${session.getSnapshot().session!.walletId}-${report.id}-${metadata.id}`,
+            operationIdempotencyKey(
+              `mint-${session.getSnapshot().session!.walletId}-${report.id}-${metadata.id}`,
+              page.mint.receipt,
+            ),
           expectedUpdatedAt: page.updatedAt,
           metadataVersionId: metadata.id,
           initialConditionReportId: report.id,

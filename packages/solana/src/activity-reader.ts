@@ -1,4 +1,5 @@
 import {
+  address,
   signature,
   type GetSignaturesForAddressApi,
   type GetTransactionApi,
@@ -27,6 +28,13 @@ import {
 
 export interface ActivityPageRequest {
   programAddress: Address;
+  /**
+   * Narrower account whose signature history discovers this program's relevant
+   * transactions. Core uses the Katha collection: every Core instruction changing a
+   * collection asset must pass the collection, while the Core program itself carries
+   * all unrelated network activity.
+   */
+  discoveryAddress?: string;
   before?: string;
   until?: string;
   limit?: number;
@@ -62,20 +70,38 @@ export function createActivityReaderFromRpc(
       throw new ActivityEvidenceError();
     const before = request.before === undefined ? undefined : signature(request.before);
     const until = request.until === undefined ? undefined : signature(request.until);
-    const abortSignal = signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(10000)])
-      : AbortSignal.timeout(10000);
-    const genesisHash = await rpc.getGenesisHash().send({ abortSignal });
+    // Each RPC call gets its own bound; a page of slow but healthy calls must not expire.
+    const call = () =>
+      signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(10000)])
+        : AbortSignal.timeout(10000);
+    const discovery =
+      request.discoveryAddress === undefined
+        ? request.programAddress
+        : address(request.discoveryAddress);
+    if (
+      request.discoveryAddress !== undefined &&
+      (request.programAddress !== CORE_PROGRAM_ADDRESS ||
+        (
+          [
+            KATHA_REGISTRY_PROGRAM_ADDRESS,
+            CORE_PROGRAM_ADDRESS,
+            KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+          ] as Address[]
+        ).includes(discovery))
+    )
+      throw new ActivityEvidenceError();
+    const genesisHash = await rpc.getGenesisHash().send({ abortSignal: call() });
     assertKathaRpcCluster(genesisHash, cluster);
     const rows = activityArray(
       await rpc
-        .getSignaturesForAddress(request.programAddress, {
+        .getSignaturesForAddress(discovery, {
           commitment: "finalized",
           limit,
           ...(before === undefined ? {} : { before }),
           ...(until === undefined ? {} : { until }),
         })
-        .send({ abortSignal }),
+        .send({ abortSignal: call() }),
       limit,
     ).map(activityRecord);
     const seen = new Set<string>();
@@ -110,7 +136,7 @@ export function createActivityReaderFromRpc(
           encoding: "json",
           maxSupportedTransactionVersion: 1,
         })
-        .send({ abortSignal });
+        .send({ abortSignal: call() });
       if (response === null) throw new ActivityEvidenceError();
       const transaction = decodeFinalizedActivity(response, transactionSignature, slot);
       if ((row.err === null) !== (transaction.outcome === "SUCCESS"))
@@ -127,7 +153,9 @@ export function createActivityReaderFromRpc(
         ...activityArray(loaded.writable),
         ...activityArray(loaded.readonly),
       ];
-      if (!keys.includes(request.programAddress)) throw new ActivityEvidenceError();
+      // Anyone can reference a discovery account without invoking the program; such a
+      // transaction keeps its scan position but decodes to no program activity.
+      if (!keys.includes(discovery)) throw new ActivityEvidenceError();
       let signatures = blocks.get(slot);
       if (!signatures) {
         const block = await rpc
@@ -137,7 +165,7 @@ export function createActivityReaderFromRpc(
             maxSupportedTransactionVersion: 1,
             rewards: false,
           })
-          .send({ abortSignal });
+          .send({ abortSignal: call() });
         const values = activityArray(activityRecord(block).signatures, 65536);
         signatures = values.map((value) =>
           typeof value === "string"

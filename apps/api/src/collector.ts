@@ -10,6 +10,18 @@ import type { WalletSessionBoundary } from "./wallet-session.js";
 import { projectProvenanceIndexing } from "./artwork-provenance.js";
 import { DomainError } from "./errors.js";
 
+function custodySubject(payload: unknown) {
+  const subject =
+    payload !== null && typeof payload === "object"
+      ? (payload as { toSubject?: unknown }).toSubject
+      : undefined;
+  return subject !== null &&
+    typeof subject === "object" &&
+    (subject as { __option?: unknown }).__option === "Some" &&
+    typeof (subject as { value?: unknown }).value === "string"
+    ? (subject as { value: string }).value
+    : null;
+}
 export function createCollector(
   store: CollectorStore,
   sessions: WalletSessionBoundary,
@@ -92,6 +104,9 @@ export function createCollector(
             state,
             source: item.custody ? "FINALIZED_REGISTRY" : "UNKNOWN",
             observedAt: item.custody?.chainRecordedAt.toISOString() ?? null,
+            heldByViewer:
+              state === "COLLECTOR_HELD" &&
+              custodySubject(item.custody?.payload) === session.walletAddress,
           },
           indexing: projectProvenanceIndexing(item),
         });

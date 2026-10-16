@@ -122,7 +122,15 @@ export async function recoverActivityStream(options: {
       const page: ActivityPage = await retryRpc(
         () =>
           options.read(
-            { programAddress, limit: 100, ...(before ? { before } : {}) },
+            {
+              programAddress,
+              // Core is network-wide; only collection-referencing transactions matter.
+              ...(programAddress === CORE_PROGRAM_ADDRESS
+                ? { discoveryAddress: options.collection }
+                : {}),
+              limit: 100,
+              ...(before ? { before } : {}),
+            },
             signal,
           ),
         signal,

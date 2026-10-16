@@ -66,10 +66,13 @@ The existing [receipt endpoint](operation-receipts-api.md) first retains the ver
 signed attempt as UNKNOWN. The browser broadcasts only after receipt retention
 succeeds and the lifetime remains valid. This gives a known signature before any
 uncertain send. The signature is shown as soon as signed; it does not imply broadcast
-or success. Submission uses the exact signed bytes with preflight enabled. The
-controller makes one submission attempt and never re-signs or resubmits; the RPC node
-keeps its default rebroadcast of those identical bytes until the blockhash expires,
-because public Devnet drops single sends and one signature executes at most once.
+or success. Submission uses the exact signed bytes with preflight enabled. Approval
+sends once and the wallet is never asked to sign again. Public Devnet drops some sends,
+so while the outcome is unknown the app follows up every 3 seconds (up to 50 checks):
+it rebroadcasts the identical signed bytes while the blockhash is valid and reconciles
+until the API records a finalized, failed or expired result. One signature executes at
+most once, so rebroadcasting cannot duplicate an operation. The RPC node also keeps
+its default retry queue.
 
 A timeout or missing confirmation stays **Confirmation unknown**. **Check this
 transaction again** only reconciles the same signed receipt; it never signs or sends.

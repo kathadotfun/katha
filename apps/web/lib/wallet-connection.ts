@@ -40,6 +40,17 @@ export const disconnectedWalletSnapshot: WalletConnectionSnapshot = {
   connected: null,
 };
 
+// Distinguishes a declined prompt from a wallet that returned different bytes;
+// neither case ever submits, but each needs a different next step from the operator.
+export class WalletSigningError extends Error {
+  readonly reason: "NOT_SIGNED" | "WALLET_CHANGED" | "MODIFIED";
+  constructor(reason: WalletSigningError["reason"]) {
+    super("Transaction signature was not completed or did not match the preparation.");
+    this.name = "WalletSigningError";
+    this.reason = reason;
+  }
+}
+
 // Wallet Standard handles stay inside this adapter; application views receive
 // public connection data, never signer methods, session tokens or wallet icons.
 export function createWalletBoundary(
@@ -156,27 +167,29 @@ export function createWalletBoundary(
         kathaId: operation.kathaId,
       });
       signal.throwIfAborted();
+      let signed;
       try {
-        const [signed] = await signer.modifyAndSignTransactions(
-          [prepared.transaction],
-          { abortSignal: signal },
-        );
+        [signed] = await signer.modifyAndSignTransactions([prepared.transaction], {
+          abortSignal: signal,
+        });
         signal.throwIfAborted();
-        const after = read().connected;
-        if (
-          disposed ||
-          after?.walletId !== before.walletId ||
-          after.address !== before.address ||
-          !signed
-        )
-          throw new Error("Wallet changed.");
+      } catch {
+        throw new WalletSigningError("NOT_SIGNED");
+      }
+      const after = read().connected;
+      if (
+        disposed ||
+        after?.walletId !== before.walletId ||
+        after.address !== before.address ||
+        !signed
+      )
+        throw new WalletSigningError("WALLET_CHANGED");
+      try {
         const wire = String(getBase64EncodedWireTransaction(signed));
         await validateSignedTransaction(wire, operation);
         return wire;
       } catch {
-        throw new Error(
-          "Transaction signature was not completed or did not match the preparation.",
-        );
+        throw new WalletSigningError("MODIFIED");
       }
     },
     async signLoginChallenge(

@@ -9,7 +9,16 @@ import type {
 import { createActivityReaderFromRpc } from "../src/activity-reader.js";
 import { KATHA_REGISTRY_PROGRAM_ADDRESS } from "../src/generated/registry/index.js";
 import { CORE_PROGRAM_ADDRESS } from "../src/core.js";
-import { activityFixture, SIG, OTHER_SIG, SLOT, SYSTEM } from "./fixtures/activity.js";
+import {
+  activityFixture,
+  base58,
+  COLLECTION,
+  SIG,
+  OTHER_SIG,
+  SLOT,
+  SYSTEM,
+} from "./fixtures/activity.js";
+const OTHER = "SysvarRent111111111111111111111111111111111";
 function fixture() {
   const response = activityFixture();
   const rows = [
@@ -196,3 +205,62 @@ it("rejects other watched programs before RPC", async () => {
   await expect(f.read({ programAddress: SYSTEM })).rejects.toThrow();
   expect(f.genesis).not.toHaveBeenCalled();
 });
+it("discovers Core activity through the collection without scanning the Core program", async () => {
+  const f = fixture();
+  f.transaction.mockResolvedValue(activityFixture(CORE_PROGRAM_ADDRESS));
+  const page = await f.read({
+    programAddress: CORE_PROGRAM_ADDRESS,
+    discoveryAddress: COLLECTION,
+  });
+  expect(f.rpc.getSignaturesForAddress).toHaveBeenCalledWith(COLLECTION, {
+    commitment: "finalized",
+    limit: 25,
+  });
+  expect(page.programAddress).toBe(CORE_PROGRAM_ADDRESS);
+  expect(page.transactions[0]!.activities.map((a) => a.kind)).toEqual([
+    "CORE_TRANSFER",
+  ]);
+});
+it("keeps a collection reference that never invokes Core as an empty scan position", async () => {
+  const f = fixture();
+  const response = activityFixture(CORE_PROGRAM_ADDRESS);
+  // Anyone may send lamports to the collection; that must not stall Core ingestion.
+  response.transaction.message.accountKeys[1] = OTHER;
+  response.transaction.message.instructions = [
+    {
+      programIdIndex: 2,
+      accounts: [4, 5],
+      data: base58([2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]),
+      stackHeight: 1,
+    },
+  ];
+  response.meta.logMessages = [
+    `Program ${SYSTEM} invoke [1]`,
+    `Program ${SYSTEM} success`,
+  ];
+  f.transaction.mockResolvedValue(response);
+  const page = await f.read({
+    programAddress: CORE_PROGRAM_ADDRESS,
+    discoveryAddress: COLLECTION,
+  });
+  expect(page.headSignature).toBe(SIG);
+  expect(page.transactions).toMatchObject([{ signature: SIG, activities: [] }]);
+  // Without a narrower discovery account, Core history still requires the Core key.
+  await expect(f.read({ programAddress: CORE_PROGRAM_ADDRESS })).rejects.toThrow();
+});
+it.each([
+  ["a non-Core stream", KATHA_REGISTRY_PROGRAM_ADDRESS, COLLECTION],
+  [
+    "a watched program as discovery",
+    CORE_PROGRAM_ADDRESS,
+    KATHA_REGISTRY_PROGRAM_ADDRESS,
+  ],
+  ["an invalid address", CORE_PROGRAM_ADDRESS, "not-an-address"],
+] as const)(
+  "rejects discovery through %s before RPC",
+  async (_, programAddress, discoveryAddress) => {
+    const f = fixture();
+    await expect(f.read({ programAddress, discoveryAddress })).rejects.toThrow();
+    expect(f.genesis).not.toHaveBeenCalled();
+  },
+);

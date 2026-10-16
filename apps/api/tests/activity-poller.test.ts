@@ -158,3 +158,31 @@ it("logs only fixed summaries and redacts polling failures", () => {
     level: "error",
   });
 });
+it("classifies polling failures without messages, URLs or unbounded fields", () => {
+  const lines: string[] = [];
+  const logger = createLogger((line) => {
+    lines.push(line);
+  });
+  const rpc = Object.assign(
+    new Error("https://rpc.example/synthetic-secret-key failed"),
+    { name: "SolanaError", context: { __code: 8100002, url: "synthetic-secret-key" } },
+  );
+  logger.activityPollingFailed(rpc);
+  logger.activityPollingFailed(
+    Object.assign(new Error("synthetic"), { reason: "PAGE_LIMIT" }),
+  );
+  logger.activityPollingFailed(
+    Object.assign(new Error("synthetic"), { name: "synthetic secret name!" }),
+  );
+  expect(lines.join()).not.toContain("synthetic");
+  expect(JSON.parse(lines[0]!)).toMatchObject({
+    event: "activity_polling_failed",
+    errorName: "SolanaError",
+    rpcErrorCode: 8100002,
+  });
+  expect(JSON.parse(lines[1]!)).toMatchObject({
+    errorName: "Error",
+    gapReason: "PAGE_LIMIT",
+  });
+  expect(JSON.parse(lines[2]!).errorName).toBeUndefined();
+});

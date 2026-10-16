@@ -169,10 +169,10 @@ export function ArtworkMintingPanel({ kathaId }: { kathaId: string }) {
                 />
                 <Check
                   ok={!blocked.has("CHAIN_PREREQUISITES")}
-                  title="Registration, verification, inspection and custody on chain"
+                  title="Registration, verification, metadata, inspection and custody on chain"
                   detail={
                     blocked.has("CHAIN_PREREQUISITES")
-                      ? "Finalize registration, verification, metadata, the initial inspection and Katha-held custody first."
+                      ? "Finalize registration, verification, the on-chain metadata commit (Metadata tab), the initial inspection and attested held custody (Katha or a collector) first."
                       : `Custody: ${custodyText[page.chain?.custodyState ?? "UNKNOWN"]}, revision ${page.chain?.custodyRevision ?? "?"}`
                   }
                   fix={{ href: `/admin/artworks/${kathaId}/custody` }}

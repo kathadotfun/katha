@@ -34,8 +34,11 @@ import {
   inspectPreparedTransaction,
   validateSignedTransaction,
 } from "../lib/prepared-transaction.ts";
-import { createTransactionLifecycle } from "../lib/transaction-lifecycle.ts";
-import { createWalletBoundary } from "../lib/wallet-connection.ts";
+import {
+  createTransactionLifecycle,
+  type TransactionLifecycle,
+} from "../lib/transaction-lifecycle.ts";
+import { createWalletBoundary, WalletSigningError } from "../lib/wallet-connection.ts";
 import { publicTransactionRpcUrl } from "../lib/transaction-rpc.ts";
 import type {
   WalletConnection,
@@ -618,6 +621,95 @@ test("only finalized execution failure becomes failed, and receipt mismatches ne
   assert.ok(!g.calls.includes("submit"));
   g.flow.dispose();
 });
+test("not-completed approvals report which stage stopped, never claiming a send", async () => {
+  for (const [failure, pattern] of [
+    [new WalletSigningError("MODIFIED"), /altered the transaction/],
+    [new WalletSigningError("NOT_SIGNED"), /did not return a signature/],
+    [new WalletSigningError("WALLET_CHANGED"), /wallet or account changed/],
+  ] as const) {
+    const f = await fixture();
+    await f.flow.load(f.operation, f.operation);
+    f.connection.signPreparedTransaction = async () => {
+      throw failure;
+    };
+    await f.flow.approveAndSend();
+    assert.equal(f.flow.getSnapshot().phase, "not-completed");
+    assert.match(f.flow.getSnapshot().error!, pattern);
+    assert.ok(!f.calls.includes("receipt") && !f.calls.includes("submit"));
+    f.flow.dispose();
+  }
+  const g = await fixture();
+  await g.flow.load(g.operation, g.operation);
+  g.rpc.simulate = async () => {
+    throw new Error("RPC unavailable");
+  };
+  await g.flow.approveAndSend();
+  assert.match(g.flow.getSnapshot().error!, /check before wallet approval/);
+  g.flow.dispose();
+});
+test("follow-up rebroadcasts identical bytes until a definite outcome, never re-signing", async () => {
+  const settle = async (flow: TransactionLifecycle) => {
+    for (let i = 0; i < 200 && flow.getSnapshot().phase === "confirming"; i++)
+      await new Promise((resolve) => setTimeout(resolve, 5));
+  };
+  const f = await fixture();
+  f.flow.dispose();
+  const submitted: string[] = [];
+  const rpc = {
+    ...f.rpc,
+    submit: async (wire: string) => {
+      submitted.push(wire);
+      await f.rpc.submit();
+    },
+  };
+  const flow = createTransactionLifecycle(
+    f.connection,
+    f.session,
+    rpc,
+    async () => {
+      throw new Error("Unpublished artwork has no public provenance");
+    },
+    undefined,
+    undefined,
+    { intervalMs: 1, maxChecks: 3 },
+  );
+  await flow.load(f.operation, f.operation);
+  await flow.approveAndSend();
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  await settle(flow);
+  // Three follow-ups after the single approval send, all with the same signed bytes.
+  assert.equal(submitted.length, 4);
+  assert.ok(submitted.every((wire) => wire === f.wire));
+  assert.equal(f.calls.filter((call) => call === "sign").length, 1);
+  assert.equal(flow.getSnapshot().phase, "unknown");
+  assert.equal(flow.getSnapshot().signature, f.signature);
+  flow.dispose();
+
+  const g = await fixture();
+  g.flow.dispose();
+  const finalizing = createTransactionLifecycle(
+    g.connection,
+    g.session,
+    g.rpc,
+    async () => {
+      throw new Error("Unpublished artwork has no public provenance");
+    },
+    undefined,
+    undefined,
+    { intervalMs: 1, maxChecks: 50 },
+  );
+  await finalizing.load(g.operation, g.operation);
+  await finalizing.approveAndSend();
+  g.setStatus("FINALIZED");
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  await settle(finalizing);
+  assert.equal(finalizing.getSnapshot().phase, "indexing-delay");
+  const sends = g.calls.filter((call) => call === "submit").length;
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  // A definite outcome stops the loop.
+  assert.equal(g.calls.filter((call) => call === "submit").length, sends);
+  finalizing.dispose();
+});
 test("a provably expired attempt fails without claiming on-chain execution", async () => {
   const f = await fixture();
   await f.flow.load(f.operation, f.operation);
@@ -693,6 +785,14 @@ test("wallet adapter uses separate signing and rejects wallet byte modifications
   modify = true;
   await assert.rejects(
     boundary.signPreparedTransaction(f.operation, new AbortController().signal),
+    (error) => error instanceof WalletSigningError && error.reason === "MODIFIED",
+  );
+  signer.modifyAndSignTransactions = async () => {
+    throw new Error("User rejected the request.");
+  };
+  await assert.rejects(
+    boundary.signPreparedTransaction(f.operation, new AbortController().signal),
+    (error) => error instanceof WalletSigningError && error.reason === "NOT_SIGNED",
   );
   boundary.dispose();
   f.flow.dispose();
