@@ -45,9 +45,9 @@ export function KathaMark({
       style={{ display: "block", flex: "none" }}
     >
       <g transform="scale(1.2)">
-        <polygon points={outer} fill={a} />
-        <polygon points={inner} fill={b} />
-        <polygon points={gem} fill={c} />
+        <polygon points={outer} fill={a} className="logo-outer" />
+        <polygon points={inner} fill={b} className="logo-inner" />
+        <polygon points={gem} fill={c} className="logo-centre" />
       </g>
     </svg>
   );

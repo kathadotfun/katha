@@ -140,8 +140,8 @@ export function ArtworkMintingPanel({ kathaId }: { kathaId: string }) {
         </Notice>
       )}
       {page && (
-        <div className="flex flex-wrap items-start gap-5">
-          <div className="flex min-w-0 flex-col gap-5" style={{ flex: "999 1 620px" }}>
+        <div className="workflow-layout">
+          <div className="flex min-w-0 flex-col gap-5">
             <section className="panel cut" aria-labelledby="mint-prereq">
               <h2 id="mint-prereq" className="h3">
                 Before minting
@@ -349,7 +349,7 @@ export function ArtworkMintingPanel({ kathaId }: { kathaId: string }) {
               >
                 Publication
               </h2>
-              <p className="m-0 max-w-[40rem]">
+              <p className="m-0 max-w-160">
                 {page.published
                   ? "Published. The artwork is live on its public record and in Explore."
                   : minted

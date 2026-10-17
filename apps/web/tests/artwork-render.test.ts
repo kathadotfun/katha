@@ -611,7 +611,7 @@ test("exploration presents artwork, attribution and real category/pagination lin
     },
   });
   for (const content of [
-    "permanent ID and a public record",
+    "public record on Solana",
     artworkFixture.artist.displayName,
     artworkFixture.title,
     'href="/art/KATHA-PAUBHA-000001"',
@@ -773,59 +773,53 @@ function home(featured: unknown, cluster = "devnet") {
   );
 }
 
-test("homepage presents the RWA backing, real photographs, attribution and permanent routes", () => {
+test("homepage follows the reference while separating design illustrations from real inventory", () => {
   const html = home({ kind: "READY", items: [summary] });
-  for (const content of [
-    "Tokenizing Nepali art as",
-    "RWAs on Solana.",
-    "Nepali art is valuable but illiquid",
-    "Katha turns each verified painting into a tradeable onchain asset",
-    "One painting. One onchain asset.",
-    "Metaplex Core asset",
-    "Collected like graded cards.",
-    "Delivery of the painting on request",
-    'id="purpose"',
-    'id="rwa"',
-    'href="#rwa"',
-    'id="traditions"',
-    'id="collecting"',
-    'href="/explore?category=MANDALA"',
-    'href="/explore?category=PAUBHA"',
-    'href="/explore?category=THANGKA"',
-    'href="/art/KATHA-PAUBHA-000001"',
-    'href="/artists/synthetic-artist"',
-    summary.artist.displayName,
+  for (const value of [
+    "Tokenizing Nepali art",
+    "as RWAs on Solana.",
+    "Preserving Nepali culture on chain",
+    "physical artworks connected to verifiable digital records",
+    "Three traditions, one record each.",
+    "From the studio to your wallet.",
+    "Straight answers.",
+    "AI design illustration",
+    "Not for sale",
+    "/design/paintings/paubha.jpg",
+    "Copyright stays with the artist",
+    "Katha test token",
+    "No monetary value",
     summary.title,
-    "Newar artists of the Kathmandu Valley",
-    "Himalayan Buddhist scroll painting",
-    "Drawings show the typical layout of each form, not specific works",
-    "doesn't prove authenticity on its own",
-    "Buying a work doesn't transfer its copyright",
-    "Katha currently runs on Solana Devnet",
-    "Katha test token, which has no monetary value",
-    `src="http://localhost:3001/storage/public/${summary.heroImage.contentHash}.png"`,
-    'alt="Synthetic catalogue photo"',
+    summary.artist.displayName,
+    summary.kathaId,
+    'href="/explore"',
+    'href="/explore?category=PAUBHA"',
+    'href="/explore?category=MANDALA"',
+    'href="/explore?category=THANGKA"',
+    `href="/art/${summary.kathaId}"`,
+    `href="/artists/${summary.artist.slug}"`,
   ])
-    assert.ok(html.includes(content), content);
+    assert.ok(html.includes(value), value);
   assert.equal((html.match(/<h1(?:\s|>)/g) ?? []).length, 1);
-  assert.equal((html.match(/<main(?:\s|>)/g) ?? []).length, 0);
-  assert.ok(!html.includes(artworkFixture.ownership.ownerWallet));
   assert.ok(
-    home({ kind: "READY", items: [] }, "localnet").includes("local Solana network"),
+    html.includes('aria-label="On-chain record of Green Tara, a sample artwork"'),
   );
+  assert.ok(html.includes('class="pill pill-acc nd">Sample</span>'));
+  assert.ok(!html.includes("Simulate approval"));
+  assert.ok(!html.includes('href="#record">Open in Solana Explorer'));
 });
 
 test("homepage keeps culture and navigation available during empty or failed catalogue reads", () => {
   for (const [featured, message] of [
-    [{ kind: "UNAVAILABLE" }, "Featured works didn't load"],
-    [{ kind: "READY", items: [] }, "No works are published yet"],
-  ]) {
+    [{ kind: "READY", items: [] }, "The first works are being documented"],
+    [{ kind: "UNAVAILABLE" }, "The catalogue couldn't load"],
+  ] as const) {
     const html = home(featured);
-    assert.ok(html.includes(message as string));
-    assert.ok(html.includes('id="traditions"'));
+    assert.ok(html.includes(message), message);
+    assert.ok(html.includes("Three traditions, one record each."));
     assert.ok(html.includes('href="/explore"'));
-    assert.ok(!html.includes(summary.title));
-    assert.ok(!html.includes("PRIVATE"));
+    assert.ok(html.includes("Straight answers."));
+    assert.ok(!html.includes("PRIVATE_UPSTREAM"));
   }
 });
 

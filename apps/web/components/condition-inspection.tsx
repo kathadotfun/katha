@@ -288,11 +288,10 @@ function InspectionContent({
         <ResaleInspectionPanel kathaId={kathaId} verifier />
       </div>
 
-      <div className="flex flex-wrap items-start gap-5">
+      <div className="workflow-layout">
         <section
           className="panel cut panel-lg flex min-w-0 flex-col gap-5"
           aria-labelledby="inspection-controls"
-          style={{ flex: "999 1 600px" }}
         >
           <h2 id="inspection-controls" className="h2 h2-ops">
             New inspection report

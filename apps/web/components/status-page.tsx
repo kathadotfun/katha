@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { kathaMarkPoints } from "./ui/katha-mark";
 
-// Full-bleed red page for not-found, outage and loading states.
 export function StatusPage({
   code,
   title,
@@ -13,50 +11,27 @@ export function StatusPage({
   children: React.ReactNode;
   action?: React.ReactNode;
 }) {
-  const { outer, inner, gem } = kathaMarkPoints;
   return (
-    <section className="nf dk" aria-labelledby="status-title">
-      <div className="wrap relative z-[1] flex flex-1 flex-col justify-center pt-12 pb-24">
-        <div className="flex max-w-[600px] flex-col gap-[22px]">
-          <p className="sm m-0 text-on-red-muted">{code}</p>
-          <h1
-            id="status-title"
-            className="serif m-0 font-semibold"
-            style={{
-              fontSize: "clamp(44px, 6vw, 84px)",
-              lineHeight: 1,
-              letterSpacing: "-0.015em",
-            }}
-          >
+    <section className="app-main relative overflow-clip" aria-labelledby="status-title">
+      <div className="haze" aria-hidden="true" />
+      <div className="wrap py-6">
+        <div className="card warm pad-l ctr mx-auto max-w-[560px] py-14">
+          <p className="big text-madder" aria-hidden="true">
+            {code}
+          </p>
+          <h1 id="status-title" className="h1 mt-[22px] text-[clamp(26px,2.6vw,34px)]">
             {title}
           </h1>
-          <div className="max-w-[32rem] text-[19px] leading-[1.6] text-on-red">
-            {children}
-          </div>
+          <div className="p mt-3 max-w-[32rem]">{children}</div>
           {action !== null && (
-            <div className="mt-3 flex flex-wrap items-center gap-x-7 gap-y-3.5">
+            <div className="mt-7 flex flex-wrap justify-center gap-3">
               {action}
-              <Link className="lnk-d py-2.5" href="/">
+              <Link className="btn btn-g" href="/">
                 Go to the home page
               </Link>
             </div>
           )}
         </div>
-      </div>
-      <div className="nf-art" aria-hidden="true">
-        <svg
-          viewBox="-760 -760 1520 1520"
-          width="100%"
-          height="100%"
-          style={{ display: "block", overflow: "visible" }}
-        >
-          <polygon className="nf-r" transform="scale(2.2)" points={outer} />
-          <g transform="scale(1.5)">
-            <polygon points={outer} fill="#652D28" />
-            <polygon points={inner} fill="#5E2A25" />
-            <polygon className="nf-r" points={gem} />
-          </g>
-        </svg>
       </div>
     </section>
   );

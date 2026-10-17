@@ -20,6 +20,7 @@ import { artworkCategoryLabels } from "../lib/artwork-page";
 import { localDateTime, localTime } from "../lib/format";
 import { signInHref } from "../lib/return-path";
 import { PublicationPath } from "./artwork-workflow-nav";
+import { EvidenceFingerprint } from "./evidence-fingerprint";
 import { NfcTagPanel } from "./nfc-tag-panel";
 import { Badge, FieldTag, Notice } from "./ui/status";
 
@@ -346,6 +347,13 @@ export function ArtworkCreatePanel() {
 function CreateRound({ onAnother }: { onAnother: () => void }) {
   const { auth, editor, state } = useEditor();
   const [requestId] = useState(() => crypto.randomUUID());
+  const [evidenceHash, setEvidenceHash] = useState("");
+  const [checks, setChecks] = useState({ identity: false, title: false });
+  const walletKey = auth.session?.walletId;
+  useEffect(() => {
+    setEvidenceHash("");
+    setChecks({ identity: false, title: false });
+  }, [walletKey]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   if (!auth.session) return <SignedOut path="/admin/artworks/new" />;
   if (state.status !== "ready" && !state.record)
@@ -373,7 +381,7 @@ function CreateRound({ onAnother }: { onAnother: () => void }) {
           >
             Open documentation
           </Link>
-          <button type="button" className="lnk-d text-[#F4FAF5]" onClick={onAnother}>
+          <button type="button" className="lnk-d" onClick={onAnother}>
             Create another
           </button>
         </div>
@@ -443,11 +451,21 @@ function CreateRound({ onAnother }: { onAnother: () => void }) {
           </p>
         </Notice>
       )}
-      <div className="mt-8 flex flex-wrap items-start gap-8">
+      <div className="workflow-layout mt-8">
         <form
           className="flex min-w-0 flex-col gap-5"
-          style={{ flex: "999 1 620px" }}
+
+          id="new-artwork-form"
           noValidate
+          onInput={(event) => {
+            const data = new FormData(event.currentTarget);
+            setChecks({
+              identity: Boolean(
+                String(data.get("artistId") ?? "").trim() && data.get("category"),
+              ),
+              title: Boolean(String(data.get("title") ?? "").trim()),
+            });
+          }}
           onSubmit={(event) => void submit(event)}
           aria-busy={state.busy}
         >
@@ -507,7 +525,14 @@ function CreateRound({ onAnother }: { onAnother: () => void }) {
                 <FieldTag kind="opt">Needed before registration</FieldTag>
                 <FieldTag kind="priv">Evidence stays private</FieldTag>
               </label>
+              <EvidenceFingerprint
+                key={walletKey}
+                disabled={disabled}
+                onFingerprint={setEvidenceHash}
+              />
               <input
+                value={evidenceHash}
+                onChange={(event) => setEvidenceHash(event.currentTarget.value)}
                 id="draft-authorshipEvidenceHash"
                 name="authorshipEvidenceHash"
                 className="inp id font-medium"
@@ -573,9 +598,6 @@ function CreateRound({ onAnother }: { onAnother: () => void }) {
             </div>
           </details>
           <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-            <button className="btn btn-p cut-s" type="submit" disabled={state.busy}>
-              {state.busy ? "Creating…" : "Create artwork"}
-            </button>
             <Link className="lnk" href="/admin/artworks">
               Cancel
             </Link>
@@ -587,6 +609,39 @@ function CreateRound({ onAnother }: { onAnother: () => void }) {
           </div>
         </form>
         <aside className="flex min-w-0 flex-col gap-4" style={{ flex: "1 1 280px" }}>
+          <div className="panel flex flex-col gap-4">
+            <p className="lbl">Permanent Katha ID</p>
+            <p className="mono sm m-0">Assigned when you create it</p>
+            <ul className="chk-list">
+              {[
+                [checks.identity, "Tradition and artist"],
+                [checks.title, "Title"],
+                [
+                  /^[0-9a-f]{64}$/.test(evidenceHash),
+                  "Authorship evidence fingerprint",
+                ],
+              ].map(([ok, label]) => (
+                <li key={String(label)}>
+                  <span className={`mk${ok ? " mk-ok" : ""}`} aria-hidden="true">
+                    {ok ? "✓" : ""}
+                  </span>
+                  <span className="sm">
+                    {label}
+                    <span className="sr-only">{ok ? ", ready" : ", not entered"}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <button
+              className="btn btn-p btn-w"
+              type="submit"
+              form="new-artwork-form"
+              disabled={state.busy}
+            >
+              {state.busy ? "Creating…" : "Create artwork"}
+            </button>
+            <p className="xs m-0">Saves a draft. Nothing goes on chain yet.</p>
+          </div>
           <div className="panel cut-s flex flex-col gap-2.5">
             <h2 className="h3">Before you create</h2>
             <ul className="p sm m-0 flex flex-col gap-1.5 pl-5">
@@ -738,8 +793,8 @@ function EditorWorkspace({
             fg: "var(--color-ok)",
           };
   return (
-    <div className="flex flex-wrap items-start gap-8">
-      <div className="flex min-w-0 flex-col gap-6" style={{ flex: "999 1 620px" }}>
+    <div className="workflow-layout">
+      <div className="flex min-w-0 flex-col gap-6">
         <div
           className="status-bar cut-s"
           role="status"
@@ -841,7 +896,7 @@ function EditorWorkspace({
                       key={side}
                       className="chk flex-col items-stretch gap-2 p-3.5"
                       style={{
-                        background: side === "mine" ? "#FFF8EA" : "var(--color-paper)",
+                        background: side === "mine" ? "var(--acc-soft)" : "var(--well)",
                       }}
                     >
                       <span className="flex items-center gap-2.5">

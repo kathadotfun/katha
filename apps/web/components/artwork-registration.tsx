@@ -159,8 +159,8 @@ function RegistrationContent({
     (!flow.signature || flow.phase === "failed");
   const receipt = page.registration.receipt;
   return (
-    <div className="flex flex-wrap items-start gap-8">
-      <div className="flex min-w-0 flex-col gap-6" style={{ flex: "999 1 620px" }}>
+    <div className="workflow-layout">
+      <div className="flex min-w-0 flex-col gap-6">
         <section className="panel cut" aria-labelledby="registration-prereq">
           <h2 id="registration-prereq" className="h3">
             Before registering

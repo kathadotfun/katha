@@ -110,7 +110,7 @@ export async function runPublicBrowsingJourneys({
       // Header links stay client-side so the in-memory wallet session survives.
       // The sticky header hides while reading; scrolling up brings it back, as for a reader.
       async function revealHeader() {
-        const header = page.locator(".hdr");
+        const header = page.locator(".hdr, .dashboard-header");
         if ((await header.getAttribute("data-hidden")) !== "true") return;
         await page.mouse.wheel(0, -200);
         await expect(header).not.toHaveAttribute("data-hidden", "true");
@@ -124,7 +124,7 @@ export async function runPublicBrowsingJourneys({
         if (await menu.isVisible()) {
           if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
           await page.locator(target("#mobile-navigation")).click();
-        } else await page.locator(target(".hdr .nav")).click();
+        } else await page.locator(target(":is(.hdr .nav, .navi, .side-foot)")).click();
       }
       const main = page.getByRole("main");
       const alert = (text) => main.getByRole("alert").filter({ hasText: text }).first();
@@ -1119,7 +1119,7 @@ export async function runPublicBrowsingJourneys({
         .click();
       await expect(page).toHaveURL(`${origin}/admin`);
       await expect(main.getByRole("heading", { name: "Create artist" })).toBeVisible();
-      await expect(page.locator(".hdr .who .role")).toHaveText("Admin");
+      await expect(page.locator(".side-foot .who .xs")).toHaveText("Administrator");
       await audit("authorized artist onboarding");
       const createArtist = main.getByRole("button", {
         name: "Create artist",
@@ -1227,6 +1227,18 @@ export async function runPublicBrowsingJourneys({
         widthMm: "200",
       }))
         await main.locator(`[name="${name}"]`).fill(value);
+      const evidenceBytes = Buffer.from("Synthetic private authorship evidence");
+      await main
+        .getByLabel("Private authorship evidence file", { exact: true })
+        .setInputFiles({
+          name: "synthetic-evidence.txt",
+          mimeType: "text/plain",
+          buffer: evidenceBytes,
+        });
+      await expect(main.locator('[name="authorshipEvidenceHash"]')).toHaveValue(
+        await sha256Hex(evidenceBytes),
+      );
+      await expect(main).toContainText("Fingerprint calculated");
       await createArtwork.click();
       await expect(main).toContainText("Artwork created");
       assert.equal(draftCreateCalls, 1);
@@ -1949,7 +1961,9 @@ export async function runPublicBrowsingJourneys({
       await expect(main.getByRole("heading", { name: "Create artist" })).toBeVisible();
       await headerLink("/account");
       await main.getByRole("button", { name: "Sign out", exact: true }).click();
-      await expect(main).toContainText("Not signed in");
+      await expect(
+        main.getByRole("heading", { name: "Prove this wallet is yours", exact: true }),
+      ).toBeVisible();
       await expect.poll(() => logoutCalls).toBe(1);
       await page.goBack();
       await expect(page).toHaveURL(`${origin}/admin`);
@@ -1968,13 +1982,17 @@ export async function runPublicBrowsingJourneys({
         .getByRole("link", { name: "Continue where you left off", exact: true })
         .click();
       await expect(main).toContainText("You don't have access to operations");
-      await expect(page.locator(".hdr .who .role")).toHaveText("No role");
+      await expect(page.locator(".side-foot .who .xs")).toHaveText(
+        "No operations role",
+      );
       await audit("admin permission denied");
       await main.getByRole("link", { name: "Switch wallet", exact: true }).click();
       await main.getByRole("button", { name: "Change account", exact: true }).click();
       await chooser.getByRole("button", { name: /^1111…1111/ }).click();
       await expect(main).toContainText("Your wallet switched accounts.");
-      await expect(main).toContainText("Not signed in");
+      await expect(
+        main.getByRole("heading", { name: "Prove this wallet is yours", exact: true }),
+      ).toBeVisible();
       await expect(
         main.getByRole("button", { name: "Sign in as 1111…1111", exact: true }),
       ).toBeVisible();
@@ -2023,37 +2041,28 @@ export async function runPublicBrowsingJourneys({
       await expect(main).toBeFocused();
 
       for (const [href, id] of [
-        ["/#rwa", "rwa"],
-        ["/#collecting", "collecting"],
+        ["/#own", "own"],
+        ["/#how", "how"],
       ]) {
         await headerLink(href);
         await expect(page).toHaveURL(new RegExp(`#${id}$`));
         await expect(page.locator(`#${id}`)).toBeFocused();
       }
-      // Scrolled down, the header hides; scrolling up shows it until the reader pauses.
+      // The reference header stays in document flow; the reader can return
+      // to the top without losing keyboard focus or the selected theme.
       const header = page.locator(".hdr");
-      await expect(header).toHaveAttribute("data-hidden", "true");
-      await page.mouse.move(width / 2, 600);
-      await page.mouse.wheel(0, -200);
-      await expect(header).toHaveAttribute("data-hidden", "false");
-      await expect(header).toBeInViewport();
-      await expect(header).toHaveAttribute("data-hidden", "true", { timeout: 5000 });
-      await expect(header).not.toBeInViewport();
       const toTop = page.getByRole("button", { name: "Back to top", exact: true });
       await expect(toTop).toBeVisible();
       assert.ok((await toTop.boundingBox()).height >= 44);
       await audit("home scrolled");
       await toTop.click();
       await expect.poll(() => page.evaluate(() => globalThis.scrollY)).toBe(0);
-      await expect(header).toHaveAttribute("data-hidden", "false");
+      await expect(header).toBeInViewport();
       await expect(main).toBeFocused();
       await expect(toTop).toBeHidden();
-      await revealHeader();
-      const menu = page.locator(".menubtn");
-      if (await menu.isVisible()) {
-        if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
-      }
-      const explore = page.locator('.hdr a[href="/explore"]:visible');
+      const explore = main
+        .getByRole("link", { name: "Explore artworks", exact: true })
+        .first();
       assert.ok((await explore.boundingBox()).height >= 44);
       await explore.click();
       await expect(page).toHaveURL(`${origin}/explore`);
@@ -2122,9 +2131,9 @@ export async function runPublicBrowsingJourneys({
       await page.locator('main a[href="/artists/synthetic-artist"]').first().click();
       await expect(page.locator("#artist-name")).toBeVisible();
       await audit("artist");
-      await headerLink("/#rwa");
-      await expect(page).toHaveURL(`${origin}/#rwa`);
-      await expect(page.locator("#rwa")).toBeFocused();
+      await headerLink("/#own");
+      await expect(page).toHaveURL(`${origin}/#own`);
+      await expect(page.locator("#own")).toBeFocused();
       assert.deepEqual(
         pageErrors,
         [],
@@ -2177,7 +2186,7 @@ export async function runPublicBrowsingJourneys({
       );
       await audit("unknown artwork");
       await page.getByRole("link", { name: "Go to the home page" }).click();
-      await expect(page.locator("#purpose")).toBeVisible();
+      await expect(page.locator("#hero-title")).toBeVisible();
 
       setArtworkOutage(true);
       await page.goto(`${origin}/art/KATHA-PAUBHA-000001`);
@@ -2195,11 +2204,11 @@ export async function runPublicBrowsingJourneys({
       await audit("recovered artwork API");
       await revealHeader();
       await page.getByRole("banner").getByRole("link", { name: "Katha home" }).click();
-      await expect(page.locator("#purpose")).toBeVisible();
+      await expect(page.locator("#hero-title")).toBeVisible();
 
       for (const [mode, message] of [
-        ["EMPTY", "No works are published yet"],
-        ["UNAVAILABLE", "Featured works didn't load"],
+        ["EMPTY", "The first works are being documented"],
+        ["UNAVAILABLE", "The catalogue couldn't load"],
       ]) {
         setHomeMode(mode);
         await page.goto(origin);

@@ -15,14 +15,7 @@ export default async function AccountPage({
   const next = safeReturnPath((await searchParams).next);
   return (
     <div className="app-main">
-      <div className="wrap">
-        <div className="flex flex-col gap-3.5">
-          <h1 className="h1">Account</h1>
-          <p className="lead">
-            Your wallet connection and your Katha sign-in. They&apos;re separate steps,
-            so you always know what you&apos;ve shared.
-          </p>
-        </div>
+      <div className="wrap account-narrow">
         <CollectorAccountPanel next={next} />
       </div>
     </div>

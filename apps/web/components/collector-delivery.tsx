@@ -99,8 +99,8 @@ export function CollectorDeliveryPanel({ kathaId }: { kathaId: string }) {
   const cancelled = page?.requests.filter((row) => row.status === "CANCELLED") ?? [];
   const held = page ? custody[page.custodyState] : null;
   return (
-    <div className="mt-8 flex flex-wrap items-start gap-8">
-      <div className="flex min-w-0 flex-col gap-6" style={{ flex: "999 1 600px" }}>
+    <div className="workflow-layout mt-8">
+      <div className="flex min-w-0 flex-col gap-6">
         {state.error && (
           <Notice tone="err">
             <p>{state.error}</p>
@@ -206,7 +206,7 @@ export function CollectorDeliveryPanel({ kathaId }: { kathaId: string }) {
             {cancelled.map((row) => (
               <article
                 key={row.id}
-                className="panel cut flex flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-[#F7F0E5]"
+                className="panel cut flex flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-paper-2"
               >
                 <div>
                   <p className="m-0 font-semibold">
@@ -248,7 +248,10 @@ export function CollectorDeliveryPanel({ kathaId }: { kathaId: string }) {
           </section>
         )}
       </div>
-      <aside className="flex min-w-0 flex-col gap-5 pt-2" style={{ flex: "1 1 300px" }}>
+      <aside
+        className="panel flex min-w-0 flex-col gap-5"
+        style={{ flex: "1 1 300px" }}
+      >
         <div className="flex flex-col gap-1.5">
           <h2 className="h3 h3-aside">Ownership doesn&apos;t move</h2>
           <p className="p sm">
@@ -356,7 +359,7 @@ function DeliveryForm({
       }}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2.5">
-        <div className="flex max-w-[34rem] flex-col gap-1">
+        <div className="flex max-w-136 flex-col gap-1">
           <h2 id="delivery-form-title" className="h3">
             {delivery ? "Request delivery" : "Return to Katha"}
           </h2>
@@ -560,7 +563,7 @@ function DeliveryForm({
         <button className="btn btn-p cut-s" type="submit" disabled={disabled}>
           {delivery ? "Request delivery" : "Request return"}
         </button>
-        <p className="xs mut m-0 max-w-[30rem]">
+        <p className="xs mut m-0 max-w-120">
           Katha reviews each request and arranges the courier by hand. Dates and
           insurance aren&apos;t guaranteed. Retrying sends the same request reference,
           so a duplicate isn&apos;t created.

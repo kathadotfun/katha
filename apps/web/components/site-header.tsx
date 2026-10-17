@@ -3,38 +3,39 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { RefObject } from "react";
 import { signedOutSnapshot } from "../lib/wallet-session";
 import { useWalletSession } from "./wallet-provider";
 import { KathaMark } from "./ui/katha-mark";
 import { shortAddress } from "../lib/format";
 import { headerVariant } from "../lib/site-routes";
+import { ThemeToggle } from "./theme-toggle";
 
-const emptySubscribe = () => () => {};
-const serverSessionSnapshot = () => signedOutSnapshot;
+const noop = () => () => {};
+const signedOut = () => signedOutSnapshot;
+type Role = "Administrator" | "Verifier" | "No operations role" | null;
 
-type Role = "Admin" | "Verifier" | "No role" | null;
-
-function useSignedInAddress() {
+export function SiteHeader({
+  cluster = "localnet",
+}: {
+  cluster?: "localnet" | "devnet";
+}) {
+  const pathname = usePathname() ?? "/";
+  const variant = headerVariant(pathname);
+  const dashboard = variant === "ops" || variant === "collector";
+  const ops = variant === "ops";
   const session = useWalletSession();
   const auth = useSyncExternalStore(
-    session?.subscribe ?? emptySubscribe,
-    session?.getSnapshot ?? serverSessionSnapshot,
-    serverSessionSnapshot,
+    session?.subscribe ?? noop,
+    session?.getSnapshot ?? signedOut,
+    signedOut,
   );
-  return { session, address: auth.session?.walletAddress ?? null, auth };
-}
-
-// Roles come from the API for the current session; nothing is shown until known.
-function useRole(enabled: boolean): Role {
-  const { session, auth } = useSignedInAddress();
+  const address = auth.session?.walletAddress ?? null;
   const [role, setRole] = useState<{ key: string; value: Role } | null>(null);
-  const key =
-    enabled && auth.session
-      ? `${auth.session.walletId}:${auth.session.expiresAt}`
-      : null;
+  const key = auth.session
+    ? `${auth.session.walletId}:${auth.session.expiresAt}`
+    : null;
   useEffect(() => {
-    if (!key || !session) return;
+    if (!session || !key) return;
     const abort = new AbortController();
     session
       .permissions(abort.signal)
@@ -42,255 +43,314 @@ function useRole(enabled: boolean): Role {
         if (!abort.signal.aborted)
           setRole({
             key,
-            value: value.admin ? "Admin" : value.verifier ? "Verifier" : "No role",
+            value: value.admin
+              ? "Administrator"
+              : value.verifier
+                ? "Verifier"
+                : "No operations role",
           });
       })
       .catch(() => undefined);
     return () => abort.abort();
-  }, [key, session]);
-  return role && role.key === key ? role.value : null;
-}
-
-// The sticky header leaves the reader's way while they scroll down or pause, and
-// returns on any upward scroll. It always shows near the top, under the pointer
-// and (through CSS :focus-within) while it holds keyboard focus.
-const revealIdleMs = 1500;
-function useAutoHide(header: RefObject<HTMLElement | null>) {
-  const [hidden, setHidden] = useState(false);
+  }, [session, key, pathname]);
+  const currentRole = role?.key === key ? role?.value : null;
+  const [menu, setMenu] = useState({ path: pathname, open: false });
+  const open = menu.path === pathname && menu.open;
+  const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
-    const element = header.current;
-    if (!element) return;
-    let last = window.scrollY;
+    const header = headerRef.current;
+    if (dashboard || !header) return;
+    let previousY = window.scrollY;
+    let frame = 0;
     let idle: number | undefined;
-    let hovered = false;
-    const pastHeader = () => window.scrollY > element.offsetHeight;
-    const hideLater = () => {
-      window.clearTimeout(idle);
-      idle = window.setTimeout(() => {
-        if (!hovered && pastHeader()) setHidden(true);
-      }, revealIdleMs);
+    const hover = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const protectedInteraction = () =>
+      (hover.matches && header.matches(":hover")) ||
+      header.querySelector(":focus-visible") !== null ||
+      header.dataset.menuOpen === "true";
+    const hide = () => {
+      if (window.scrollY > 96 && !protectedInteraction())
+        header.dataset.scrollHidden = "true";
     };
-    const onScroll = () => {
-      const y = window.scrollY;
-      if (!pastHeader()) {
+    const settle = () => {
+      window.clearTimeout(idle);
+      idle = window.setTimeout(hide, 900);
+    };
+    const update = () => {
+      frame = 0;
+      const y = Math.max(0, window.scrollY);
+      header.dataset.scrolled = String(y > 96);
+      if (y <= 96) {
+        header.dataset.scrollHidden = "false";
         window.clearTimeout(idle);
-        setHidden(false);
-        last = y;
-        return;
+      } else if (y < previousY - 0.75) {
+        header.dataset.scrollHidden = "false";
+        settle();
+      } else if (y > previousY + 0.75) {
+        hide();
       }
-      if (Math.abs(y - last) < 4) return;
-      const up = y < last;
-      last = y;
-      setHidden(!up);
-      if (up) hideLater();
-      else window.clearTimeout(idle);
+      previousY = y;
     };
-    // Keyboard focus moving into the page must not sit under a revealed header.
-    const onFocusIn = (event: FocusEvent) => {
-      const target = event.target;
-      if (
-        target instanceof Element &&
-        !element.contains(target) &&
-        target.matches(":focus-visible") &&
-        pastHeader()
-      )
-        setHidden(true);
+    const scroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(update);
     };
-    const onEnter = () => {
-      hovered = true;
-      window.clearTimeout(idle);
-    };
-    const onLeave = () => {
-      hovered = false;
-      if (pastHeader()) hideLater();
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    document.addEventListener("focusin", onFocusIn);
-    element.addEventListener("pointerenter", onEnter);
-    element.addEventListener("pointerleave", onLeave);
+    header.dataset.scrollHidden = String(previousY > 96);
+    header.dataset.scrolled = String(previousY > 96);
+    window.addEventListener("scroll", scroll, { passive: true });
+    header.addEventListener("mouseleave", settle);
+    header.addEventListener("focusout", settle);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.clearTimeout(idle);
-      window.removeEventListener("scroll", onScroll);
-      document.removeEventListener("focusin", onFocusIn);
-      element.removeEventListener("pointerenter", onEnter);
-      element.removeEventListener("pointerleave", onLeave);
+      window.removeEventListener("scroll", scroll);
+      header.removeEventListener("mouseleave", settle);
+      header.removeEventListener("focusout", settle);
     };
-  }, [header]);
-  return hidden;
-}
-
-export function SiteHeader() {
-  const pathname = usePathname() ?? "/";
-  const variant = headerVariant(pathname);
-  const [menu, setMenu] = useState<{ open: boolean; path: string }>({
-    open: false,
-    path: pathname,
-  });
-  // Navigating closes the in-flow menu.
-  const open = menu.open && menu.path === pathname;
-  const button = useRef<HTMLButtonElement>(null);
-  const header = useRef<HTMLElement>(null);
-  // An open menu stays on screen until the reader closes it or navigates.
-  const hidden = useAutoHide(header) && !open;
-  const { address } = useSignedInAddress();
-  const role = useRole(variant === "ops");
-  const close = () => setMenu({ open: false, path: pathname });
-  const chip = address ? shortAddress(address) : "Sign in";
-  // On the home page, section links stay native fragments so the browser moves
-  // focus to the section; elsewhere the router keeps the wallet session alive.
-  const samePage = (href: string) => pathname === "/" && href.startsWith("/#");
-
-  const artworksCurrent =
-    pathname === "/explore" ||
-    (pathname.startsWith("/art/") && variant !== "collector");
-  const links =
-    variant === "ops"
+  }, [dashboard, pathname]);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const close = () => setMenu({ path: pathname, open: false });
+  const homeLinks = [
+    { href: "/#works", label: "Artworks" },
+    { href: "/#own", label: "What you own" },
+    { href: "/#how", label: "How it works" },
+    { href: "/#record", label: "Record" },
+    { href: "/#faq", label: "FAQ" },
+  ];
+  const publicLinks = [
+    { href: "/explore", label: "Artworks" },
+    { href: "/#own", label: "What you own" },
+    { href: "/#how", label: "How it works" },
+  ];
+  const links = ops
+    ? [
+        { href: "/admin", label: "Overview" },
+        { href: "/admin/artworks", label: "Artworks" },
+        { href: "/admin/artworks/new", label: "New artwork" },
+        { href: "/admin/devnet", label: "Devnet setup" },
+      ]
+    : dashboard
       ? [
-          { href: "/admin", label: "Administration", current: pathname === "/admin" },
-          {
-            href: "/admin/artworks",
-            label: "Artworks",
-            current: pathname.startsWith("/admin/artworks"),
-          },
+          { href: "/collection", label: "My collection" },
+          { href: "/explore", label: "Artworks" },
+          { href: "/account", label: "Account" },
+          ...(currentRole === "Administrator" || currentRole === "Verifier"
+            ? [{ href: "/admin", label: "Operations" }]
+            : []),
         ]
-      : variant === "collector"
-        ? [
-            { href: "/explore", label: "Artworks", current: false },
-            {
-              href: "/collection",
-              label: "My collection",
-              current: pathname.startsWith("/collection"),
-            },
-          ]
-        : [
-            { href: "/explore", label: "Artworks", current: artworksCurrent },
-            { href: "/#rwa", label: "Why RWAs", current: false },
-            { href: "/#collecting", label: "How collecting works", current: false },
-          ];
-  const mobileAccount =
-    variant === "ops"
-      ? address
-        ? `Signed in as ${shortAddress(address)}`
-        : "Sign in"
-      : variant === "collector"
-        ? address
-          ? "Account"
-          : "Sign in"
-        : address
-          ? "Account"
-          : "Sign in";
+      : variant === "home"
+        ? homeLinks
+        : publicLinks;
+  function isCurrent(href: string) {
+    if (href === "/admin/artworks")
+      return pathname.startsWith(href) && pathname !== "/admin/artworks/new";
+    if (href === "/collection") return pathname.startsWith(href);
+    if (href === "/explore")
+      return pathname === href || (pathname.startsWith("/art/") && !dashboard);
+    return pathname === href;
+  }
+  function navigation(mobile = false) {
+    return links.map((link, index) =>
+      variant === "home" && link.href.startsWith("/#") ? (
+        <a key={link.href} href={link.href.slice(1)} onClick={close}>
+          {link.label}
+        </a>
+      ) : (
+        <Link
+          key={link.href}
+          href={link.href}
+          onClick={close}
+          aria-current={isCurrent(link.href) ? "page" : undefined}
+        >
+          {dashboard && !mobile && (
+            <svg
+              className="ic"
+              width="18"
+              height="18"
+              viewBox="0 0 20 20"
+              aria-hidden="true"
+            >
+              <path
+                d={
+                  link.href.endsWith("/new")
+                    ? "M10 4v12M4 10h12"
+                    : index === 0
+                      ? "M3.5 3.5h5v5h-5zM11.5 3.5h5v5h-5zM3.5 11.5h5v5h-5zM11.5 11.5h5v5h-5z"
+                      : link.href === "/account"
+                        ? "M10 10a3 3 0 100-6 3 3 0 000 6M4 17c1-3 3-4.5 6-4.5s5 1.5 6 4.5"
+                        : "M3 4h14v12H3zM3 13l4-4 3 3 2-2 5 5"
+                }
+              />
+            </svg>
+          )}
+          {link.label}
+        </Link>
+      ),
+    );
+  }
+  const brand = (
+    <Link className="brand" href="/" aria-label="Katha home" onClick={close}>
+      <KathaMark size={28} />
+      <span className="brand-w">KATHA</span>
+    </Link>
+  );
+  const network = (
+    <span className="net">
+      <span className="dot" aria-hidden="true" />
+      {cluster === "devnet" ? "Devnet" : "Localnet"}
+    </span>
+  );
+  const toggle = (
+    <button
+      ref={menuButton}
+      className="iconbtn menubtn"
+      type="button"
+      aria-label={open ? "Close menu" : "Menu"}
+      aria-expanded={open}
+      aria-controls="mobile-navigation"
+      onClick={() => setMenu({ path: pathname, open: !open })}
+    >
+      <svg className="ic" width="18" height="18" viewBox="0 0 20 20" aria-hidden="true">
+        <path d={open ? "M5 5l10 10M15 5L5 15" : "M3 6h14M3 10h14M3 14h14"} />
+      </svg>
+    </button>
+  );
+  const segment = pathname.split("/").filter(Boolean).at(-1) ?? "";
+  const crumb =
+    pathname === "/account"
+      ? "Account"
+      : pathname === "/collection"
+        ? "My collection"
+        : pathname === "/admin"
+          ? "Overview"
+          : pathname.endsWith("/new")
+            ? "New artwork"
+            : segment.startsWith("KATHA-")
+              ? segment
+              : ((
+                  {
+                    list: "Manage listing",
+                    delivery: "Delivery and returns",
+                    resale: "Resale approval",
+                    purchase: "Review purchase",
+                    artworks: "Artworks",
+                    devnet: "Devnet setup",
+                  } as Record<string, string>
+                )[segment] ?? segment.charAt(0).toUpperCase() + segment.slice(1));
 
   return (
     <header
-      ref={header}
-      data-hidden={hidden}
-      className={`hdr weave dk${variant === "ops" ? " hdr-ops" : ""}${variant === "home" ? " hdr-home" : ""}`}
+      ref={headerRef}
+      className={dashboard ? "dashboard-header" : "hdr"}
+      data-menu-open={open}
       onKeyDown={(event) => {
-        // An in-flow disclosure, not a modal: Escape returns focus to its button.
-        if (event.key === "Escape" && open && button.current?.offsetParent) {
+        if (event.key === "Escape" && open) {
           close();
-          button.current.focus();
+          menuButton.current?.focus();
         }
       }}
     >
       <noscript>
-        <style>{`@media (max-width:860px){.hdr:not(.hdr-ops) .mnav{display:block!important}.hdr:not(.hdr-ops) .menubtn{display:none!important}}@media (max-width:900px){.hdr-ops .mnav{display:block!important}.hdr-ops .menubtn{display:none!important}}`}</style>
+        <style>{`@media(max-width:900px){.mnav[data-open="false"]{display:flex!important}.menubtn{display:none!important}}`}</style>
       </noscript>
-      <div className="wrap hdr-in">
-        {variant === "ops" ? (
-          <div className="flex items-center gap-3.5">
-            <Link
-              className="brand"
-              href="/admin"
-              aria-label="Katha operations home"
-              onClick={close}
-            >
-              <KathaMark size={32} variant="ops" />
-              <span className="brand-w">KATHA</span>
-            </Link>
-            <span className="ctx">Operations</span>
-          </div>
-        ) : (
-          <Link className="brand" href="/" aria-label="Katha home" onClick={close}>
-            <KathaMark size={variant === "home" ? 34 : 32} />
-            <span className="brand-w">KATHA</span>
-          </Link>
-        )}
-        <nav className="nav" aria-label={variant === "ops" ? "Operations" : "Main"}>
-          {links.map((link) =>
-            samePage(link.href) ? (
-              <a key={link.href} href={link.href.slice(1)}>
-                {link.label}
-              </a>
-            ) : (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={link.current ? "page" : undefined}
-              >
-                {link.label}
+      {dashboard ? (
+        <>
+          <aside className="side" aria-label="Sidebar">
+            {brand}
+            <span className="net">
+              <span className="dot" aria-hidden="true" />
+              {ops ? "Operations · " : "Solana "}
+              {cluster === "devnet" ? "Devnet" : "Localnet"}
+            </span>
+            <nav className="navi" aria-label={ops ? "Operations" : "Collector"}>
+              {navigation()}
+            </nav>
+            <div className="side-foot">
+              <Link className="tx px-2 py-1.5 text-sm" href="/">
+                Back to katha.fun
               </Link>
-            ),
-          )}
-          {variant === "ops" ? (
-            <Link
-              className="who cut-s"
-              href="/account"
-              aria-current={pathname === "/account" ? "page" : undefined}
-            >
-              {role && <span className="role">{role}</span>}
-              <span className="id">{chip}</span>
+              <Link
+                className="who"
+                href="/account"
+                aria-label={
+                  address ? `Account, signed in as ${shortAddress(address)}` : "Sign in"
+                }
+              >
+                <span className="ava">{address ? address.slice(0, 2) : "··"}</span>
+                <span className="min-w-0">
+                  <span className="mono block text-[13px]">
+                    {address ? shortAddress(address) : "No wallet"}
+                  </span>
+                  <span className="xs">
+                    {address
+                      ? ops
+                        ? (currentRole ?? "Checking access")
+                        : "Signed in"
+                      : "Not signed in"}
+                  </span>
+                </span>
+              </Link>
+            </div>
+          </aside>
+          <div className="topbar">
+            <div className="row min-w-0">
+              {toggle}
+              <nav className="crumbs" aria-label="Workspace breadcrumb">
+                <Link href={ops ? "/admin" : "/collection"}>
+                  {ops ? "Operations" : "Collector"}
+                </Link>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page" className="wrap-break-word">
+                  {crumb}
+                </span>
+              </nav>
+            </div>
+            <div className="hright">
+              {network}
+              <ThemeToggle />
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="wrap hdr-in">
+          {brand}
+          <nav className="nav" aria-label="Main">
+            {navigation()}
+          </nav>
+          <div className="hright">
+            {network}
+            <ThemeToggle />
+            <Link className="btn btn-p btn-sm hide-sm" href="/account">
+              {address ? shortAddress(address) : "Connect wallet"}
             </Link>
-          ) : (
-            <Link
-              className="hbtn cut-s"
-              href="/account"
-              aria-label={address ? `Account, signed in as ${chip}` : undefined}
-            >
-              {chip}
-            </Link>
-          )}
-        </nav>
-        <button
-          ref={button}
-          type="button"
-          className="hbtn menubtn cut-s"
-          aria-expanded={open}
-          aria-controls="mobile-navigation"
-          onClick={() => setMenu({ open: !open, path: pathname })}
-        >
-          {open ? "Close" : "Menu"}
-        </button>
-      </div>
+            {toggle}
+          </div>
+        </div>
+      )}
       <nav
         id="mobile-navigation"
-        className="mnav wrap"
+        className={`mnav ${dashboard ? "" : "wrap"}`}
         data-open={open}
-        aria-label={variant === "ops" ? "Operations" : "Main"}
+        aria-label={
+          ops ? "Operations mobile" : dashboard ? "Collector mobile" : "Main mobile"
+        }
       >
-        {links.map((link) =>
-          samePage(link.href) ? (
-            <a key={link.href} href={link.href.slice(1)} onClick={close}>
-              {link.label}
-            </a>
-          ) : (
-            <Link
-              key={link.href}
-              href={link.href}
-              aria-current={link.current ? "page" : undefined}
-              onClick={close}
-            >
-              {link.label}
-            </Link>
-          ),
+        {variant === "home" && (
+          <noscript>
+            <style>{`#mobile-navigation a[href="#works"]{display:none}`}</style>
+            <a href="/explore">Artworks</a>
+          </noscript>
         )}
-        <Link
-          href="/account"
-          aria-current={pathname === "/account" ? "page" : undefined}
-          onClick={close}
-        >
-          {mobileAccount}
-        </Link>
+        {navigation(true)}
+        {!links.some((link) => link.href === "/account") && (
+          <Link href="/account" onClick={close}>
+            {address ? "Account" : "Sign in"}
+          </Link>
+        )}
+        {dashboard && (
+          <Link href="/" onClick={close}>
+            Back to katha.fun
+          </Link>
+        )}
       </nav>
     </header>
   );

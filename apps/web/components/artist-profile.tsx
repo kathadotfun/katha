@@ -5,7 +5,6 @@ import { artistWorksUrl, type ArtistWorks } from "../lib/artist-page";
 import { utcDate } from "../lib/format";
 import { ArtworkCard } from "./artwork-card";
 import { ArtworkPhoto } from "./artwork-photo";
-import { KathaMark } from "./ui/katha-mark";
 import { Pagination } from "./ui/pagination";
 import { Badge, Icon } from "./ui/status";
 import { RetryButton } from "./ui/retry-button";
@@ -29,140 +28,102 @@ export function ArtistProfile({
 }) {
   return (
     <article aria-labelledby="artist-name">
-      <section
-        className="weave dk bg-madder-deep text-paper"
-        style={{ padding: "clamp(40px, 6vw, 88px) 0" }}
-      >
-        <div
-          className="wrap flex flex-wrap items-end"
-          style={{ gap: "32px clamp(32px, 5vw, 72px)" }}
-        >
-          {artist.profileImageUrl ? (
+      <div className="wrap pt-12">
+        <section className="card warm pad-l" aria-labelledby="artist-name">
+          <div className="flex flex-wrap items-center gap-x-9 gap-y-7">
             <div
-              className="ph cut bg-madder"
-              style={{
-                flex: "0 1 300px",
-                width: 300,
-                maxWidth: "100%",
-                aspectRatio: "4 / 5",
-              }}
+              className="artist-portrait"
+              role={artist.profileImageUrl ? undefined : "img"}
+              aria-label={
+                artist.profileImageUrl
+                  ? undefined
+                  : `No portrait supplied for ${artist.displayName}`
+              }
             >
-              <ArtworkPhoto
-                src={artist.profileImageUrl}
-                alt={`Portrait of ${artist.displayName}, approved by the artist`}
-                primary
-              />
+              {artist.profileImageUrl ? (
+                <ArtworkPhoto
+                  src={artist.profileImageUrl}
+                  alt={`Portrait of ${artist.displayName}, approved by the artist`}
+                  primary
+                />
+              ) : (
+                artist.displayName
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((word) => word[0])
+                  .join("")
+              )}
             </div>
-          ) : (
-            <div
-              className="cut flex items-center justify-center bg-madder-dark"
-              aria-hidden="true"
-              style={{
-                flex: "0 1 300px",
-                width: 300,
-                maxWidth: "100%",
-                aspectRatio: "4 / 5",
-              }}
-            >
-              <KathaMark size={96} variant="outline" />
-            </div>
-          )}
-          <div className="flex min-w-0 flex-col gap-4" style={{ flex: "1 1 420px" }}>
-            <p className="sm m-0 text-on-red-muted">Artist</p>
-            <h1
-              id="artist-name"
-              className="serif m-0 font-semibold"
-              style={{
-                fontSize: "clamp(40px, 5.6vw, 80px)",
-                lineHeight: 1,
-                letterSpacing: "-0.015em",
-                overflowWrap: "anywhere",
-              }}
-            >
-              {artist.displayName}
-            </h1>
-            <p className="m-0 text-[19px] text-on-red">{artist.region}</p>
-            <ul
-              aria-label="Art traditions"
-              className="m-0 flex list-none flex-wrap gap-2 p-0"
-            >
-              {artist.traditions.map((tradition, index) => (
-                <li key={index} className="chip-light cut-s">
-                  {tradition}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-2">
+            <div className="min-w-0 flex-1 basis-[360px]">
               <Badge tone="ok">Profile verified</Badge>
-              <span className="sm text-on-red-muted">
-                Checked manually by Katha on{" "}
-                <time dateTime={artist.verifiedAt}>{utcDate(artist.verifiedAt)}</time>
-              </span>
-            </div>
-            {artist.publicLinks.length > 0 && (
+              <h1 id="artist-name" className="h1 mt-3 wrap-break-word">
+                {artist.displayName}
+              </h1>
+              <p className="p mt-2">{artist.region}</p>
               <ul
-                aria-label="Public links"
-                className="mt-2 mb-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0"
+                aria-label="Art traditions"
+                className="mt-3 mb-0 flex list-none flex-wrap gap-2 p-0"
               >
-                {artist.publicLinks.map((href, index) => (
-                  <li key={index}>
-                    <a
-                      className="lnk-d inline-flex min-h-11 items-center gap-1.5"
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {linkLabel(href)}
-                      <Icon name="external" size={14} />
-                      <span className="sr-only">, artist link, opens in a new tab</span>
-                    </a>
+                {artist.traditions.map((tradition, index) => (
+                  <li key={index} className="chip-cat">
+                    {tradition}
                   </li>
                 ))}
               </ul>
-            )}
+            </div>
+            <dl className="kv-direct min-w-0 basis-[260px]">
+              <dt>Profile checked</dt>
+              <dd>
+                <time dateTime={artist.verifiedAt}>{utcDate(artist.verifiedAt)}</time>
+              </dd>
+              <dt>Published works</dt>
+              <dd>
+                {works.kind === "READY" ? works.page.pagination.total : "Unavailable"}
+              </dd>
+            </dl>
           </div>
-        </div>
-      </section>
-
-      <section
-        aria-labelledby="artist-biography"
-        className="bg-paper"
-        style={{ padding: "clamp(56px, 7vw, 96px) 0 0" }}
-      >
-        <div
-          className="wrap flex flex-wrap items-start"
-          style={{ gap: "32px clamp(32px, 5vw, 80px)" }}
-        >
-          <div className="flex min-w-0 flex-col gap-4" style={{ flex: "2 1 520px" }}>
-            <h2 id="artist-biography" className="h2">
-              Biography
-            </h2>
-            <p className="reading p m-0">{artist.biography}</p>
-          </div>
-          <aside
-            className="panel cut flex min-w-0 flex-col gap-2.5"
-            style={{ flex: "1 1 280px" }}
-          >
-            <p className="serif m-0 text-xl font-semibold text-madder">
-              Attribution stays with the artist
-            </p>
-            <p className="p sm">
+          <h2 id="artist-biography" className="sr-only">
+            Biography
+          </h2>
+          <p className="reading p mt-6">{artist.biography}</p>
+          {artist.publicLinks.length > 0 && (
+            <ul
+              aria-label="Public links"
+              className="mt-4 mb-0 flex list-none flex-wrap gap-x-6 gap-y-1 p-0"
+            >
+              {artist.publicLinks.map((href, index) => (
+                <li key={index}>
+                  <a
+                    className="lnk inline-flex min-h-11 items-center gap-1.5"
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {linkLabel(href)}
+                    <Icon name="external" size={14} />
+                    <span className="sr-only">, artist link, opens in a new tab</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+          <details className="more mt-3">
+            <summary>Attribution stays with the artist</summary>
+            <p className="p sm max-w-3xl">
               Every work by {artist.displayName} stays credited to them permanently,
               whoever owns it later. Buying a work doesn&apos;t transfer its copyright.
-            </p>
-            <p className="xs mut m-0">
               Profile verification records a manual check of the artist, not independent
               proof of every artwork&apos;s authenticity.
             </p>
-          </aside>
-        </div>
-      </section>
+          </details>
+        </section>
+      </div>
 
       <section
         id="artist-works"
         aria-labelledby="artist-artworks"
-        className="bg-paper"
-        style={{ padding: "clamp(56px, 7vw, 96px) 0 clamp(72px, 8vw, 112px)" }}
+        className=""
+        style={{ padding: "clamp(48px, 6vw, 72px) 0 clamp(72px, 8vw, 112px)" }}
       >
         <div className="wrap">
           <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-b-[1.5px] border-(--rule-strong) pb-5">

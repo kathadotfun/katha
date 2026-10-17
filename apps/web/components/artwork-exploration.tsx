@@ -45,15 +45,16 @@ export function ArtworkExploration({
     <div className="app-main">
       <div className="wrap">
         <div className="flex flex-col gap-3.5">
+          <p className="kick">Catalogue</p>
           <h1 id="explore-title" className="h1">
             Artworks
           </h1>
           <p className="lead">
-            Every work published on Katha, each with a permanent ID and a public record.
+            Original paintings, each with a public record on Solana.
           </p>
         </div>
 
-        <div className="mt-10 flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-t-[1.5px] border-b border-t-(--rule-strong) border-b-[rgba(113,51,45,0.14)] py-5">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
             <nav aria-label="Filter by tradition" className="seg">
               {categories.map(([label, category]) => (
@@ -105,7 +106,7 @@ export function ArtworkExploration({
         {state.kind === "INVALID_QUERY" ? (
           <div className="panel cut panel-empty mt-10">
             <h2 className="h2">These filters aren&apos;t supported</h2>
-            <p className="p max-w-[36rem]">
+            <p className="p max-w-xl">
               Choose a tradition above, or reset your filters to see every published
               work.
             </p>
@@ -119,7 +120,7 @@ export function ArtworkExploration({
               Catalogue unavailable
             </Badge>
             <h2 className="h2">Artworks couldn&apos;t load</h2>
-            <p className="p max-w-[36rem]">
+            <p className="p max-w-xl">
               The Katha catalogue didn&apos;t respond. Your filters are kept, so you can
               try again in a moment.
             </p>
@@ -136,14 +137,14 @@ export function ArtworkExploration({
                 />
               ))}
             </div>
-            <div className="mt-[72px]">
+            <div className="mt-18">
               <ExplorationPages state={state} query={query} />
             </div>
           </>
         ) : query.offset ? (
           <div className="panel cut panel-empty mt-10">
             <h2 className="h2">No artworks on this page</h2>
-            <p className="p max-w-[36rem]">
+            <p className="p max-w-xl">
               The catalogue may have changed since your last visit.
             </p>
             <Link
@@ -156,7 +157,7 @@ export function ArtworkExploration({
         ) : (
           <div className="panel cut panel-empty mt-10">
             <h2 className="h2">No {scope} yet</h2>
-            <p className="p max-w-[36rem]">
+            <p className="p max-w-xl">
               {filtered
                 ? "Try another tradition, or reset your filters to see every published work."
                 : "Works appear here once Katha has verified, minted and published them."}

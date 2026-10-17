@@ -195,7 +195,7 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
                     <div className="skel cut-s ratio-art w-28" />
                     <div
                       className="flex flex-col gap-2.5"
-                      style={{ flex: "1 1 260px" }}
+                      style={{ flex: "1 1 180px" }}
                     >
                       <div className="skel h-4 w-1/5" />
                       <div className="skel h-6.5 w-[70%]" />
@@ -257,7 +257,44 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
             )}
             {page && page.items.length > 0 && (
               <>
-                <ul className="mt-8 flex list-none flex-col gap-3 p-0">
+                <section
+                  className="card warm pad-l mt-7"
+                  aria-label="Collection summary"
+                >
+                  <div className="collection-stats">
+                    <div>
+                      <p className="lbl">Works on this page</p>
+                      <p className="big mt-2.5">{page.items.length}</p>
+                    </div>
+                    <div>
+                      <p className="lbl">In Katha custody on this page</p>
+                      <p className="big mt-2.5">
+                        {
+                          page.items.filter(
+                            (item) => item.custody.state === "KATHA_HELD",
+                          ).length
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <p className="lbl">Network</p>
+                      <p className="h3 mt-4">
+                        {page.cluster === "devnet"
+                          ? "Solana Devnet"
+                          : "Solana Localnet"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="lbl">Last checked</p>
+                      <p className="h3 mt-4">
+                        <time dateTime={page.evaluatedAt}>
+                          {localTime(page.evaluatedAt)}
+                        </time>
+                      </p>
+                    </div>
+                  </div>
+                </section>
+                <ul className="collection-grid mt-5 list-none p-0">
                   {page.items.map((item) => {
                     const { artwork } = item;
                     const photo = explorationPhotoUrl(apiOrigin, artwork.heroImage);
@@ -272,7 +309,7 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
                     return (
                       <li key={artwork.kathaId} className="panel cut coll-row">
                         <Link
-                          className="ph ph-sm cut-s ratio-art w-28 flex-none"
+                          className="ph ph-sm cut-s ratio-art w-18 flex-none"
                           href={`/art/${artwork.kathaId}`}
                           aria-label={`${artwork.title}, open artwork record`}
                         >
@@ -288,7 +325,7 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
                         </Link>
                         <div
                           className="flex min-w-0 flex-col gap-1"
-                          style={{ flex: "1 1 260px" }}
+                          style={{ flex: "1 1 180px" }}
                         >
                           <span className="xs mut">
                             {artworkCategoryLabels[artwork.category]},{" "}
@@ -350,7 +387,7 @@ export function CollectorCollectionPanel({ apiOrigin }: { apiOrigin: string }) {
                           </div>
                         </div>
                         <div
-                          className="flex min-w-0 flex-col items-stretch gap-2"
+                          className="collection-actions flex min-w-0 flex-wrap gap-2"
                           style={{ flex: "1 1 200px" }}
                         >
                           {changedOwner ? (

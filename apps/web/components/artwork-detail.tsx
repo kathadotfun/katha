@@ -210,16 +210,16 @@ export function ArtworkDetail({
             {category}
           </Link>
           <span aria-hidden="true">/</span>
-          <span aria-current="page" className="[overflow-wrap:anywhere]">
+          <span aria-current="page" className="wrap-anywhere">
             {artwork.title}
           </span>
         </nav>
 
-        <div className="side mt-6">
-          <div className="min-w-0" style={{ flex: "1 1 460px" }}>
+        <div className="artwork-layout mt-6">
+          <div className="artwork-gallery min-w-0">
             <ArtworkGallery photos={photos} title={artwork.title} />
           </div>
-          <div className="flex min-w-0 flex-col gap-5" style={{ flex: "1 1 420px" }}>
+          <div className="artwork-summary flex min-w-0 flex-col gap-5">
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="chip-cat cut-s">{category}</span>
               <span className="sm mut">Created {artwork.creationYear}</span>
@@ -233,7 +233,7 @@ export function ArtworkDetail({
                 {artwork.artist.displayName}
               </Link>
             </p>
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-paper-2 px-[18px] py-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-paper-2 px-4.5 py-3.5">
               <div className="min-w-0">
                 <p className="xs mut m-0">Permanent Katha ID</p>
                 <p className="id m-0 text-lg">{artwork.kathaId}</p>
@@ -307,8 +307,11 @@ export function ArtworkDetail({
           aria-labelledby="artwork-details"
           style={{ marginTop: "clamp(64px, 8vw, 112px)" }}
         >
-          <div className="side">
-            <div className="flex min-w-0 flex-col gap-4" style={{ flex: "1 1 320px" }}>
+          <div className="layout-split">
+            <div
+              className="panel flex min-w-0 flex-col gap-4"
+              style={{ flex: "1 1 320px" }}
+            >
               <h2 id="artwork-details" className="h2">
                 About the work
               </h2>
@@ -348,7 +351,7 @@ export function ArtworkDetail({
                 transfer its copyright or reproduction rights.
               </p>
             </div>
-            <div className="min-w-0" style={{ flex: "2 1 520px" }}>
+            <div className="panel min-w-0" style={{ flex: "2 1 520px" }}>
               {integrityFailed && (
                 <Notice tone="err" icon="warning" className="mb-4">
                   <p>
@@ -381,7 +384,7 @@ export function ArtworkDetail({
           aria-labelledby="evidence-heading"
           style={{ marginTop: "clamp(64px, 8vw, 112px)" }}
         >
-          <div className="flex max-w-[44rem] flex-col gap-2.5">
+          <div className="flex max-w-reading flex-col gap-2.5">
             <h2 id="evidence-heading" className="h2">
               Record and evidence
             </h2>

@@ -444,7 +444,7 @@ export async function runPrimaryJourney(context) {
       await approve.click();
       await expect(
         buyer.getByText(
-          "Wallet approval or preflight was not completed. No transaction was submitted.",
+          "The wallet did not return a signature (cancelled, rejected or unsupported). Nothing was sent.",
           { exact: true },
         ),
       ).toBeVisible();

@@ -11,7 +11,7 @@ import {
 } from "../lib/collector-account";
 import { localDateTime, localTime, shortAddress } from "../lib/format";
 import { WalletChooser } from "./wallet-chooser";
-import { Badge, Notice } from "./ui/status";
+import { Badge, Icon, Notice } from "./ui/status";
 import { CopyButton } from "./ui/copy-button";
 
 const emptySubscribe = () => () => {};
@@ -113,6 +113,11 @@ export function CollectorAccountPanel({ next }: { next?: string | null }) {
 
   return (
     <>
+      <div className="flex flex-col gap-3.5">
+        <p className="kick">Account</p>
+        <h1 className="h1">{signedIn ? "Your account" : "Sign in with your wallet"}</h1>
+        <p className="p">Katha never holds your keys.</p>
+      </div>
       {ended?.kind === "expired" && (
         <Notice tone="warn" icon="clock" role="alert" className="mt-8">
           <p>
@@ -140,11 +145,11 @@ export function CollectorAccountPanel({ next }: { next?: string | null }) {
           <p>{error}</p>
         </Notice>
       )}
-      <div className="mt-10 flex flex-wrap items-start gap-8">
+      <div className="account-layout">
         <section
           aria-labelledby="account-wallet-title"
           className="panel cut min-w-0"
-          style={{ flex: "999 1 560px", padding: "clamp(20px, 3vw, 40px)" }}
+          style={{ padding: "clamp(24px, 3.2vw, 40px)" }}
         >
           {signedIn ? (
             <div className="flex flex-col gap-[18px]">
@@ -244,167 +249,113 @@ export function CollectorAccountPanel({ next }: { next?: string | null }) {
               </div>
             </div>
           ) : (
-            <ol className="m-0 list-none p-0">
-              <li className="acct-step">
-                <span
-                  className={`acct-num cut-s ${connected ? "n-done" : "n-now"}`}
-                  aria-hidden="true"
-                >
-                  1
+            <div className="flex flex-col gap-3">
+              <span className="ibox">
+                <Icon name={waiting ? "clock" : "lock"} size={20} />
+              </span>
+              {connected && (
+                <span className="chip mt-2 self-start">
+                  {shortAddress(connected.address)}
                 </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
-                    <h2 id="account-wallet-title" className="h3">
-                      Connect your wallet
-                    </h2>
-                    <Badge tone={connected ? "ok" : "neu"} marker={false} role="status">
-                      {connected
-                        ? "Connected"
-                        : busy
-                          ? "Waiting for wallet"
-                          : "Not connected"}
+              )}
+              <h2 id="account-wallet-title" className="h2 mt-1.5">
+                {waiting
+                  ? "Waiting for your wallet"
+                  : connected
+                    ? "Prove this wallet is yours"
+                    : "Connect a Solana wallet"}
+              </h2>
+              <p className="p sm">
+                {waiting && connected
+                  ? `Approve the sign-in message in ${connected.walletName}. It only proves this address is yours.`
+                  : connected
+                    ? "Sign a message. It’s free and doesn’t send a transaction."
+                    : "Connecting shares your public address so you can see your collection, buy, list or request delivery."}
+              </p>
+              {connected && (
+                <p className="xs m-0">
+                  {connected.walletName} on {network}. Connection and sign-in are
+                  separate steps.
+                </p>
+              )}
+              {connected && !connected.supportsMessageSigning && (
+                <Notice tone="warn">
+                  <p>
+                    This wallet account can&apos;t sign messages, so it can&apos;t sign
+                    in. Choose another account or wallet.
+                  </p>
+                </Notice>
+              )}
+              {connected && !connected.supportsV0 && !connected.supportsV1 && (
+                <p className="p sm">
+                  This account doesn&apos;t support versioned Solana transactions, so it
+                  can&apos;t approve purchases or listings.
+                </p>
+              )}
+              <div className="stack mt-3" style={{ gap: 10 }}>
+                {!connected ? (
+                  <button
+                    type="button"
+                    className="btn btn-p btn-w"
+                    disabled={!connection || busy}
+                    onClick={() => setChoosing(true)}
+                  >
+                    {busy ? "Waiting for wallet…" : "Connect wallet"}
+                  </button>
+                ) : waiting ? (
+                  <>
+                    <Badge tone="info" marker={false} className="wait" role="status">
+                      Waiting for {connected.walletName}
                     </Badge>
-                  </div>
-                  {connected ? (
-                    <>
-                      <p className="p">
-                        {connected.walletName},{" "}
-                        <span className="id">{shortAddress(connected.address)}</span>,
-                        on {network}.
-                      </p>
-                      {!connected.supportsV0 && !connected.supportsV1 && (
-                        <p className="p sm">
-                          This account doesn&apos;t support versioned Solana
-                          transactions, so it can&apos;t approve purchases or listings.
-                        </p>
-                      )}
-                      <div className="flex flex-wrap gap-x-5 gap-y-3">
-                        <button
-                          type="button"
-                          className="lnk"
-                          disabled={busy}
-                          onClick={() => setChoosing(true)}
-                        >
-                          Change account
-                        </button>
-                        <button
-                          type="button"
-                          className="lnk"
-                          disabled={busy}
-                          onClick={() => void disconnect()}
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="p">
-                        Connecting shares your public address with Katha. It can&apos;t
-                        move anything from your wallet.
-                      </p>
+                    <button type="button" className="btn btn-g" onClick={signOut}>
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {connected.supportsMessageSigning && (
                       <button
                         type="button"
-                        className="btn btn-p cut-s mt-1.5 self-start"
-                        disabled={!connection}
-                        onClick={() => setChoosing(true)}
+                        className="btn btn-p btn-w"
+                        disabled={!session || busy}
+                        onClick={() => void session?.signIn()}
                       >
-                        Connect wallet
+                        {ended?.kind === "changed"
+                          ? `Sign in as ${shortAddress(connected.address)}`
+                          : "Sign in with wallet"}
                       </button>
-                    </>
-                  )}
-                </div>
-              </li>
-              <li className="acct-step">
-                <span
-                  className={`acct-num cut-s${connected ? " n-now" : ""}`}
-                  aria-hidden="true"
-                >
-                  2
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2">
-                    <h2 className="h3">Sign in to Katha</h2>
-                    <Badge
-                      tone={!connected ? "neu" : waiting ? "info" : "warn"}
-                      marker={false}
-                    >
-                      {!connected
-                        ? "After connecting"
-                        : waiting
-                          ? "Waiting for approval"
-                          : "Not signed in"}
-                    </Badge>
-                  </div>
-                  <p className="p">
-                    {!connected
-                      ? "After connecting, your wallet asks you to sign a short message. Signing is free and moves no funds."
-                      : waiting
-                        ? `Approve the sign-in message in ${connected.walletName}. It only proves this address is yours.`
-                        : "Your wallet will ask you to sign a short message. Signing is free and moves no funds."}
-                  </p>
-                  {connected && !connected.supportsMessageSigning && (
-                    <p className="p sm">
-                      This wallet account can&apos;t sign messages, so it can&apos;t
-                      sign in. Choose another account or wallet.
-                    </p>
-                  )}
-                  {connected && connected.supportsMessageSigning && !waiting && (
+                    )}
                     <button
                       type="button"
-                      className="btn btn-p cut-s mt-1.5 self-start"
-                      disabled={!session || busy}
-                      onClick={() => void session?.signIn()}
+                      className="btn btn-g"
+                      disabled={busy}
+                      onClick={() => void disconnect()}
                     >
-                      {ended?.kind === "changed"
-                        ? `Sign in as ${shortAddress(connected.address)}`
-                        : "Sign in with wallet"}
+                      Disconnect
                     </button>
-                  )}
-                  {waiting && connected && (
-                    <div
-                      role="status"
-                      className="mt-1.5 flex flex-wrap items-center gap-x-5 gap-y-3"
+                    <button
+                      type="button"
+                      className="lnk self-center"
+                      disabled={busy}
+                      onClick={() => setChoosing(true)}
                     >
-                      <Badge tone="info" marker={false} className="wait">
-                        Waiting for {connected.walletName}
-                      </Badge>
-                      <button type="button" className="lnk" onClick={signOut}>
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </li>
-            </ol>
+                      Change account
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           )}
         </section>
-        <aside
-          className="flex min-w-0 flex-col gap-5 pt-2"
-          style={{ flex: "1 1 300px" }}
-        >
-          <div className="flex flex-col gap-1.5">
-            <h2 className="h3 h3-aside">Connecting</h2>
-            <p className="p sm">
-              Shares your public address so Katha can show which artworks you own.
-              It&apos;s read-only.
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <h2 className="h3 h3-aside">Signing in</h2>
-            <p className="p sm">
-              Proves the address is yours by signing a message. It&apos;s free, moves no
-              funds, and unlocks private details like delivery requests.
-            </p>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <h2 className="h3 h3-aside">Signing out</h2>
-            <p className="p sm">
-              Private details disappear from this device at once. They also disappear if
-              your session expires or your wallet switches accounts.
-            </p>
-          </div>
-        </aside>
+        <details className="more">
+          <summary>About wallet sign-in</summary>
+          <p className="p sm">
+            Connecting shares your public address. Signing in proves that it is yours
+            with a free message signature and unlocks private requests. Signing out, an
+            expired session or a wallet account change hides those private details
+            immediately.
+          </p>
+        </details>
       </div>
       <WalletChooser
         open={choosing}

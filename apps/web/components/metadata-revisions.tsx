@@ -175,8 +175,8 @@ export function MetadataRevisionsPanel({ kathaId }: { kathaId: string }) {
         </Notice>
       )}
       {page && content && (
-        <div className="flex flex-wrap items-start gap-5">
-          <div className="flex min-w-0 flex-col gap-5" style={{ flex: "999 1 640px" }}>
+        <div className="workflow-layout">
+          <div className="flex min-w-0 flex-col gap-5">
             {!comparing ? (
               <section
                 className="panel cut panel-lg flex flex-col gap-4"

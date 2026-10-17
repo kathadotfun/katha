@@ -111,7 +111,7 @@ export function CustodyAdministrationPanel({ kathaId }: { kathaId: string }) {
   return (
     <div className="flex flex-col gap-6" aria-busy={state.busy}>
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-        <p className="p max-w-[46rem]">
+        <p className="p max-w-184">
           Confirm actual movement in person. Delivery requests and their contact details
           stay private. Updating a request and recording custody on chain are separate
           actions; digital ownership and artist attribution don&apos;t change.
@@ -143,8 +143,8 @@ export function CustodyAdministrationPanel({ kathaId }: { kathaId: string }) {
         </Notice>
       )}
       {page && held && (
-        <div className="flex flex-wrap items-start gap-5">
-          <div className="flex min-w-0 flex-col gap-5" style={{ flex: "999 1 620px" }}>
+        <div className="workflow-layout">
+          <div className="flex min-w-0 flex-col gap-5">
             {page.custody.unresolved && (
               <Notice tone="warn" icon="warning">
                 <p>

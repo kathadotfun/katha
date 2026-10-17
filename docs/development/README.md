@@ -33,6 +33,24 @@ existing visual tokens and reviewed brand assets. Preserve keyboard access,
 visible focus, reduced motion, responsive layouts and text labels for status.
 Private records must clear when a wallet/session changes.
 
+The interface uses Geist and Geist Mono, cotton-paper textures, and dark/light
+color tokens. The header theme switch persists only the theme preference; wallet
+sessions remain in memory. Public pages use the top navigation, while collector
+and operations pages use the responsive sidebar shell. Reuse those surfaces for
+additional forms, dialogs, loading and recovery states.
+
+Public navigation reveals on upward scrolling and hides after a short idle pause;
+open menus, pointer interaction and visible keyboard focus keep it available.
+Coarse mouse-wheel steps ease between positions, while precision gestures, touch,
+keyboard scrolling and nested scrollable controls retain native behavior. Reduced
+motion disables easing. The Back to top control restores focus to the main content.
+
+Introductory paintings under `apps/web/public/design/paintings` are labelled
+AI-generated design illustrations. They are not catalogue inventory, artist
+attributions or transaction evidence. Published artwork images come from the API.
+The new-artwork evidence picker hashes a user-selected file locally; it uploads
+only the digest through the existing draft form, never the evidence file.
+
 ## Database changes
 
 After changing a schema, generate and review a forward migration:

@@ -431,7 +431,7 @@ try {
   const catalogue = await explore("?category=PAUBHA");
   assert.equal(catalogue.status, 200);
   for (const text of [
-    "Every work published on Katha",
+    "Original paintings, each with a public record on Solana.",
     artworkFixture.title,
     artworkFixture.artist.displayName,
     `/storage/public/${artworkFixture.media[0].contentHash}.png`,
@@ -469,12 +469,12 @@ try {
   assert.ok(home.includes('href="/art/KATHA-PAUBHA-000001"'));
   assert.ok(home.includes('href="/artists/synthetic-artist"'));
   assert.ok(home.includes('href="https://katha.fun/"'));
-  assert.ok(home.includes('id="purpose"') && home.includes('id="traditions"'));
+  assert.ok(home.includes('id="hero-title"') && home.includes('id="traditions"'));
   assert.ok(home.includes("RWAs on Solana."));
   assert.ok(home.includes('id="collecting"'));
   for (const [mode, message] of [
-    ["EMPTY", "No works are published yet"],
-    ["UNAVAILABLE", "The Katha catalogue didn"],
+    ["EMPTY", "The first works are being documented"],
+    ["UNAVAILABLE", "The catalogue couldn"],
   ]) {
     homeMode = mode;
     const fallback = await globalThis.fetch(origin).then((response) => response.text());
@@ -559,6 +559,14 @@ try {
         artworkOutage = enabled;
       },
     });
+  }
+  if (process.argv.includes("--no-script")) {
+    const { runNoScriptChecks } = await import("./test-responsive-shell.mjs");
+    await runNoScriptChecks({ origin });
+  }
+  if (process.argv.includes("--scroll")) {
+    const { runScrollChecks } = await import("./test-responsive-shell.mjs");
+    await runScrollChecks({ origin });
   }
   if (process.argv.includes("--shell")) {
     const { runResponsiveShellChecks } = await import("./test-responsive-shell.mjs");

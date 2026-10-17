@@ -109,8 +109,8 @@ export function PurchaseQuotePanel({
 
   if (!auth.session)
     return (
-      <div className="mt-8 flex flex-wrap items-start gap-8">
-        <div className="panel cut panel-empty" style={{ flex: "999 1 600px" }}>
+      <div className="workflow-layout purchase-layout mt-8">
+        <div className="panel cut panel-empty">
           <p className="empty-title">Sign in to review this purchase</p>
           <p className="p max-w-xl">
             Purchase terms are prepared for a specific buyer wallet. Connect your wallet
@@ -189,8 +189,8 @@ export function PurchaseQuotePanel({
             </Link>
           </Notice>
         ))}
-      <div className="mt-8 flex flex-wrap items-start gap-8">
-        <div className="flex min-w-0 flex-col gap-6" style={{ flex: "999 1 600px" }}>
+      <div className="workflow-layout purchase-layout mt-8">
+        <div className="flex min-w-0 flex-col gap-6">
           <section
             className="panel cut panel-lg"
             aria-labelledby="purchase-quote-title"

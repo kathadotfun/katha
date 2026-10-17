@@ -161,8 +161,8 @@ export function OwnerListingPanel({
   }
   const errorCount = Number(Boolean(errors.price)) + Number(Boolean(errors.expiry));
   return (
-    <div className="mt-8 flex flex-wrap items-start gap-8">
-      <div className="flex min-w-0 flex-col gap-6" style={{ flex: "999 1 600px" }}>
+    <div className="workflow-layout mt-8">
+      <div className="flex min-w-0 flex-col gap-6">
         <section
           className="panel cut panel-lg"
           aria-labelledby="owner-listing-title"
@@ -458,7 +458,10 @@ export function OwnerListingPanel({
           </p>
         )}
       </div>
-      <aside className="flex min-w-0 flex-col gap-5 pt-2" style={{ flex: "1 1 300px" }}>
+      <aside
+        className="panel flex min-w-0 flex-col gap-5"
+        style={{ flex: "1 1 300px" }}
+      >
         <div className="flex flex-col gap-1.5">
           <h2 className="h3 h3-aside">Listing locks the asset</h2>
           <p className="p sm">

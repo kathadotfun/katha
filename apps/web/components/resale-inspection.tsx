@@ -155,10 +155,10 @@ export function ResaleInspectionPanel({
   const page = state.page;
   const view = page ? summary(page, kathaId) : null;
   return (
-    <div className="mt-8 flex flex-wrap items-start gap-8">
+    <div className="workflow-layout mt-8">
       <div
         className="flex min-w-0 flex-col gap-6"
-        style={{ flex: "999 1 600px" }}
+
         aria-busy={state.busy}
       >
         {state.error && (

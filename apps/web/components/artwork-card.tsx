@@ -22,7 +22,7 @@ export function ArtworkCard({
   const Heading = heading;
   const href = `/art/${artwork.kathaId}`;
   return (
-    <article className="flex min-w-0 flex-col" style={{ gap: large ? 20 : 18 }}>
+    <article className="card work min-w-0">
       <Link
         className="ph cut ratio-art"
         href={href}
@@ -34,7 +34,7 @@ export function ArtworkCard({
           <PhotoPlaceholder label="Photo not available yet" size={large ? 64 : 56} />
         )}
       </Link>
-      <div className="flex flex-col" style={{ gap: large ? 8 : 6 }}>
+      <div className="wb">
         <div className="flex flex-wrap items-center gap-2.5">
           <span className="chip-cat cut-s">
             {artworkCategoryLabels[artwork.category]}
@@ -43,7 +43,7 @@ export function ArtworkCard({
         </div>
         <Heading
           className="serif mt-1 mb-0 font-semibold"
-          style={{ fontSize: large ? 26 : 24, lineHeight: large ? 1.15 : 1.18 }}
+          style={{ fontSize: large ? 21 : 18, lineHeight: large ? 1.15 : 1.18 }}
         >
           <Link href={href} className="text-madder no-underline hover:underline">
             {artwork.title}

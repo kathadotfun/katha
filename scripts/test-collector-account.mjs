@@ -124,8 +124,10 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         if (value.items[0])
           value.items[0].assetAddress = fixture.expected.listing.asset;
         if (collectionMode === "EMPTY") value.items = [];
-        if (collectionMode === "COLLECTOR" && value.items[0])
+        if (collectionMode === "COLLECTOR" && value.items[0]) {
           value.items[0].custody.state = "COLLECTOR_HELD";
+          value.items[0].custody.heldByViewer = true;
+        }
         return route.fulfill({ headers, json: value });
       });
       await context.route(`${apiOrigin}/artworks/*/listing`, async (route) => {
@@ -160,6 +162,11 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
           return route.fulfill({ status: 204, headers });
         const path = new URL(route.request().url()).pathname;
         if (path.endsWith("logout")) return route.fulfill({ status: 204, headers });
+        if (path.endsWith("permissions"))
+          return route.fulfill({
+            headers,
+            json: { session: issuedSession, admin: false, verifier: false },
+          });
         const input = route.request().postDataJSON();
         if (path.endsWith("challenge")) {
           const challengeId = "aaaaaaaa-1111-4111-8111-111111111111",
@@ -195,7 +202,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       // Header links stay client-side, so the in-memory wallet session survives.
       // The sticky header hides while reading; scrolling up brings it back, as for a reader.
       async function revealHeader() {
-        const header = page.locator(".hdr");
+        const header = page.locator(".hdr, .dashboard-header");
         if ((await header.getAttribute("data-hidden")) !== "true") return;
         await page.mouse.wheel(0, -200);
         await expect(header).not.toHaveAttribute("data-hidden", "true");
@@ -209,11 +216,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
             .locator("#mobile-navigation")
             .getByRole("link", { name: "Account", exact: true })
             .click();
-        } else
-          await page
-            .getByRole("navigation", { name: "Main", exact: true })
-            .getByRole("link", { name: /^Account, signed in as/ })
-            .click();
+        } else await page.locator('.side-foot a[href="/account"]').click();
         await expect(page).toHaveURL(`${origin}/account`);
       }
       async function audit() {
@@ -226,7 +229,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
       await page.goto(`${origin}/account`);
       const main = page.getByRole("main");
       await expect(
-        main.getByRole("heading", { name: "Account", exact: true }),
+        main.getByRole("heading", { name: "Sign in with your wallet", exact: true }),
       ).toBeVisible();
       assert.equal(accountCalls, 0);
       await expect(main).toContainText("Connecting shares your public address");
@@ -916,7 +919,7 @@ export async function runCollectorAccountJourney({ origin, apiOrigin }) {
         .getByRole("button", { name: "Approve in wallet", exact: true })
         .click();
       await expect(main).toContainText(
-        "Wallet approval or preflight was not completed",
+        "The wallet did not return a signature (cancelled, rejected or unsupported). Nothing was sent.",
       );
       assert.equal(
         await page.evaluate(() => globalThis.__kathaWalletTest.transactionCalls()),
