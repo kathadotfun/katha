@@ -90,6 +90,7 @@ function steps(state: TransactionSnapshot): Step[] {
   ];
   const last = base.length - 1;
   const ownerStep = purchase ? 5 : -1;
+  const stoppedAt = state.feeLamports === null ? (state.operation ? 1 : 0) : 2;
   // `at` is the current step; earlier steps are done.
   const position: Record<TransactionPhase, number> = {
     idle: 0,
@@ -101,7 +102,7 @@ function steps(state: TransactionSnapshot): Step[] {
     confirming: 4,
     unknown: 3,
     expired: state.signature ? 3 : 2,
-    "not-completed": 2,
+    "not-completed": stoppedAt,
     failed: 4,
     "indexing-delay": purchase
       ? state.purchaseOwnerConfirmed
@@ -116,7 +117,9 @@ function steps(state: TransactionSnapshot): Step[] {
       ? 4
       : state.phase === "not-completed" ||
           (state.phase === "expired" && !state.signature)
-        ? 2
+        ? state.phase === "not-completed"
+          ? stoppedAt
+          : 2
         : undefined;
   const warnAt =
     state.phase === "unknown" || (state.phase === "expired" && state.signature)
@@ -319,8 +322,9 @@ export function TransactionReviewView({
             <div className="kv">
               <dt>Network fee</dt>
               <dd>
-                Estimated {state.feeLamports ?? "pending"} lamports; account rent may
-                also apply.{" "}
+                {state.feeLamports === null
+                  ? "Network fee not yet available; account rent may also apply. "
+                  : `Estimated ${state.feeLamports} lamports; account rent may also apply. `}
                 {operation.kind === "PURCHASE_ARTWORK"
                   ? "The test-token payment above is part of this operation."
                   : "No token payment is included in this operation."}

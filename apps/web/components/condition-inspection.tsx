@@ -112,16 +112,14 @@ export function ConditionInspectionPanel({ kathaId }: { kathaId: string }) {
       {state.error && (
         <Notice tone="err">
           <p>{state.error}</p>
-          {!page && (
-            <button
-              className="btn btn-o btn-sm self-start"
-              type="button"
-              disabled={state.busy || !workflow}
-              onClick={() => void workflow?.read()}
-            >
-              Reload inspection state
-            </button>
-          )}
+          <button
+            className="btn btn-o btn-sm self-start"
+            type="button"
+            disabled={state.busy || !workflow}
+            onClick={() => void workflow?.read()}
+          >
+            Reload inspection state
+          </button>
         </Notice>
       )}
       {page && (
@@ -285,7 +283,7 @@ function InspectionContent({
             </div>
           </dl>
         </section>
-        <ResaleInspectionPanel kathaId={kathaId} verifier />
+        {page.chain.minted && <ResaleInspectionPanel kathaId={kathaId} verifier />}
       </div>
 
       <div className="workflow-layout">

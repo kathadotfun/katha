@@ -360,6 +360,33 @@ it("does not implicitly grant routine powers to the root or to another operator 
   ).rejects.toMatchObject({ code: "FORBIDDEN" });
 });
 
+it("checks namespace and route permission together while rechecking each later request", async () => {
+  const f = fixture();
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: grantFor(f, 1),
+  });
+  await expect(
+    f.authorization.requireRole("Bearer admin", "admin", 4),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(f.readAuthorities).toHaveBeenCalledTimes(1);
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: grantFor(f, 4),
+  });
+  expect(
+    (await f.authorization.requireRole("Bearer admin", "admin", 4)).walletAddress,
+  ).toBe(f.admin);
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: grantFor(f, 0),
+  });
+  await expect(
+    f.authorization.requireRole("Bearer admin", "admin", 4),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(f.readAuthorities).toHaveBeenCalledTimes(3);
+});
+
 it("denies protected reads and database writes when chain permission reads fail or pause", async () => {
   const f = fixture();
   f.readAuthorities.mockRejectedValue(new Error("RPC unavailable"));

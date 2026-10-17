@@ -862,6 +862,62 @@ test("Kit RPC checks genesis, preserves simulation bytes and submits once with p
   }
 });
 
+test("browser retries transient preapproval reads without changing simulation bytes or retrying submissions", async () => {
+  const f = await fixture();
+  const originalFetch = globalThis.fetch;
+  const { createTransactionRpc } = await import("../lib/transaction-rpc.ts");
+  try {
+    for (const target of [
+      "getGenesisHash",
+      "getBlockHeight",
+      "simulateTransaction",
+      "getFeeForMessage",
+      "sendTransaction",
+    ]) {
+      let failures = 0;
+      const calls: { method: string; params: unknown[] }[] = [];
+      globalThis.fetch = async (input, init) => {
+        const body = (await new Request(input, init).json()) as {
+          id: number;
+          method: string;
+          params: unknown[];
+        };
+        calls.push(body);
+        if (body.method === target && failures++ === 0)
+          return new Response("Synthetic rate limit", { status: 429 });
+        const result =
+          body.method === "getGenesisHash"
+            ? "11111111111111111111111111111111"
+            : body.method === "getBlockHeight"
+              ? 1
+              : body.method === "simulateTransaction"
+                ? { context: { slot: 2 }, value: { err: null, unitsConsumed: 100 } }
+                : body.method === "getFeeForMessage"
+                  ? { context: { slot: 2 }, value: 5000 }
+                  : f.signature;
+        return Response.json({ jsonrpc: "2.0", id: body.id, result });
+      };
+      const rpc = createTransactionRpc("localnet");
+      const signal = new AbortController().signal;
+      if (target === "sendTransaction") {
+        await assert.rejects(rpc.submit(f.wire, signal));
+        assert.equal(calls.filter((c) => c.method === target).length, 1);
+      } else {
+        if (target === "getBlockHeight") assert.equal(await rpc.height(signal), 1n);
+        else
+          assert.equal((await rpc.simulate(f.operation, signal)).feeLamports, "5000");
+        assert.equal(calls.filter((c) => c.method === target).length, 2);
+        for (const call of calls.filter((c) => c.method === "simulateTransaction"))
+          assert.equal(call.params[0], f.operation.transactionBase64);
+        assert.equal(calls.filter((c) => c.method === "sendTransaction").length, 0);
+      }
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    f.flow.dispose();
+  }
+});
+
 test("protected registration indexing checks preserve finalized receipts during read outages", async () => {
   const f = await fixture();
   let indexed = false,

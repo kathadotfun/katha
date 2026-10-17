@@ -91,6 +91,22 @@ test("transaction panel displays distinct pending, failure, finalization and ind
   );
 });
 
+test("a failed preapproval simulation does not mark simulation complete or blame wallet approval", async () => {
+  const { registrationFixture } = await import("./fixtures/registration.ts");
+  const { operation } = await registrationFixture();
+  const html = render({
+    ...idleTransactionSnapshot,
+    phase: "not-completed",
+    operation,
+  });
+  assert.match(html, /Network fee not yet available/);
+  const items = html.match(/<li[\s\S]*?<\/li>/g) ?? [];
+  assert.ok(items[1]?.includes("failed"));
+  assert.ok(!items[1]?.includes("d-done"));
+  assert.ok(!items[2]?.includes("d-err"));
+  assert.ok(!html.includes("Estimated pending lamports"));
+});
+
 test("purchase review shows exact payment/recipients and separates Core ownership from indexer catch-up", async () => {
   const { purchaseFixture } = await import("./fixtures/purchase.ts");
   const { operation } = await purchaseFixture();

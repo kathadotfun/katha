@@ -148,6 +148,37 @@ it("fetches finalized configuration on every read with a bounded abort signal", 
   await expect(read()).rejects.toThrow("RPC failure");
 });
 
+it("shares only in-flight permission reads for the same wallet and refreshes after completion", async () => {
+  const { account, state } = await fixture();
+  const fetch = vi.mocked(fetchEncodedAccount);
+  fetch.mockResolvedValue(account);
+  const read = createRegistryAuthorityReader({ cluster: "localnet" });
+  const first = read(ADMIN);
+  const concurrent = read(ADMIN);
+  expect(concurrent).toBe(first);
+  await Promise.all([first, concurrent]);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  state.registrationAuthority = VERIFIER;
+  account.data = Uint8Array.from(getKathaConfigEncoder().encode(state));
+  expect((await read(ADMIN)).registrationAuthority).toBe(VERIFIER);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  await Promise.all([read(ADMIN), read(VERIFIER)]);
+  expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+it("discards a failed in-flight read before the next permission check", async () => {
+  const { account } = await fixture();
+  const fetch = vi.mocked(fetchEncodedAccount);
+  fetch
+    .mockRejectedValueOnce(new Error("Synthetic transport failure"))
+    .mockResolvedValue(account);
+  const read = createRegistryAuthorityReader({ cluster: "localnet" });
+  const failed = await Promise.allSettled([read(ADMIN), read(ADMIN)]);
+  expect(failed.every((result) => result.status === "rejected")).toBe(true);
+  expect((await read(ADMIN)).registrationAuthority).toBe(ADMIN);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
 it("binds collection filters to fresh finalized validated configuration", async () => {
   const { account, state } = await fixture();
   const fetch = vi.mocked(fetchEncodedAccount);

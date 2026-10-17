@@ -55,9 +55,16 @@ export function createAuthorization(
   async function requireRole(
     authorization: string | undefined,
     role: AdministrativeRole,
+    requiredRoles?: number,
   ): Promise<WalletSession> {
     const session = await sessions.authenticate(authorization);
-    if (!permitted(session, await current(session), role))
+    const authorities = await current(session);
+    if (
+      !permitted(session, authorities, role) ||
+      (requiredRoles !== undefined &&
+        authorities.operatorAuthorization &&
+        !(authorities.operatorAuthorization.roles & requiredRoles))
+    )
       throw new DomainError("FORBIDDEN");
     return session;
   }

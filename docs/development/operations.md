@@ -187,6 +187,14 @@ governance-bank reads within an eight-second overall read deadline. A retry read
 the grant and chain clock again; no permission is cached. Exhausted transient
 provider failures return a service error rather than an authorization denial.
 Malformed accounts, revoked/expired grants and pauses still deny access.
+Concurrent permission reads for the same wallet share only the in-flight lookup;
+completed results and failures are discarded. Namespace and route permissions use
+one snapshot at the middleware boundary; later write checks still read fresh grants.
+Browser genesis, height, simulation and fee reads use bounded retries with cancellation,
+preserving exact transaction bytes. Sending a transaction is not automatically retried
+by this read helper. On condition-page errors, reload saved inspection state and reuse
+the existing prepared report before preparing a fresh transaction. Collector resale
+requests are loaded only after minting, when that workflow applies.
 
 For a full replay from the acknowledged start, or a bounded historical replay:
 

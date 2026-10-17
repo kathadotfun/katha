@@ -28,7 +28,8 @@ export async function readRegistryAuthorities(
 /** Fresh finalized reads; no authority cache, signer, or transaction submission. */
 export function createRegistryAuthorityReader(config: KathaRpcConfig) {
   const client = createKathaRpcClient(config);
-  return async (wallet?: string): Promise<RegistryAuthorities> => {
+  const pending = new Map<string | undefined, Promise<RegistryAuthorities>>();
+  async function readFresh(wallet?: string): Promise<RegistryAuthorities> {
     // Bound permission recovery below the browser request timeout; never reuse a grant.
     const signal = AbortSignal.timeout(8000);
     const [configAddress] = await findConfigPda();
@@ -65,6 +66,15 @@ export function createRegistryAuthorityReader(config: KathaRpcConfig) {
         signal,
       ),
     };
+  }
+  return (wallet?: string): Promise<RegistryAuthorities> => {
+    const active = pending.get(wallet);
+    if (active) return active;
+    // Share only concurrent reads for the same identity. Completed results are
+    // discarded before the next check, including failures and revoked grants.
+    const read = readFresh(wallet).finally(() => pending.delete(wallet));
+    pending.set(wallet, read);
+    return read;
   };
 }
 

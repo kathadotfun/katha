@@ -200,10 +200,6 @@ export function createApi(
         await sessions.authenticate(c.req.header("Authorization"));
         throw new DomainError("FORBIDDEN");
       }
-      c.set(
-        "walletSession",
-        await authorization.requireRole(c.req.header("Authorization"), role),
-      );
       // Sessions prove identity. Finalized grants independently authorize each
       // protected route, including database-only actions and private reads.
       const path = c.req.path;
@@ -221,7 +217,10 @@ export function createApi(
                 : c.req.method === "GET"
                   ? R.catalog | R.registrar | R.custody | R.inventorySales
                   : R.catalog;
-      await authorization.requirePermission(c.req.header("Authorization"), required);
+      c.set(
+        "walletSession",
+        await authorization.requireRole(c.req.header("Authorization"), role, required),
+      );
       await next();
     });
   }

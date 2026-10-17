@@ -7,6 +7,7 @@ import {
   getSignatureFromTransaction,
 } from "@solana/kit";
 import { assertKathaRpcCluster } from "@katha/solana/rpc-cluster";
+import { retryRpcRead } from "@katha/solana";
 
 import { decodeCanonicalTransaction } from "./prepared-transaction.ts";
 export function publicTransactionRpcUrl(
@@ -35,47 +36,60 @@ export function createTransactionRpc(cluster: "localnet" | "devnet", url?: strin
   const rpc = createSolanaRpc(publicTransactionRpcUrl(cluster, url));
   async function check(signal: AbortSignal) {
     assertKathaRpcCluster(
-      await rpc.getGenesisHash().send({ abortSignal: signal }),
+      await retryRpcRead(
+        () => rpc.getGenesisHash().send({ abortSignal: signal }),
+        signal,
+      ),
       cluster,
     );
   }
   return {
     async height(signal: AbortSignal) {
       await check(signal);
-      return rpc
-        .getBlockHeight({ commitment: "confirmed" })
-        .send({ abortSignal: signal });
+      return retryRpcRead(
+        () =>
+          rpc.getBlockHeight({ commitment: "confirmed" }).send({ abortSignal: signal }),
+        signal,
+      );
     },
     async simulate(operation: WalletOperation, signal: AbortSignal) {
       await check(signal);
-      const response = await rpc
-        .simulateTransaction(
-          getBase64EncodedWireTransaction(
-            decodeCanonicalTransaction(operation.transactionBase64),
-          ),
-          {
-            encoding: "base64",
-            commitment: "confirmed",
-            sigVerify: false,
-            replaceRecentBlockhash: false,
-            minContextSlot: BigInt(operation.simulation.slot),
-          },
-        )
-        .send({ abortSignal: signal });
+      const response = await retryRpcRead(
+        () =>
+          rpc
+            .simulateTransaction(
+              getBase64EncodedWireTransaction(
+                decodeCanonicalTransaction(operation.transactionBase64),
+              ),
+              {
+                encoding: "base64",
+                commitment: "confirmed",
+                sigVerify: false,
+                replaceRecentBlockhash: false,
+                minContextSlot: BigInt(operation.simulation.slot),
+              },
+            )
+            .send({ abortSignal: signal }),
+        signal,
+      );
       if (
         response.value.err !== null ||
         typeof response.context.slot !== "bigint" ||
         response.context.slot < BigInt(operation.simulation.slot)
       )
         throw new Error("Simulation rejected.");
-      const fee = await rpc
-        .getFeeForMessage(
-          getBase64Decoder().decode(
-            decodeCanonicalTransaction(operation.transactionBase64).messageBytes,
-          ) as TransactionMessageBytesBase64,
-          { commitment: "confirmed" },
-        )
-        .send({ abortSignal: signal });
+      const fee = await retryRpcRead(
+        () =>
+          rpc
+            .getFeeForMessage(
+              getBase64Decoder().decode(
+                decodeCanonicalTransaction(operation.transactionBase64).messageBytes,
+              ) as TransactionMessageBytesBase64,
+              { commitment: "confirmed" },
+            )
+            .send({ abortSignal: signal }),
+        signal,
+      );
       if (typeof fee.value !== "bigint" || fee.value < 0n)
         throw new Error("Fee unavailable.");
       return {
