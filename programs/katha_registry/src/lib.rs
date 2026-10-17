@@ -2,6 +2,8 @@ use anchor_lang::prelude::*;
 
 pub mod multisig;
 pub use multisig::*;
+pub mod governance;
+pub use governance::*;
 
 declare_id!("Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr");
 
@@ -16,10 +18,236 @@ pub const CONDITION_REPORT_SEED: &[u8] = b"condition-report";
 pub const CUSTODY_HEAD_SEED: &[u8] = b"custody";
 pub const CUSTODY_TRANSITION_SEED: &[u8] = b"custody-transition";
 pub const CORE_ASSET_SEED: &[u8] = b"core-asset";
+// Counterpart program identity, not a wallet or operational authority.
+pub const MARKETPLACE_PROGRAM_ID: Pubkey =
+    Pubkey::from_str_const("B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq");
 
 #[program]
 pub mod katha_registry {
     use super::*;
+
+    pub fn activate_governance(
+        ctx: Context<ActivateGovernance>,
+        vault_index: u8,
+        expected_members: [Pubkey; 3],
+        expected_time_lock: u32,
+    ) -> Result<()> {
+        require!(
+            !is_governed(&ctx.accounts.config),
+            RegistryError::InvalidGovernance
+        );
+        validate_squads_vault(
+            &ctx.accounts.multisig.to_account_info(),
+            ctx.accounts.authority.key(),
+            vault_index,
+            expected_members,
+            expected_time_lock,
+        )?;
+        let market = &ctx.accounts.marketplace_program;
+        let program_data = Pubkey::find_program_address(
+            &[market.key().as_ref()],
+            &anchor_lang::solana_program::bpf_loader_upgradeable::ID,
+        )
+        .0;
+        require_keys_eq!(
+            program_data,
+            ctx.accounts.marketplace_program_data.key(),
+            RegistryError::InvalidProgramData
+        );
+        let program_bytes = market.try_borrow_data()?;
+        require!(
+            program_bytes.len() == 36
+                && program_bytes[..4] == [2, 0, 0, 0]
+                && program_bytes[4..36] == program_data.to_bytes(),
+            RegistryError::InvalidProgramData
+        );
+        let market_config = &ctx.accounts.marketplace_config;
+        require_keys_eq!(
+            *market_config.owner,
+            market.key(),
+            RegistryError::InvalidGovernance
+        );
+        require_keys_eq!(
+            market_config.key(),
+            Pubkey::find_program_address(&[b"marketplace-config"], &market.key()).0,
+            RegistryError::InvalidGovernance
+        );
+        let bytes = market_config.try_borrow_data()?;
+        require!(
+            bytes.len() == 247
+                && bytes[..8] == [169, 22, 247, 131, 182, 200, 81, 124]
+                && bytes[8] == 2
+                && bytes[9..41] == ctx.accounts.authority.key().to_bytes()
+                && bytes[41..73] == crate::ID.to_bytes()
+                && bytes[73..105] == ctx.accounts.config.key().to_bytes()
+                && bytes[105..137] == ctx.accounts.config.collection.to_bytes(),
+            RegistryError::InvalidGovernance
+        );
+        let governance = &mut ctx.accounts.governance;
+        governance.version = 1;
+        governance.config = ctx.accounts.config.key();
+        governance.marketplace_program = market.key();
+        governance.marketplace_config = market_config.key();
+        governance.legacy_registrar = ctx.accounts.config.registration_authority;
+        governance.custody_identity = ctx.accounts.config.custody_authority;
+        governance.revision = 1;
+        governance.pauses = 0;
+        governance.holds = Vec::new();
+        governance.bump = ctx.bumps.governance;
+        // This PDA cannot sign a top-level legacy registration. No downgrade setter exists.
+        ctx.accounts.config.registration_authority = governance.key();
+        Ok(())
+    }
+
+    pub fn create_role_grant(
+        ctx: Context<CreateRoleGrant>,
+        wallet: Pubkey,
+        roles: u16,
+        expires_at: i64,
+    ) -> Result<()> {
+        require!(
+            wallet != Pubkey::default()
+                && wallet != ctx.accounts.config.authority
+                && wallet != governance_address(),
+            RegistryError::InvalidRoleGrant
+        );
+        let grant = &mut ctx.accounts.grant;
+        grant.version = 1;
+        grant.governance = ctx.accounts.governance.key();
+        grant.wallet = wallet;
+        grant.revision = 0;
+        grant.bump = ctx.bumps.grant;
+        write_grant(grant, roles, true, expires_at, ctx.accounts.authority.key())
+    }
+
+    pub fn update_role_grant(
+        ctx: Context<UpdateRoleGrant>,
+        expected_revision: u64,
+        roles: u16,
+        enabled: bool,
+        expires_at: i64,
+    ) -> Result<()> {
+        let root = require_root_or_guardian(
+            &ctx.accounts.config,
+            ctx.accounts.authority.key(),
+            ctx.remaining_accounts,
+        )?;
+        let grant = &mut ctx.accounts.grant;
+        require!(
+            grant.revision == expected_revision,
+            RegistryError::StaleGovernance
+        );
+        // Guardians may only disable exactly the existing grant. They cannot extend it.
+        require!(
+            root || (!enabled && roles == grant.roles && expires_at == grant.expires_at),
+            RegistryError::UnauthorizedOperator
+        );
+        write_grant(
+            grant,
+            roles,
+            enabled,
+            expires_at,
+            ctx.accounts.authority.key(),
+        )
+    }
+
+    pub fn set_governance_pause(
+        ctx: Context<SetGovernancePause>,
+        expected_revision: u64,
+        pauses: u8,
+    ) -> Result<()> {
+        let root = require_root_or_guardian(
+            &ctx.accounts.config,
+            ctx.accounts.authority.key(),
+            ctx.remaining_accounts,
+        )?;
+        let governance = &mut ctx.accounts.governance;
+        require!(
+            pauses & !ALL_PAUSES == 0 && (root || pauses | governance.pauses == pauses),
+            RegistryError::UnauthorizedOperator
+        );
+        governance.advance(expected_revision)?;
+        governance.pauses = pauses;
+        Ok(())
+    }
+
+    pub fn place_artwork_hold(
+        ctx: Context<SetArtworkHold>,
+        expected_revision: u64,
+        reason_hash: [u8; 32],
+    ) -> Result<()> {
+        require_root_or_guardian(
+            &ctx.accounts.config,
+            ctx.accounts.authority.key(),
+            ctx.remaining_accounts,
+        )?;
+        let head_info = &ctx.accounts.head;
+        let condition_version = if head_info.data_is_empty() {
+            require_keys_eq!(
+                *head_info.owner,
+                anchor_lang::system_program::ID,
+                RegistryError::InvalidConditionRelationship
+            );
+            0
+        } else {
+            require_keys_eq!(
+                *head_info.owner,
+                crate::ID,
+                RegistryError::InvalidConditionRelationship
+            );
+            let head = ConditionHead::try_deserialize(&mut head_info.try_borrow_data()?.as_ref())?;
+            require_keys_eq!(
+                head.artwork,
+                ctx.accounts.artwork.key(),
+                RegistryError::InvalidConditionRelationship
+            );
+            head.version
+        };
+        let governance = &mut ctx.accounts.governance;
+        require!(
+            reason_hash != [0; 32]
+                && governance.holds.len() < MAX_HOLDS
+                && !governance
+                    .holds
+                    .iter()
+                    .any(|hold| hold.artwork == ctx.accounts.artwork.key()),
+            RegistryError::InvalidGovernance
+        );
+        governance.advance(expected_revision)?;
+        governance.holds.push(ArtworkIncident {
+            artwork: ctx.accounts.artwork.key(),
+            condition_version,
+            placed_at: Clock::get()?.unix_timestamp,
+            reason_hash,
+        });
+        Ok(())
+    }
+
+    pub fn clear_artwork_hold(
+        ctx: Context<ClearArtworkHold>,
+        expected_revision: u64,
+    ) -> Result<()> {
+        let governance = &mut ctx.accounts.governance;
+        let hold = governance
+            .holds
+            .iter()
+            .find(|hold| hold.artwork == ctx.accounts.artwork.key())
+            .ok_or(RegistryError::InvalidGovernance)?;
+        let report = &ctx.accounts.condition_report;
+        require!(
+            report.version > hold.condition_version
+                && report.recorded_at >= hold.placed_at
+                && report.inspected_at >= hold.placed_at
+                && report.inspected_at <= report.recorded_at
+                && report.verifier != ctx.accounts.artwork.registered_by,
+            RegistryError::IndependentVerifierRequired
+        );
+        governance.advance(expected_revision)?;
+        governance
+            .holds
+            .retain(|hold| hold.artwork != ctx.accounts.artwork.key());
+        Ok(())
+    }
 
     /// Root handover only; operational roles, historical attestations and sale terms do not move.
     pub fn transfer_multisig_authority(
@@ -124,6 +352,13 @@ pub mod katha_registry {
         creation_year: u16,
         authorship_evidence_hash: [u8; 32],
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.registration_authority.key(),
+            REGISTRAR,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
         let serial = katha_id
             .strip_prefix(category.id_prefix())
             .ok_or(RegistryError::InvalidArtworkId)?;
@@ -192,6 +427,20 @@ pub mod katha_registry {
         ctx: Context<VerifyArtwork>,
         expected_authorship_evidence_hash: [u8; 32],
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.verifier_authority.key(),
+            ARTWORK_VERIFIER,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
+        if is_governed(&ctx.accounts.config) {
+            require_keys_neq!(
+                ctx.accounts.artwork.registered_by,
+                ctx.accounts.verifier_authority.key(),
+                RegistryError::IndependentVerifierRequired
+            );
+        }
         let artwork = &ctx.accounts.artwork;
         require!(
             expected_authorship_evidence_hash == artwork.authorship_evidence_hash,
@@ -220,6 +469,13 @@ pub mod katha_registry {
         document_hash: [u8; 32],
         uri: String,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.registration_authority.key(),
+            REGISTRAR,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
         validate_metadata_commitment(&document_hash, &uri)?;
         let artwork = &ctx.accounts.artwork;
         let revision = &mut ctx.accounts.revision;
@@ -257,6 +513,13 @@ pub mod katha_registry {
         document_hash: [u8; 32],
         uri: String,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.registration_authority.key(),
+            REGISTRAR,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
         let head = &mut ctx.accounts.head;
         require!(
             head.version == expected_version,
@@ -301,6 +564,13 @@ pub mod katha_registry {
         document_hash: [u8; 32],
         uri: String,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.registration_authority.key(),
+            REGISTRAR,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
         use mpl_core::instructions::UpdateV1CpiBuilder;
         use mpl_core::types::UpdateAuthority;
 
@@ -391,6 +661,20 @@ pub mod katha_registry {
         inspector_id: [u8; 16],
         inspected_at: i64,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.verifier_authority.key(),
+            ARTWORK_VERIFIER,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
+        if is_governed(&ctx.accounts.config) {
+            require_keys_neq!(
+                ctx.accounts.artwork.registered_by,
+                ctx.accounts.verifier_authority.key(),
+                RegistryError::IndependentVerifierRequired
+            );
+        }
         require!(
             reason == ConditionReason::InitialVerification,
             RegistryError::InvalidInitialConditionReason
@@ -456,6 +740,20 @@ pub mod katha_registry {
         inspector_id: [u8; 16],
         inspected_at: i64,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.verifier_authority.key(),
+            ARTWORK_VERIFIER,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
+        if is_governed(&ctx.accounts.config) {
+            require_keys_neq!(
+                ctx.accounts.artwork.registered_by,
+                ctx.accounts.verifier_authority.key(),
+                RegistryError::IndependentVerifierRequired
+            );
+        }
         let head = &mut ctx.accounts.head;
         require!(
             head.version == expected_version,
@@ -533,6 +831,20 @@ pub mod katha_registry {
         inspector_id: [u8; 16],
         inspected_at: i64,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.verifier_authority.key(),
+            ARTWORK_VERIFIER,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
+        if is_governed(&ctx.accounts.config) {
+            require_keys_neq!(
+                ctx.accounts.artwork.registered_by,
+                ctx.accounts.verifier_authority.key(),
+                RegistryError::IndependentVerifierRequired
+            );
+        }
         let head = &mut ctx.accounts.head;
         require!(
             head.version == expected_version,
@@ -635,10 +947,21 @@ pub mod katha_registry {
         action: CustodyAction,
         collector: Option<Pubkey>,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.custody_authority.key(),
+            CUSTODY,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
         let artwork = &ctx.accounts.artwork;
         let authority = ctx.accounts.custody_authority.key();
-        let (state, subject) =
-            custody_destination(action, CustodyState::Unknown, collector, authority)?;
+        let (state, subject) = custody_destination(
+            action,
+            CustodyState::Unknown,
+            collector,
+            ctx.accounts.config.custody_authority,
+        )?;
         let recorded_at = Clock::get()?.unix_timestamp;
         let transition = &mut ctx.accounts.transition;
         transition.artwork = artwork.key();
@@ -683,6 +1006,13 @@ pub mod katha_registry {
         action: CustodyAction,
         collector: Option<Pubkey>,
     ) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.custody_authority.key(),
+            CUSTODY,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
         let head = &mut ctx.accounts.head;
         require!(
             head.revision == expected_revision,
@@ -696,7 +1026,12 @@ pub mod katha_registry {
         let from_subject = head.subject;
         let artwork = &ctx.accounts.artwork;
         let authority = ctx.accounts.custody_authority.key();
-        let (state, subject) = custody_destination(action, from_state, collector, authority)?;
+        let (state, subject) = custody_destination(
+            action,
+            from_state,
+            collector,
+            ctx.accounts.config.custody_authority,
+        )?;
         let recorded_at = Clock::get()?.unix_timestamp;
 
         let transition = &mut ctx.accounts.transition;
@@ -733,6 +1068,13 @@ pub mod katha_registry {
     }
 
     pub fn mint_artwork(ctx: Context<MintArtwork>) -> Result<()> {
+        authorize_operator(
+            &ctx.accounts.config,
+            ctx.accounts.registration_authority.key(),
+            REGISTRAR,
+            Some(ctx.accounts.artwork.key()),
+            ctx.remaining_accounts,
+        )?;
         use mpl_core::instructions::CreateV2CpiBuilder;
 
         let artwork = &ctx.accounts.artwork;
@@ -1167,7 +1509,7 @@ pub struct RegisterArtwork<'info> {
         bump
     )]
     pub artwork: Account<'info, ArtworkRecord>,
-    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    #[account(mut)]
     pub registration_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1190,7 +1532,7 @@ pub struct VerifyArtwork<'info> {
         bump
     )]
     pub verification: Account<'info, ArtworkVerification>,
-    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    #[account(mut)]
     pub verifier_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1222,7 +1564,7 @@ pub struct InitializeMetadata<'info> {
         bump
     )]
     pub revision: Account<'info, MetadataRevision>,
-    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    #[account(mut)]
     pub registration_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1254,7 +1596,7 @@ pub struct ReviseUnmintedMetadata<'info> {
         bump
     )]
     pub revision: Account<'info, MetadataRevision>,
-    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    #[account(mut)]
     pub registration_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1302,7 +1644,7 @@ pub struct ReviseMintedMetadata<'info> {
     /// CHECK: Bound Core asset is parsed and validated before CPI.
     #[account(mut, seeds = [CORE_ASSET_SEED, artwork.key().as_ref()], bump, owner = mpl_core::ID @ RegistryError::InvalidCoreAsset)]
     pub asset: UncheckedAccount<'info>,
-    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    #[account(mut)]
     pub registration_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
     /// CHECK: Program ID is fixed; Core validates the CPI accounts.
@@ -1344,7 +1686,7 @@ pub struct InitializeCondition<'info> {
         bump
     )]
     pub report: Account<'info, ConditionAttestation>,
-    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    #[account(mut)]
     pub verifier_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1382,7 +1724,7 @@ pub struct RecordUnmintedCondition<'info> {
         bump
     )]
     pub report: Account<'info, ConditionAttestation>,
-    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    #[account(mut)]
     pub verifier_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1426,7 +1768,7 @@ pub struct RecordMintedCondition<'info> {
     /// CHECK: Bound canonical Core asset; handler validates its collection and owner.
     #[account(seeds = [CORE_ASSET_SEED, artwork.key().as_ref()], bump, owner = mpl_core::ID @ RegistryError::InvalidCoreAsset)]
     pub asset: UncheckedAccount<'info>,
-    #[account(mut, address = config.verifier_authority @ RegistryError::UnauthorizedVerifier)]
+    #[account(mut)]
     pub verifier_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1457,7 +1799,7 @@ pub struct InitializeCustody<'info> {
         bump
     )]
     pub transition: Account<'info, CustodyTransition>,
-    #[account(mut, address = config.custody_authority @ RegistryError::UnauthorizedCustody)]
+    #[account(mut)]
     pub custody_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1488,7 +1830,7 @@ pub struct TransitionCustody<'info> {
         bump
     )]
     pub transition: Account<'info, CustodyTransition>,
-    #[account(mut, address = config.custody_authority @ RegistryError::UnauthorizedCustody)]
+    #[account(mut)]
     pub custody_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
 }
@@ -1551,7 +1893,7 @@ pub struct MintArtwork<'info> {
     /// CHECK: Core creates this uninitialized Registry-derived asset PDA through CPI.
     #[account(mut, seeds = [CORE_ASSET_SEED, artwork.key().as_ref()], bump)]
     pub asset: UncheckedAccount<'info>,
-    #[account(mut, address = config.registration_authority @ RegistryError::UnauthorizedRegistration)]
+    #[account(mut)]
     pub registration_authority: Signer<'info>,
     pub system_program: Program<'info, System>,
     /// CHECK: The program ID is fixed; Core owns and validates the asset on CPI.
@@ -1768,6 +2110,20 @@ pub enum RegistryError {
     UpgradeAuthorityMismatch,
     #[msg("The accepting vault is already the root authority")]
     UnchangedAuthority,
+    #[msg("Canonical active governance is required")]
+    InvalidGovernance,
+    #[msg("The reviewed governance or grant revision is stale")]
+    StaleGovernance,
+    #[msg("This operation is paused")]
+    GovernancePaused,
+    #[msg("This artwork is on an incident hold")]
+    ArtworkOnHold,
+    #[msg("Canonical enabled unexpired role grant is required")]
+    InvalidRoleGrant,
+    #[msg("The signer does not currently hold the required role")]
+    UnauthorizedOperator,
+    #[msg("An artwork's registrar cannot independently verify it")]
+    IndependentVerifierRequired,
 }
 
 #[cfg(feature = "core-cpi-test")]

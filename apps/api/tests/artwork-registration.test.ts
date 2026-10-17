@@ -32,7 +32,7 @@ it("prepares actual generated unsigned registration and binds selected metadata 
   expect(JSON.stringify(response)).not.toContain("PRIVATE ARTIST BIO");
   expect(response).not.toHaveProperty("canonicalRequest");
   expect(f.read).toHaveBeenCalledOnce();
-  expect(f.readAuthorities).toHaveBeenCalledTimes(2);
+  expect(f.readAuthorities).toHaveBeenCalledTimes(3);
 });
 it.each([undefined, "Bearer outsider"])(
   "denies unauthorized registration before reading drafts/storage/chain",

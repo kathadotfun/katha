@@ -61,6 +61,7 @@ import {
   getInitializeMarketplaceInstructionAsync,
   getInitializeSaleTermsInstructionAsync,
   getPurchaseListingInstructionAsync,
+  getStageGovernanceInstructionAsync,
   getTransferMultisigAuthorityInstructionAsync,
   getUpdateFeeScheduleInstructionAsync,
   parseCancelListingInstruction,
@@ -73,6 +74,7 @@ import {
   parseInitializeMarketplaceInstruction,
   parseInitializeSaleTermsInstruction,
   parsePurchaseListingInstruction,
+  parseStageGovernanceInstruction,
   parseTransferMultisigAuthorityInstruction,
   parseUpdateFeeScheduleInstruction,
   type CancelListingAsyncInput,
@@ -94,9 +96,11 @@ import {
   type ParsedInitializeMarketplaceInstruction,
   type ParsedInitializeSaleTermsInstruction,
   type ParsedPurchaseListingInstruction,
+  type ParsedStageGovernanceInstruction,
   type ParsedTransferMultisigAuthorityInstruction,
   type ParsedUpdateFeeScheduleInstruction,
   type PurchaseListingAsyncInput,
+  type StageGovernanceAsyncInput,
   type TransferMultisigAuthorityAsyncInput,
   type UpdateFeeScheduleAsyncInput,
 } from "../instructions/index.js";
@@ -284,6 +288,7 @@ export enum KathaMarketplaceInstruction {
   InitializeMarketplace,
   InitializeSaleTerms,
   PurchaseListing,
+  StageGovernance,
   TransferMultisigAuthority,
   UpdateFeeSchedule,
 }
@@ -406,6 +411,17 @@ export function identifyKathaMarketplaceInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([180, 125, 148, 129, 217, 45, 151, 177]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.StageGovernance;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([110, 188, 29, 105, 224, 116, 248, 106]),
       ),
       0,
@@ -463,6 +479,9 @@ export type ParsedKathaMarketplaceInstruction<
   | ({
       instructionType: KathaMarketplaceInstruction.PurchaseListing;
     } & ParsedPurchaseListingInstruction<TProgram>)
+  | ({
+      instructionType: KathaMarketplaceInstruction.StageGovernance;
+    } & ParsedStageGovernanceInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.TransferMultisigAuthority;
     } & ParsedTransferMultisigAuthorityInstruction<TProgram>)
@@ -543,6 +562,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
       return {
         instructionType: KathaMarketplaceInstruction.PurchaseListing,
         ...parsePurchaseListingInstruction(instruction),
+      };
+    }
+    case KathaMarketplaceInstruction.StageGovernance: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.StageGovernance,
+        ...parseStageGovernanceInstruction(instruction),
       };
     }
     case KathaMarketplaceInstruction.TransferMultisigAuthority: {
@@ -626,6 +652,9 @@ export type KathaMarketplacePluginInstructions = {
   purchaseListing: (
     input: PurchaseListingAsyncInput,
   ) => ReturnType<typeof getPurchaseListingInstructionAsync> & SelfPlanAndSendFunctions;
+  stageGovernance: (
+    input: StageGovernanceAsyncInput,
+  ) => ReturnType<typeof getStageGovernanceInstructionAsync> & SelfPlanAndSendFunctions;
   transferMultisigAuthority: (
     input: TransferMultisigAuthorityAsyncInput,
   ) => ReturnType<typeof getTransferMultisigAuthorityInstructionAsync> &
@@ -718,6 +747,11 @@ export function kathaMarketplaceProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getPurchaseListingInstructionAsync(input),
+            ),
+          stageGovernance: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getStageGovernanceInstructionAsync(input),
             ),
           transferMultisigAuthority: (input) =>
             addSelfPlanAndSendFunctions(

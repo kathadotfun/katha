@@ -127,9 +127,12 @@ function fixture(mediaEnabled = false) {
     cluster: "localnet",
     expiresAt: new Date(Date.now() + 60000).toISOString(),
   };
-  const chain = vi.fn(async () => {
-    throw new Error("No chain calls for drafts");
-  });
+  const chain = vi.fn(async () => ({
+    authority: admin,
+    registrationAuthority: admin,
+    custodyAuthority: admin,
+    verifierAuthority: verifier,
+  }));
   const authorization = createAuthorization(
     {
       authenticate: async (header) => {
@@ -184,7 +187,7 @@ it("creates a private draft with server identity and nullable content", async ()
   });
   expect(result).not.toHaveProperty("creationRequestId");
   expect(JSON.stringify(result)).not.toContain("PRIVATE");
-  expect(f.chain).not.toHaveBeenCalled();
+  expect(f.chain).toHaveBeenCalled();
   expect(f.logs.join("")).not.toContain(input.title);
 });
 it.each([undefined, "verifier", "outsider"])(
@@ -344,7 +347,7 @@ it("edits selected draft content with explicit null clearing and no identity ove
     }),
   );
   expect(JSON.stringify(result)).not.toContain("PRIVATE");
-  expect(f.chain).not.toHaveBeenCalled();
+  expect(f.chain).toHaveBeenCalled();
   expect(f.logs.join("")).not.toContain("Revised synthetic title");
 });
 it.each([undefined, "verifier", "outsider"])(
@@ -485,7 +488,7 @@ it("lists safe draft summaries only after admin authorization with strict pagina
   });
   expect(failed.status).toBe(500);
   expect(await failed.text()).not.toContain("PRIVATE_DRIVER_SENTINEL");
-  expect(f.chain).not.toHaveBeenCalled();
+  expect(f.chain).toHaveBeenCalled();
 });
 
 it("reads draft content only for administrators, projecting materials and editing eligibility", async () => {

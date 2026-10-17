@@ -20,6 +20,7 @@ pnpm build
 pnpm program:build
 pnpm codegen:check
 pnpm devnet:test
+pnpm devnet:check
 ```
 
 Both `Anchor.toml` cluster sections and the generated clients use these IDs:
@@ -43,6 +44,117 @@ keypair produces the corresponding public address, using `solana-keygen pubkey`
 in their own terminal. Keep those files outside public Git. If an identity signer
 is unavailable, stop: generating a different key does not deploy at the pinned ID.
 An existing deployment requires its current upgrade authority instead.
+
+## Upgrade existing programs without changing their IDs
+
+`pnpm devnet:check` reads finalized Devnet accounts and the two local `.so`
+files. It checks the genesis, loader ownership, ProgramData relationship,
+upgrade authority, binary bytes and allocated capacity. It reports the exact
+additional bytes needed, whether the fee schedule exists and whether the
+governance marker is active. It never reads a wallet/keypair file or sends a
+transaction. Build packages and normal SBF binaries before using its results.
+The committed network manifest is a dated deployment record; the checker is
+the current observation.
+
+An upgrade preserves existing accounts. Do not initialize Registry, Marketplace,
+the collection or an existing fee schedule again. Program IDs are protocol
+identities; operational wallet addresses come from account state and reviewed
+public inputs.
+
+If the current upgrade authority is available through the operator's CLI or
+hardware wallet, use `program deploy` with the existing **public program ID**:
+
+```bash
+solana --url devnet program deploy target/deploy/katha_registry.so \
+  --program-id Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr
+solana --url devnet program deploy target/deploy/katha_marketplace.so \
+  --program-id B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq
+```
+
+The selected CLI signer must be the reported upgrade authority; otherwise the
+commands cannot authorize the upgrade. Do not export a browser wallet's secret
+to make it fit this workflow. A browser-held authority can approve a reviewed
+buffer upgrade through `/admin/devnet` instead:
+
+1. Run `pnpm devnet:check`. If `additionalBytesRequired` is positive, the operator
+   funds the exact capacity extension with
+   `solana --url devnet program extend PROGRAM_PUBLIC_ID ADDITIONAL_BYTES`.
+2. With a separately funded Devnet CLI fee payer, upload one binary using
+   `solana --url devnet program write-buffer target/deploy/katha_registry.so`.
+   Record only the public buffer address. Do not share any recovery material
+   printed by the CLI. Repeat with the Marketplace binary and a separate buffer.
+3. Transfer each buffer's write authority to the connected browser operator:
+   `solana --url devnet program set-buffer-authority BUFFER_PUBLIC_ADDRESS --new-buffer-authority OPERATOR_PUBLIC_ADDRESS`.
+4. In the existing public bootstrap JSON, add an `upgrade` object containing
+   `buffer`, `spill`, `binarySha256` and integer `binaryBytes`. Use the current
+   checker results for hash and byte length. `spill` is the reviewed public
+   recipient of the closed buffer's remaining test SOL.
+5. Select `upgrade-registry` or `upgrade-marketplace` in `/admin/devnet`, connect
+   the current authority, prepare, inspect the summary and approve. The builder
+   verifies both authorities, the exact ELF/hash/length, zero capacity padding,
+   ProgramData capacity and account order. Existing wallet integrity, repeated
+   simulation, signature retention and uncertain-outcome handling also apply.
+6. Confirm the retained signature at finalized commitment, then rerun
+   `pnpm devnet:check`. Both `matchesLocal` values must be true. A signed or
+   simulated upgrade alone does not prove the deployed bytes changed.
+
+Once a program is controlled by a Squads vault, upgrades require Squads execution;
+a member wallet cannot substitute for the vault. Keep buffers controlled by the
+reviewed authority and recheck their bytes before executing a delayed proposal.
+
+## Prepare two-of-three governance and separate operators
+
+Create three independent governance wallets and separate daily operational
+wallets. An autonomous Squads v4 account must have exactly three fully permitted
+members, threshold two, no external configuration authority, and the exact
+reviewed execution delay. Zero delay can be explicitly selected for a Devnet
+rehearsal; it is not a production recommendation. Use the vault PDA as both Katha
+roots and both upgrade authorities. The multisig configuration account is a
+different address.
+
+Prepare public JSON with `cluster: "devnet"`, `multisig`, three `members`,
+`vaultIndex`, `timeLockSeconds` and `grants`. Each grant contains a `wallet`,
+role names and an `expiresAt` Unix-second decimal string (`"0"` means no expiry).
+Roles are `catalog`, `artistVerifier`, `registrar`, `artworkVerifier`, `custody`,
+`inventorySales` and `guardian`. Governance members and operator wallets must be
+separate in this setup plan. Assign all six lifecycle roles, with distinct
+registrar and artwork-verifier wallets.
+
+```bash
+pnpm devnet:governance:plan -- helper/devnet/governance-public.json
+```
+
+This reads public Devnet state and outputs exact instructions, compact Squads
+message bytes/hashes, current and target authorities, required execution
+co-signers, an atomic loader/root handover, atomic Marketplace staging/Registry
+activation and separate grant proposals. It does not sign, submit, install a
+Squads CLI, fund wallets, or declare the full ADR migration ready. Reconcile the
+printed current authorities and all outstanding release gates before execution.
+Additional current-authority signatures in the handover are mandatory; threshold
+votes do not replace them. Never transfer authorities to a vault whose execution
+and required co-signing workflow have not been tested.
+
+After activation, the canonical governance/grant accounts are mandatory for new
+Registry operations and Marketplace listing/purchase preparation. Startup API
+allowlists do not retain revoked privileges. A session authenticates a wallet;
+finalized grants authorize each protected request. Artist verification rechecks
+the grant immediately before its conditional database write and records the
+authorization slot. Revocation cannot undo an already committing database write.
+Guardians may disable grants, add pauses or place holds; only governance may
+enable, unpause or clear a hold after a new independent condition inspection.
+Cancellation and expiry cleanup remain available while trading is paused.
+
+This implements operational governance controls. Constrained inventory,
+artist-signed terms/recovery, full policy snapshots, replacement authorship heads
+and signing groups remain release requirements in
+[ADR 0002](../decisions/0002-authority-and-settings-migration.md). Keep an authorship
+incident held until it is resolved; a new condition report does not replace the
+original authorship verification. Full Devnet acceptance still requires the
+[manual demonstration](devnet-demo.md) and finalized wallet receipts.
+
+Sources: [Squads v4 CLI](https://docs.squads.so/main/development/cli/commands),
+[Squads v4 source](https://github.com/Squads-Protocol/v4/tree/af94153ff77a28b6effe46b9c94baaa93742b48c),
+[Solana deployment](https://solana.com/docs/programs/deploying).
 
 Keep signing credentials in the operator's own CLI configuration or hardware
 wallet. Never put a keypair, seed phrase, RPC credential or signing token in the
@@ -225,7 +337,7 @@ KATHA_PUBLIC_APP_ORIGIN=http://localhost:3000
 KATHA_PUBLIC_API_ORIGIN=http://localhost:3001
 ```
 
-Replace placeholders with the exact authorized addresses. API roles are an
+Replace placeholders with the exact authorized addresses. Before governance activation, API roles are an
 additional access boundary; they do not substitute for the on-chain signer.
 Restart the API, worker and web with matching cluster settings. Never mix localnet
 and Devnet projections in the same demonstration database: select a fresh

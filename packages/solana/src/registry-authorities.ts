@@ -2,10 +2,15 @@ import { fetchEncodedAccount, type EncodedAccount } from "@solana/kit";
 import { createKathaRpcClient, type KathaRpcConfig } from "./client.js";
 import { findConfigPda } from "./generated/registry/index.js";
 import { nonzeroAddress, readRegistryConfiguration } from "./registration.js";
+import { findGovernancePda } from "./generated/registry/index.js";
+import { readOperatorAuthorization, type OperatorAuthorization } from "./governance.js";
+import { assertKathaRpcCluster } from "./rpc-cluster.js";
 
 export type RegistryAuthorityRole =
   "authority" | "registrationAuthority" | "verifierAuthority" | "custodyAuthority";
-export type RegistryAuthorities = Readonly<Record<RegistryAuthorityRole, string>>;
+export type RegistryAuthorities = Readonly<Record<RegistryAuthorityRole, string>> & {
+  readonly operatorAuthorization?: OperatorAuthorization | undefined;
+};
 
 export async function readRegistryAuthorities(
   account: EncodedAccount,
@@ -22,14 +27,32 @@ export async function readRegistryAuthorities(
 /** Fresh finalized reads; no authority cache, signer, or transaction submission. */
 export function createRegistryAuthorityReader(config: KathaRpcConfig) {
   const client = createKathaRpcClient(config);
-  return async (): Promise<RegistryAuthorities> => {
+  return async (wallet?: string): Promise<RegistryAuthorities> => {
     const [configAddress] = await findConfigPda();
     const account = await fetchEncodedAccount(client.rpc, configAddress, {
       commitment: "finalized",
       abortSignal: AbortSignal.timeout(5000),
     });
     if (!account.exists) throw new TypeError("Registry is not initialized");
-    return readRegistryAuthorities(account);
+    const authorities = await readRegistryAuthorities(account);
+    if (authorities.registrationAuthority !== (await findGovernancePda())[0])
+      return authorities;
+    assertKathaRpcCluster(
+      await client.rpc
+        .getGenesisHash()
+        .send({ abortSignal: AbortSignal.timeout(5000) }),
+      config.cluster,
+    );
+    if (!wallet)
+      throw new TypeError("Operator identity is required after governance activation");
+    const { address } = await import("@solana/kit");
+    return {
+      ...authorities,
+      operatorAuthorization: await readOperatorAuthorization(
+        client.rpc,
+        address(wallet),
+      ),
+    };
   };
 }
 

@@ -19,6 +19,8 @@
     "typescript-eslint": "8.70.1"
   },
   "scripts": {
+    "devnet:check": "node scripts/devnet-check.mjs",
+    "devnet:governance:plan": "node scripts/devnet-governance-plan.mjs",
     "devnet:plan": "node scripts/devnet-plan.mjs",
     "devnet:test": "node --test scripts/devnet-plan.test.mjs",
     "indexer:inspect": "pnpm --filter @katha/api indexer:inspect",

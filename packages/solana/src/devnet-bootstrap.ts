@@ -24,6 +24,7 @@ import { nonzeroAddress, readRegistryConfiguration } from "./registration.js";
 import * as registry from "./generated/registry/index.js";
 import * as market from "./generated/marketplace/index.js";
 import { readMarketplaceFeeSchedule } from "./marketplace.js";
+import { prepareProgramUpgrade } from "./program-upgrade.js";
 
 const LOADER = address("BPFLoaderUpgradeab1e11111111111111111111111");
 const TOKEN = address("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
@@ -88,6 +89,25 @@ export async function prepareDevnetBootstrapInstruction(
     throw new TypeError("Unsupported bootstrap operation");
   const config = devnetBootstrapSchema.parse(input);
   const operator = nonzeroAddress(address(config.operator));
+  if (step === "upgrade-registry" || step === "upgrade-marketplace") {
+    if (!config.upgrade)
+      throw new TypeError(
+        "Public upgrade buffer, spill and binary SHA-256 are required",
+      );
+    return prepareProgramUpgrade(
+      {
+        ...config.upgrade,
+        buffer: address(config.upgrade.buffer),
+        spill: address(config.upgrade.spill),
+        operator,
+        program:
+          step === "upgrade-registry"
+            ? registry.KATHA_REGISTRY_PROGRAM_ADDRESS
+            : market.KATHA_MARKETPLACE_PROGRAM_ADDRESS,
+      },
+      read,
+    );
+  }
   const collection = address(config.collection);
   const [registryConfig] = await registry.findConfigPda();
   const [collectionAuthority] = await registry.findCollectionAuthorityPda();

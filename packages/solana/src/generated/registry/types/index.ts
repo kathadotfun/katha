@@ -7,6 +7,7 @@
  */
 
 export * from "./artworkCategory.js";
+export * from "./artworkIncident.js";
 export * from "./conditionGrade.js";
 export * from "./conditionReason.js";
 export * from "./custodyAction.js";

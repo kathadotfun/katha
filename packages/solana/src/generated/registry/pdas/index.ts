@@ -10,6 +10,8 @@ export * from "./artwork.js";
 export * from "./asset.js";
 export * from "./collectionAuthority.js";
 export * from "./config.js";
+export * from "./governance.js";
+export * from "./grant.js";
 export * from "./head.js";
 export * from "./initializeCustodyHead.js";
 export * from "./initializeMetadataHead.js";

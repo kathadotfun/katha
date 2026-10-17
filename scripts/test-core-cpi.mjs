@@ -246,6 +246,7 @@ async function main() {
           : [
               "tests/core-cpi.test.ts",
               "tests/multisig-authority.test.ts",
+              "tests/governance.test.ts",
               "tests/registry-config.test.ts",
               "tests/marketplace-fixtures.test.ts",
               "tests/marketplace-config.test.ts",

@@ -1,3 +1,4 @@
+import { OPERATOR_ROLES as R } from "@katha/shared";
 import type { ResaleInspectionBoundary } from "./resale-inspection.js";
 import { resaleInspectionRequestSchema } from "@katha/shared";
 import type { CollectorBoundary } from "./collector.js";
@@ -203,6 +204,24 @@ export function createApi(
         "walletSession",
         await authorization.requireRole(c.req.header("Authorization"), role),
       );
+      // Sessions prove identity. Finalized grants independently authorize each
+      // protected route, including database-only actions and private reads.
+      const path = c.req.path;
+      const required =
+        role === "verifier"
+          ? path.includes("/artists")
+            ? R.artistVerifier
+            : R.artworkVerifier
+          : /\/(custody|fulfillment)(\/|$)/.test(path)
+            ? R.custody
+            : /\/(mint|registration|metadata)(\/|$)/.test(path)
+              ? R.registrar
+              : path.includes("/listings")
+                ? R.inventorySales
+                : c.req.method === "GET"
+                  ? R.catalog | R.registrar | R.custody | R.inventorySales
+                  : R.catalog;
+      await authorization.requirePermission(c.req.header("Authorization"), required);
       await next();
     });
   }
@@ -276,6 +295,13 @@ export function createApi(
           parsed.data.artistId,
           await parseJson(c, artistVerificationRequestSchema),
           c.get("walletSession"),
+          async () =>
+            (
+              await authorization!.requirePermission(
+                c.req.header("Authorization"),
+                R.artistVerifier,
+              )
+            ).authorizationSlot,
         ),
       );
     });

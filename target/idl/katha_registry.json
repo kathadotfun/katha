@@ -8,6 +8,360 @@
   },
   "instructions": [
     {
+      "name": "activate_governance",
+      "discriminator": [
+        59,
+        165,
+        99,
+        188,
+        34,
+        143,
+        48,
+        46
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "multisig"
+        },
+        {
+          "name": "program",
+          "address": "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "marketplace_program",
+          "address": "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
+        },
+        {
+          "name": "marketplace_program_data"
+        },
+        {
+          "name": "marketplace_config"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "vault_index",
+          "type": "u8"
+        },
+        {
+          "name": "expected_members",
+          "type": {
+            "array": [
+              "pubkey",
+              3
+            ]
+          }
+        },
+        {
+          "name": "expected_time_lock",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "clear_artwork_hold",
+      "discriminator": [
+        80,
+        163,
+        165,
+        58,
+        195,
+        197,
+        7,
+        204
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  100,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "condition_report"
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_role_grant",
+      "discriminator": [
+        38,
+        155,
+        38,
+        129,
+        196,
+        5,
+        164,
+        134
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "governance",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "grant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  45,
+                  103,
+                  114,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "wallet",
+          "type": "pubkey"
+        },
+        {
+          "name": "roles",
+          "type": "u16"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "initialize_condition",
       "discriminator": [
         210,
@@ -918,6 +1272,136 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "place_artwork_hold",
+      "discriminator": [
+        202,
+        241,
+        204,
+        200,
+        2,
+        54,
+        134,
+        253
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "artwork",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  114,
+                  116,
+                  119,
+                  111,
+                  114,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork.katha_id",
+                "account": "ArtworkRecord"
+              }
+            ]
+          }
+        },
+        {
+          "name": "head",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  100,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "artwork"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        },
+        {
+          "name": "reason_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
     },
     {
       "name": "record_minted_condition",
@@ -1935,6 +2419,82 @@
       ]
     },
     {
+      "name": "set_governance_pause",
+      "discriminator": [
+        156,
+        221,
+        234,
+        30,
+        222,
+        238,
+        195,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        },
+        {
+          "name": "pauses",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "transfer_multisig_authority",
       "docs": [
         "Root handover only; operational roles, historical attestations and sale terms do not move."
@@ -2178,6 +2738,117 @@
       ]
     },
     {
+      "name": "update_role_grant",
+      "discriminator": [
+        146,
+        73,
+        162,
+        117,
+        67,
+        130,
+        0,
+        103
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "governance",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "grant",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  111,
+                  108,
+                  101,
+                  45,
+                  103,
+                  114,
+                  97,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "grant.wallet",
+                "account": "RoleGrant"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_revision",
+          "type": "u64"
+        },
+        {
+          "name": "roles",
+          "type": "u16"
+        },
+        {
+          "name": "enabled",
+          "type": "bool"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "verify_artwork",
       "discriminator": [
         114,
@@ -2406,6 +3077,32 @@
         21,
         139,
         166
+      ]
+    },
+    {
+      "name": "RegistryGovernance",
+      "discriminator": [
+        14,
+        139,
+        11,
+        141,
+        229,
+        106,
+        177,
+        78
+      ]
+    },
+    {
+      "name": "RoleGrant",
+      "discriminator": [
+        126,
+        213,
+        123,
+        128,
+        172,
+        2,
+        104,
+        242
       ]
     }
   ],
@@ -2800,6 +3497,41 @@
       "code": 6056,
       "name": "UnchangedAuthority",
       "msg": "The accepting vault is already the root authority"
+    },
+    {
+      "code": 6057,
+      "name": "InvalidGovernance",
+      "msg": "Canonical active governance is required"
+    },
+    {
+      "code": 6058,
+      "name": "StaleGovernance",
+      "msg": "The reviewed governance or grant revision is stale"
+    },
+    {
+      "code": 6059,
+      "name": "GovernancePaused",
+      "msg": "This operation is paused"
+    },
+    {
+      "code": 6060,
+      "name": "ArtworkOnHold",
+      "msg": "This artwork is on an incident hold"
+    },
+    {
+      "code": 6061,
+      "name": "InvalidRoleGrant",
+      "msg": "Canonical enabled unexpired role grant is required"
+    },
+    {
+      "code": 6062,
+      "name": "UnauthorizedOperator",
+      "msg": "The signer does not currently hold the required role"
+    },
+    {
+      "code": 6063,
+      "name": "IndependentVerifierRequired",
+      "msg": "An artwork's registrar cannot independently verify it"
     }
   ],
   "types": [
@@ -2816,6 +3548,35 @@
           },
           {
             "name": "Thangka"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ArtworkIncident",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "artwork",
+            "type": "pubkey"
+          },
+          {
+            "name": "condition_version",
+            "type": "u32"
+          },
+          {
+            "name": "placed_at",
+            "type": "i64"
+          },
+          {
+            "name": "reason_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
@@ -3775,6 +4536,115 @@
           {
             "name": "treasury",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RegistryGovernance",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "marketplace_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "marketplace_config",
+            "type": "pubkey"
+          },
+          {
+            "name": "legacy_registrar",
+            "type": "pubkey"
+          },
+          {
+            "name": "custody_identity",
+            "type": "pubkey"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "pauses",
+            "type": "u8"
+          },
+          {
+            "name": "holds",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "ArtworkIncident"
+                }
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RoleGrant",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "version",
+            "type": "u8"
+          },
+          {
+            "name": "governance",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "roles",
+            "type": "u16"
+          },
+          {
+            "name": "enabled",
+            "type": "bool"
+          },
+          {
+            "name": "expires_at",
+            "docs": [
+              "Zero means no expiry; otherwise Unix time, with equality already expired."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "revision",
+            "type": "u64"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_at",
+            "type": "i64"
+          },
+          {
+            "name": "changed_slot",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

@@ -113,6 +113,13 @@
       "when": 1791464070694,
       "tag": "0015_resale_inspection_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792236318993,
+      "tag": "0016_artist_verification_authorization",
+      "breakpoints": true
     }
   ]
 }

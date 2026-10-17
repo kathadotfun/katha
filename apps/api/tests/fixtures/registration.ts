@@ -98,6 +98,7 @@ export async function registrationFixture() {
       verificationStatus: "VERIFIED",
       verifiedAt: at,
       verifiedByWallet: wallet,
+      verificationAuthorizationSlot: null,
       createdAt: at,
       updatedAt: at,
     },

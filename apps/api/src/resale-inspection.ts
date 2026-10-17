@@ -76,7 +76,10 @@ export function createResaleInspection(
     const hash = Buffer.from(head.currentHash).toString("hex");
     const secondary = (market.state.ledger?.completedSales ?? 0n) > 0n;
     const validReport =
-      report.verifier === config.verifierAuthority &&
+      (getMarketplaceConfigDecoder().decode(
+        market.accounts.marketplaceConfigAccount.data,
+      ).version === 2 ||
+        report.verifier === config.verifierAuthority) &&
       !/^0+$/.test(hash) &&
       report.inspectedAt > 0n &&
       report.inspectedAt <= report.recordedAt &&

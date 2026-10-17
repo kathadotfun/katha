@@ -4,6 +4,8 @@ use katha_registry::{program::KathaRegistry, KathaConfig};
 
 pub mod multisig;
 pub use multisig::*;
+pub mod governance;
+pub use governance::*;
 pub mod distribution;
 pub use distribution::*;
 pub mod eligibility;
@@ -26,6 +28,15 @@ pub const BASIS_POINTS_DENOMINATOR: u32 = 10_000;
 #[program]
 pub mod katha_marketplace {
     use super::*;
+
+    pub fn stage_governance(ctx: Context<StageGovernance>) -> Result<()> {
+        require!(
+            ctx.accounts.config.version == 1,
+            MarketplaceError::InvalidGovernance
+        );
+        ctx.accounts.config.version = 2;
+        Ok(())
+    }
 
     /// The vault must accept through Squads CPI; a member wallet cannot substitute for it.
     pub fn transfer_multisig_authority(
@@ -86,6 +97,7 @@ pub mod katha_marketplace {
         secondary_commission_bps: u16,
         secondary_royalty_bps: u16,
     ) -> Result<()> {
+        check_root_governance(&ctx.accounts.config, ctx.remaining_accounts)?;
         let schedule = &mut ctx.accounts.fee_schedule;
         schedule.set_rates(
             primary_commission_bps,
@@ -111,6 +123,7 @@ pub mod katha_marketplace {
         secondary_commission_bps: u16,
         secondary_royalty_bps: u16,
     ) -> Result<()> {
+        check_root_governance(&ctx.accounts.config, ctx.remaining_accounts)?;
         let schedule = &mut ctx.accounts.fee_schedule;
         require!(
             schedule.revision == expected_revision,
@@ -138,6 +151,13 @@ pub mod katha_marketplace {
         expected_revision: u64,
         expected_price: u64,
     ) -> Result<()> {
+        check_governance(
+            &ctx.accounts.config,
+            &ctx.accounts.registry_config,
+            ctx.remaining_accounts,
+            katha_registry::governance::PAUSE_PURCHASES,
+            Some(ctx.accounts.artwork.key()),
+        )?;
         ctx.accounts.purchase(expected_revision, expected_price)
     }
 
@@ -170,6 +190,13 @@ pub mod katha_marketplace {
         expected_commission_bps: u16,
         expected_secondary_royalty_bps: u16,
     ) -> Result<()> {
+        check_governance(
+            &ctx.accounts.config,
+            &ctx.accounts.registry_config,
+            ctx.remaining_accounts,
+            katha_registry::governance::PAUSE_LISTINGS,
+            Some(ctx.accounts.artwork.key()),
+        )?;
         require!(
             ctx.accounts.fee_schedule.revision == expected_fee_revision,
             MarketplaceError::StaleFeeSchedule
@@ -189,6 +216,7 @@ pub mod katha_marketplace {
         ctx: Context<InitializeSaleTerms>,
         artist_payout: Pubkey,
     ) -> Result<()> {
+        check_root_governance(&ctx.accounts.config, ctx.remaining_accounts)?;
         require_keys_neq!(
             artist_payout,
             Pubkey::default(),
@@ -204,6 +232,13 @@ pub mod katha_marketplace {
 
     // Read-only preview. Listing and purchase instructions must call the same validator.
     pub fn check_sale_eligibility(ctx: Context<CheckSaleEligibility>) -> Result<()> {
+        check_governance(
+            &ctx.accounts.config,
+            &ctx.accounts.registry_config,
+            ctx.remaining_accounts,
+            katha_registry::governance::PAUSE_LISTINGS,
+            Some(ctx.accounts.artwork.key()),
+        )?;
         ctx.accounts.validate(Clock::get()?.unix_timestamp)
     }
 
@@ -425,6 +460,10 @@ pub enum MarketplaceError {
     UpgradeAuthorityMismatch,
     #[msg("The accepting vault is already the root authority")]
     UnchangedAuthority,
+    #[msg("Canonical active Registry governance and matching roots are required")]
+    InvalidGovernance,
+    #[msg("This operation is paused or the artwork is on hold")]
+    GovernancePaused,
 }
 
 #[cfg(test)]

@@ -116,6 +116,14 @@ export function DevnetBootstrapControls({ rpcUrl }: { rpcUrl: string }) {
       <p className="sm m-0">
         RPC <span className="id">{rpcUrl}</span>
       </p>
+      {step.startsWith("upgrade-") && (
+        <p className="sm m-0" role="note">
+          Upload the reviewed binary to a Devnet buffer first. Add an upgrade object to
+          the public JSON with buffer, spill, binarySha256 and binaryBytes. The
+          connected wallet must control both the program and buffer. Review the exact
+          SHA-256 before approval. Multisig-owned programs require Squads execution.
+        </p>
+      )}
       <p className="xs mut m-0">Approval diagnostics v2 · 20-second timeout</p>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         {state?.connected ? (

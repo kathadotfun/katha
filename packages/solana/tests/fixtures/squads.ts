@@ -1,3 +1,4 @@
+import { compileSquadsMessage, inspectSquadsVault } from "../../src/squads.js";
 import { createHash } from "node:crypto";
 import {
   AccountRole,
@@ -140,41 +141,7 @@ export async function createSquads(
       number(index, 8),
       text("proposal"),
     );
-    const roles = new Map<Address, AccountRole>([[vault, AccountRole.WRITABLE_SIGNER]]);
-    for (const instruction of instructions) {
-      for (const account of instruction.accounts ?? [])
-        roles.set(account.address, (roles.get(account.address) ?? 0) | account.role);
-      if (!roles.has(instruction.programAddress))
-        roles.set(instruction.programAddress, AccountRole.READONLY);
-    }
-    const rank = (role: AccountRole) =>
-      role === 3 ? 0 : role === 2 ? 1 : role === 1 ? 2 : 3;
-    const keys = [...roles.keys()].sort((a, b) =>
-      a === vault ? -1 : b === vault ? 1 : rank(roles.get(a)!) - rank(roles.get(b)!),
-    );
-    if (keys.length > 255 || instructions.length > 255)
-      throw new Error("Test Squads message too large");
-    const message = concat(
-      [
-        keys.filter((key) => roles.get(key)! >= 2).length,
-        keys.filter((key) => roles.get(key) === 3).length,
-        keys.filter((key) => roles.get(key) === 1).length,
-        keys.length,
-      ],
-      ...keys.map((key) => encodeAddress.encode(key)),
-      [instructions.length],
-      ...instructions.map((instruction) => {
-        const accounts = instruction.accounts ?? [];
-        const data = instruction.data ?? new Uint8Array();
-        return concat(
-          [keys.indexOf(instruction.programAddress), accounts.length],
-          accounts.map((account) => keys.indexOf(account.address)),
-          number(data.length, 2),
-          data,
-        );
-      }),
-      [0],
-    );
+    const { message, remainingAccounts } = compileSquadsMessage(vault, instructions);
     const creator = members[0]!;
     await client.sendTransaction([
       addSignersToInstruction([creator, payer], {
@@ -220,9 +187,7 @@ export async function createSquads(
       ]);
     }
     async function execute(prefix: readonly Instruction[] = []) {
-      const remaining = keys.map((key) =>
-        meta(key, key === vault ? AccountRole.WRITABLE : roles.get(key)!),
-      );
+      const remaining = remainingAccounts;
       const execution = addSignersToInstruction([creator, ...extraSigners], {
         programAddress: SQUADS,
         accounts: [
@@ -240,6 +205,11 @@ export async function createSquads(
       await client.sendTransaction([...prefix, execution]);
     }
     return { approve, execute, proposal, transaction };
+  }
+  if (!options.controlled && (options.threshold ?? 2) === 2) {
+    const account = client.svm.getAccount(multisig);
+    if (!account.exists || (await inspectSquadsVault(account, 0)).vault !== vault)
+      throw new Error("Squads review adapter rejected the genuine fixture");
   }
   return { multisig, vault, members, memberAddresses, propose };
 }

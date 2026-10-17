@@ -128,13 +128,30 @@ export const KATHA_REGISTRY_ERROR__INVALID_MULTISIG_PROGRAM_DATA = 0x17a6; // 60
 export const KATHA_REGISTRY_ERROR__UPGRADE_AUTHORITY_MISMATCH = 0x17a7; // 6055
 /** UnchangedAuthority: The accepting vault is already the root authority */
 export const KATHA_REGISTRY_ERROR__UNCHANGED_AUTHORITY = 0x17a8; // 6056
+/** InvalidGovernance: Canonical active governance is required */
+export const KATHA_REGISTRY_ERROR__INVALID_GOVERNANCE = 0x17a9; // 6057
+/** StaleGovernance: The reviewed governance or grant revision is stale */
+export const KATHA_REGISTRY_ERROR__STALE_GOVERNANCE = 0x17aa; // 6058
+/** GovernancePaused: This operation is paused */
+export const KATHA_REGISTRY_ERROR__GOVERNANCE_PAUSED = 0x17ab; // 6059
+/** ArtworkOnHold: This artwork is on an incident hold */
+export const KATHA_REGISTRY_ERROR__ARTWORK_ON_HOLD = 0x17ac; // 6060
+/** InvalidRoleGrant: Canonical enabled unexpired role grant is required */
+export const KATHA_REGISTRY_ERROR__INVALID_ROLE_GRANT = 0x17ad; // 6061
+/** UnauthorizedOperator: The signer does not currently hold the required role */
+export const KATHA_REGISTRY_ERROR__UNAUTHORIZED_OPERATOR = 0x17ae; // 6062
+/** IndependentVerifierRequired: An artwork's registrar cannot independently verify it */
+export const KATHA_REGISTRY_ERROR__INDEPENDENT_VERIFIER_REQUIRED = 0x17af; // 6063
 
 export type KathaRegistryError =
   | typeof KATHA_REGISTRY_ERROR__ARTWORK_ALREADY_MINTED
+  | typeof KATHA_REGISTRY_ERROR__ARTWORK_ON_HOLD
   | typeof KATHA_REGISTRY_ERROR__ASSET_ALREADY_EXISTS
   | typeof KATHA_REGISTRY_ERROR__AUTHORSHIP_HASH_MISMATCH
   | typeof KATHA_REGISTRY_ERROR__CONTROLLED_MULTISIG
   | typeof KATHA_REGISTRY_ERROR__CORE_METADATA_OUT_OF_SYNC
+  | typeof KATHA_REGISTRY_ERROR__GOVERNANCE_PAUSED
+  | typeof KATHA_REGISTRY_ERROR__INDEPENDENT_VERIFIER_REQUIRED
   | typeof KATHA_REGISTRY_ERROR__INITIAL_CONDITION_REQUIRED
   | typeof KATHA_REGISTRY_ERROR__INVALID_ARTIST_ID
   | typeof KATHA_REGISTRY_ERROR__INVALID_ARTWORK_COLLECTION
@@ -153,6 +170,7 @@ export type KathaRegistryError =
   | typeof KATHA_REGISTRY_ERROR__INVALID_CUSTODY_REVISION
   | typeof KATHA_REGISTRY_ERROR__INVALID_CUSTODY_SUBJECT
   | typeof KATHA_REGISTRY_ERROR__INVALID_CUSTODY_TRANSITION
+  | typeof KATHA_REGISTRY_ERROR__INVALID_GOVERNANCE
   | typeof KATHA_REGISTRY_ERROR__INVALID_INITIAL_CONDITION_REASON
   | typeof KATHA_REGISTRY_ERROR__INVALID_INSPECTION_TIME
   | typeof KATHA_REGISTRY_ERROR__INVALID_INSPECTOR_ID
@@ -167,6 +185,7 @@ export type KathaRegistryError =
   | typeof KATHA_REGISTRY_ERROR__INVALID_PROGRAM_DATA
   | typeof KATHA_REGISTRY_ERROR__INVALID_REPORT_ID
   | typeof KATHA_REGISTRY_ERROR__INVALID_ROLE
+  | typeof KATHA_REGISTRY_ERROR__INVALID_ROLE_GRANT
   | typeof KATHA_REGISTRY_ERROR__INVALID_THRESHOLD
   | typeof KATHA_REGISTRY_ERROR__INVALID_UNMINTED_CONDITION_REASON
   | typeof KATHA_REGISTRY_ERROR__INVALID_VAULT
@@ -177,10 +196,12 @@ export type KathaRegistryError =
   | typeof KATHA_REGISTRY_ERROR__STALE_AUTHORITY
   | typeof KATHA_REGISTRY_ERROR__STALE_CONDITION_VERSION
   | typeof KATHA_REGISTRY_ERROR__STALE_CUSTODY_REVISION
+  | typeof KATHA_REGISTRY_ERROR__STALE_GOVERNANCE
   | typeof KATHA_REGISTRY_ERROR__STALE_METADATA_VERSION
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_AUTHORITY
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_BOOTSTRAP
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_CUSTODY
+  | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_OPERATOR
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_REGISTRATION
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_VERIFIER
   | typeof KATHA_REGISTRY_ERROR__UNCHANGED_AUTHORITY
@@ -192,10 +213,13 @@ let kathaRegistryErrorMessages: Record<KathaRegistryError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   kathaRegistryErrorMessages = {
     [KATHA_REGISTRY_ERROR__ARTWORK_ALREADY_MINTED]: `Artwork is already bound to a Core asset`,
+    [KATHA_REGISTRY_ERROR__ARTWORK_ON_HOLD]: `This artwork is on an incident hold`,
     [KATHA_REGISTRY_ERROR__ASSET_ALREADY_EXISTS]: `The deterministic Core asset account already exists`,
     [KATHA_REGISTRY_ERROR__AUTHORSHIP_HASH_MISMATCH]: `The evidence hash does not match the registered artwork`,
     [KATHA_REGISTRY_ERROR__CONTROLLED_MULTISIG]: `Controlled multisigs are not accepted`,
     [KATHA_REGISTRY_ERROR__CORE_METADATA_OUT_OF_SYNC]: `Core identity or URI differs from the current Registry metadata revision`,
+    [KATHA_REGISTRY_ERROR__GOVERNANCE_PAUSED]: `This operation is paused`,
+    [KATHA_REGISTRY_ERROR__INDEPENDENT_VERIFIER_REQUIRED]: `An artwork's registrar cannot independently verify it`,
     [KATHA_REGISTRY_ERROR__INITIAL_CONDITION_REQUIRED]: `Initial verification condition report is required for minting`,
     [KATHA_REGISTRY_ERROR__INVALID_ARTIST_ID]: `Artist ID must be a canonical lowercase UUID`,
     [KATHA_REGISTRY_ERROR__INVALID_ARTWORK_COLLECTION]: `Artwork belongs to a different Core collection`,
@@ -214,6 +238,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_REGISTRY_ERROR__INVALID_CUSTODY_REVISION]: `Custody revisions must advance by exactly one`,
     [KATHA_REGISTRY_ERROR__INVALID_CUSTODY_SUBJECT]: `Custodian address must be nonzero and distinct from Katha custody authority`,
     [KATHA_REGISTRY_ERROR__INVALID_CUSTODY_TRANSITION]: `Custody transition is not allowed from the current state`,
+    [KATHA_REGISTRY_ERROR__INVALID_GOVERNANCE]: `Canonical active governance is required`,
     [KATHA_REGISTRY_ERROR__INVALID_INITIAL_CONDITION_REASON]: `The first condition report must be an initial verification inspection`,
     [KATHA_REGISTRY_ERROR__INVALID_INSPECTION_TIME]: `Inspection time must be positive and no later than chain time`,
     [KATHA_REGISTRY_ERROR__INVALID_INSPECTOR_ID]: `Inspector ID must be a valid UUID`,
@@ -228,6 +253,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_REGISTRY_ERROR__INVALID_PROGRAM_DATA]: `ProgramData does not belong to this Registry program`,
     [KATHA_REGISTRY_ERROR__INVALID_REPORT_ID]: `Condition report ID must be a valid UUID`,
     [KATHA_REGISTRY_ERROR__INVALID_ROLE]: `Platform role addresses must not be the default address`,
+    [KATHA_REGISTRY_ERROR__INVALID_ROLE_GRANT]: `Canonical enabled unexpired role grant is required`,
     [KATHA_REGISTRY_ERROR__INVALID_THRESHOLD]: `The accepted multisig threshold must be two`,
     [KATHA_REGISTRY_ERROR__INVALID_UNMINTED_CONDITION_REASON]: `Unminted follow-up reports must be pre-sale or insurance inspections`,
     [KATHA_REGISTRY_ERROR__INVALID_VAULT]: `The accepting signer is not the reviewed Squads vault`,
@@ -238,10 +264,12 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_REGISTRY_ERROR__STALE_AUTHORITY]: `Root authority changed since this handover was reviewed`,
     [KATHA_REGISTRY_ERROR__STALE_CONDITION_VERSION]: `Condition version is stale`,
     [KATHA_REGISTRY_ERROR__STALE_CUSTODY_REVISION]: `Custody revision is stale`,
+    [KATHA_REGISTRY_ERROR__STALE_GOVERNANCE]: `The reviewed governance or grant revision is stale`,
     [KATHA_REGISTRY_ERROR__STALE_METADATA_VERSION]: `Metadata version is stale`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_AUTHORITY]: `Only the current root authority can authorize a handover`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_BOOTSTRAP]: `Bootstrap signer is not the Registry upgrade authority`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_CUSTODY]: `Signer is not the configured custody authority`,
+    [KATHA_REGISTRY_ERROR__UNAUTHORIZED_OPERATOR]: `The signer does not currently hold the required role`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_REGISTRATION]: `Only the configured registration authority can register artwork`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_VERIFIER]: `Only the configured verifier can authenticate artwork`,
     [KATHA_REGISTRY_ERROR__UNCHANGED_AUTHORITY]: `The accepting vault is already the root authority`,

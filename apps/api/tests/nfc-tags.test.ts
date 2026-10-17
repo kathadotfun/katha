@@ -55,9 +55,12 @@ function fixture() {
       },
     },
     { cluster: "localnet", adminWallets: [admin], verifierWallets: [verifier] },
-    async () => {
-      throw new Error("No NFC chain signing");
-    },
+    async () => ({
+      authority: admin,
+      registrationAuthority: admin,
+      custodyAuthority: admin,
+      verifierAuthority: verifier,
+    }),
   );
   const logs: string[] = [];
   const app = createApi(

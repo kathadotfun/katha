@@ -42,7 +42,7 @@ pub struct ReleaseListing<'info> {
 impl<'info> ReleaseListing<'info> {
     pub fn release(&mut self, expected_revision: u64, expired: bool) -> Result<()> {
         require!(
-            self.config.version == 1 && matches!(self.listing.version, 1 | 2),
+            matches!(self.config.version, 1 | 2) && matches!(self.listing.version, 1 | 2),
             MarketplaceError::InvalidListing
         );
         require!(

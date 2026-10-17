@@ -39,6 +39,19 @@ export function createMetadataAdministration(
       if (error instanceof TypeError) throw new DomainError("CONFLICT");
       throw error;
     }
+    let canRegister = false;
+    try {
+      await authorization.requireRegistryAuthority(bearer, "registrationAuthority");
+      canRegister = true;
+    } catch (error) {
+      if (!(error instanceof DomainError) || error.code !== "FORBIDDEN") throw error;
+    }
+    const reviewedChain = {
+      ...live.chain,
+      registrationAuthority: canRegister
+        ? session.walletAddress
+        : String(live.chain.registrationAuthority),
+    };
     const record = live.prepared.record;
     if (
       record.artistId !== a.artistId ||
@@ -106,7 +119,7 @@ export function createMetadataAdministration(
       published: a.publishedAt !== null,
       metadata: project(metadata),
       current: current ? project(current) : null,
-      chain: live.chain,
+      chain: reviewedChain,
       revision,
       canSave: false,
       canSubmit: false,
@@ -121,7 +134,7 @@ export function createMetadataAdministration(
     page.canSave = eligible;
     page.canSubmit =
       eligible &&
-      live.chain.registrationAuthority === session.walletAddress &&
+      reviewedChain.registrationAuthority === session.walletAddress &&
       metadata.status === "PREPARED" &&
       metadata.documentHash !== live.chain.documentHash;
     return { page, snapshot };

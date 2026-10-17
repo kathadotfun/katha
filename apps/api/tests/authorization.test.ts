@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { walletPermissionsSchema, type WalletSession } from "@katha/shared";
-import type { RegistryAuthorities } from "@katha/solana";
+import type { RegistryAuthorities, OperatorAuthorization } from "@katha/solana";
 import { createAuthorization } from "../src/authorization.js";
 import { DomainError } from "../src/errors.js";
 import { createApi } from "../src/app.js";
@@ -111,7 +111,7 @@ it("admits only the configured role, with no admin-to-verifier inheritance", asy
     ).status,
   ).toBe(403);
   expect(f.reached).toHaveBeenCalledTimes(2);
-  expect(f.readAuthorities).not.toHaveBeenCalled();
+  expect(f.readAuthorities).toHaveBeenCalled();
 });
 it.each([
   "/admin",
@@ -207,7 +207,7 @@ it.each([
     await expect(
       f.authorization.requireRegistryAuthority("Bearer outsider", role),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(f.readAuthorities).toHaveBeenCalledTimes(2);
+    expect(f.readAuthorities).toHaveBeenCalledTimes(3);
   },
 );
 it("fails closed on missing, malformed, timed-out or failed Registry reads", async () => {
@@ -250,7 +250,7 @@ it("allows a wallet with both explicitly assigned roles", async () => {
   );
 });
 
-it("discovers only current authenticated permissions without authority lists or chain reads", async () => {
+it("discovers only current authenticated permissions through fresh chain reads", async () => {
   const f = fixture();
   for (const [token, admin, verifier] of [
     ["admin", true, false],
@@ -278,5 +278,105 @@ it("discovers only current authenticated permissions without authority lists or 
   ).toBe(401);
   expect((await f.app.request("/auth/permissions")).status).toBe(401);
   expect((await createApi().request("/auth/permissions")).status).toBe(401);
-  expect(f.readAuthorities).not.toHaveBeenCalled();
+  expect(f.readAuthorities).toHaveBeenCalled();
+});
+
+function grantFor(f: ReturnType<typeof fixture>, roles: number): OperatorAuthorization {
+  const wallet = f.admin as OperatorAuthorization["wallet"];
+  return {
+    wallet,
+    roles,
+    governance: wallet,
+    grant: wallet,
+    registryConfig: wallet,
+    pauses: 0,
+    slot: 123n,
+  };
+}
+
+it("uses fresh grants instead of environment lists and rejects a revoked session on its next request", async () => {
+  const f = fixture();
+  const authorization = createAuthorization(
+    { authenticate: f.authenticate },
+    { ...f.config, adminWallets: [], verifierWallets: [] },
+    f.readAuthorities,
+  );
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: grantFor(f, 1 | 4),
+  });
+  expect(
+    (
+      await authorization.requireRegistryAuthority(
+        "Bearer admin",
+        "registrationAuthority",
+      )
+    ).walletAddress,
+  ).toBe(f.admin);
+  expect(
+    (await authorization.requirePermission("Bearer admin", 1)).authorizationSlot,
+  ).toBe(123n);
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: grantFor(f, 0),
+  });
+  await expect(
+    authorization.requireRole("Bearer admin", "admin"),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(
+    f.authorization.requireRole("Bearer admin", "admin"),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+it("does not implicitly grant routine powers to the root or to another operator role", async () => {
+  const f = fixture();
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: grantFor(f, 8),
+  });
+  await expect(
+    f.authorization.requirePermission("Bearer admin", 2),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(
+    f.authorization.requireRegistryAuthority("Bearer admin", "registrationAuthority"),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(
+    (
+      await f.authorization.requireRegistryAuthority(
+        "Bearer admin",
+        "verifierAuthority",
+      )
+    ).walletAddress,
+  ).toBe(f.admin);
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: grantFor(f, 64),
+  });
+  await expect(
+    f.authorization.requirePermission("Bearer admin", 1 | 4 | 16 | 32),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(
+    f.authorization.requireRegistryAuthority("Bearer admin", "authority"),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+it("denies protected reads and database writes when chain permission reads fail or pause", async () => {
+  const f = fixture();
+  f.readAuthorities.mockRejectedValue(new Error("RPC unavailable"));
+  await expect(
+    f.authorization.requireRole("Bearer admin", "admin"),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(
+    f.authorization.requirePermission("Bearer verifier", 2),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(f.authorization.permissions("Bearer admin")).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  f.readAuthorities.mockResolvedValue({
+    ...f.authorities,
+    operatorAuthorization: { ...grantFor(f, 127), pauses: 1 },
+  });
+  await expect(
+    f.authorization.requirePermission("Bearer admin", 1),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
 });

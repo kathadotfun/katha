@@ -30,6 +30,18 @@ export const devnetBootstrapSchema = z.strictObject({
   treasury: publicAddress,
   paymentMint: publicAddress,
   feeRates: marketplaceFeeScheduleSchema.default(DEFAULT_MARKETPLACE_FEES),
+  upgrade: z
+    .strictObject({
+      buffer: publicAddress,
+      spill: publicAddress,
+      binarySha256: z.string().regex(/^[0-9a-f]{64}$/),
+      binaryBytes: z
+        .number()
+        .int()
+        .min(4)
+        .max(10 * 1024 * 1024),
+    })
+    .optional(),
 });
 export type DevnetBootstrap = z.infer<typeof devnetBootstrapSchema>;
 export const devnetSaleTermsSchema = z.strictObject({
@@ -44,5 +56,7 @@ export const devnetBootstrapSteps = [
   "fees",
   "update-fees",
   "sale-terms",
+  "upgrade-registry",
+  "upgrade-marketplace",
 ] as const;
 export type DevnetBootstrapStep = (typeof devnetBootstrapSteps)[number];

@@ -151,6 +151,13 @@ export function createCustodyOperations(
         store.listRequests(snapshot.artwork.id, pagination),
         readStatus(kathaId),
       ]);
+      let canAttest = false;
+      try {
+        await authorization.requireRegistryAuthority(bearer, "custodyAuthority");
+        canAttest = true;
+      } catch (error) {
+        if (!(error instanceof DomainError) || error.code !== "FORBIDDEN") throw error;
+      }
       const transitions = physicalCustodyTransitionSchema.options
         .map((option) =>
           option.parse({
@@ -179,7 +186,7 @@ export function createCustodyOperations(
           ownerWallet: accounts.ownerWallet,
           custodyAuthority: accounts.configuration.custodyAuthority,
         },
-        canAttest: handler.walletAddress === accounts.configuration.custodyAuthority,
+        canAttest,
         transitions,
         custody,
         requests: queue.items.map((row) => {

@@ -1,17 +1,17 @@
 # ADR 0002: Authority recovery and settings migration
 
-Status: migration design; implementation and Devnet deployment pending.
+Status: root handover and operational-governance foundation implemented locally; full migration and Devnet activation pending.
 
 The user selected a **2-of-3 governance multisig with separate operational
 wallets**, and confirmed that artists can approve wallet messages. This document
-defines the migration contract for that selection. It does not change the running
-programs, API authorization, payouts, or signing flow. The original
+defines the migration contract for that selection. The locally implemented
+foundation is described below; it has not changed the live Devnet deployment. The original
 [trust boundaries](0001-trust-and-lifecycle.md) continue to apply.
 
 ## Implemented foundation: root authority handover
 
 Both programs now expose `transfer_multisig_authority`. This is an opt-in root
-handover primitive; the governance/grants migration below remains pending. No
+handover primitive; the broader migration below remains pending. No
 Devnet authority was changed by adding it.
 
 The existing root and accepting Squads vault must both sign. Program-side checks
@@ -23,27 +23,77 @@ prevents stale handovers, and the target must always be a verified vault rather
 than a replacement hot wallet. A Squads vault signs through program execution;
 its members' wallet signatures cannot substitute for its CPI signature.
 
-Existing config layouts, instruction formats, role wallets, historical attestations,
-custody identity and listing economics are preserved. The root field alone changes.
-After handover, existing Marketplace root checks require the vault, including fee
-changes and initial sale-term creation. These actions need Squads execution; the
-current single-wallet `/admin/devnet` flow does not execute a Squads proposal.
-Changing a Squad's configuration later is governed by Squads itself; the acceptance
-event records a snapshot, not a permanent guarantee that its membership or threshold
-can never change.
+Root-only handover preserves config layouts, role snapshots, history and listing
+economics. The separate opt-in operational cutover below changes future role
+checks. Existing root checks require the accepted vault, including fee changes
+and initial sale-term creation. These need Squads execution; the single-wallet
+bootstrap utility cannot substitute a member wallet for a vault signature.
+Changing a Squad's settings remains governed by Squads itself. The acceptance
+event is a snapshot, not a guarantee that threshold/membership never change.
 
-The public activity decoder validates these exact events without adding them to
-an artwork's provenance. The public finalized transaction remains the governance
-receipt. IDLs and Codama clients include the new instruction and events.
+The public activity decoder validates handover events and successful governance
+instructions without adding governance actions to artwork provenance. The
+finalized transaction and canonical state are the governance receipt. IDLs and
+Codama clients include the instructions and account layouts.
 
-This foundation does **not** add revocable role grants, holds, independent
-verification, inventory constraints, artist-signed consent, batch receipts or the
-fresh API permissions specified below. It does not activate a governance migration
-state. The live migration still requires those release gates and a concrete,
-operator-approved manifest; do not use this primitive alone as evidence that the
-full migration has shipped. Local tests use the genuine SHA-256-pinned Squads
-program and synthetic identities, including two-approval success, one-approval
-failure, real timelock enforcement and atomic loader/config rollback.
+## Implemented foundation: operational governance
+
+`stage_governance` marks Marketplace version two; listing and purchase calls then
+fail closed without matching active Registry governance. A reviewed proposal
+pairs that staging instruction atomically with `activate_governance`. Activation
+requires the verified autonomous two-of-three vault, both matching Katha roots,
+both canonical ProgramData upgrade authorities and the bound Marketplace config.
+It creates a versioned `RegistryGovernance` and irreversibly replaces Registry's
+registration-authority field with its canonical governance PDA as a mode marker.
+The former registrar is captured separately. The verifier and custody fields
+remain historical snapshots; they no longer authorize writes after cutover.
+There is no setter restoring the old wallet path. Before this opt-in transaction,
+the existing bootstrap mode remains active; upgrading code alone is not cutover.
+
+Multiple canonical `RoleGrant` accounts support enabled state, bounded permission
+bits, expiry, compare-and-set revisions, actor/time/slot and revocation. The vault
+has no implicit routine role. Every Registry operational handler checks the
+current grant and applicable pauses. An artwork's registrar cannot verify or
+inspect it after activation, even if that wallet holds both roles. New operators
+sign their own attestations. Katha-held custody keeps the captured organizational
+identity; a role change creates no physical transition or renewed inspection.
+Marketplace validates historical canonical Registry records without requiring
+their authors to retain today's grants.
+
+Restricted guardians may disable existing grants, add pause flags or place a
+public reason commitment on an artwork hold. They cannot create/enable grants,
+reduce pauses, clear holds or redirect proceeds. Governance clears a hold only
+after a newer independent condition report inspected after the hold. The bounded
+incident set holds 64 artworks; a full set rejects additional holds and still
+allows a global pause. This bounded shared account replaces the proposed separate
+`ArtworkHold` accounts for this foundation. It does not replace a disputed
+immutable authorship verification; keep such an artwork held pending resolution.
+Mint/list/purchase recheck incident state. Cancellation and expiry cleanup retain
+the existing owner, revision and delegate checks during pauses/holds.
+
+The API reads finalized governance/grant/clock state for every protected request,
+including artist approval and private reads, and maps routes to their specific
+roles. Startup allowlists cannot preserve a revoked grant. RPC failures deny
+access. Database artist verification rechecks immediately before the conditional
+write and records its authorization slot. A database write already committing
+cannot be undone by a later chain revocation. Other in-flight database actions
+retain that same cross-system timing limitation.
+
+Prepared transactions, browser review, persistence and receipts bind the complete
+canonical read-only governance/grant/config extension. No arbitrary CPI wrapper,
+extra signer or hidden instruction is accepted as an operator transaction. The
+read-only Devnet governance planner validates public Squad/config/program state
+and exports exact proposal groups and compact message hashes. Its message compiler
+is exercised by genuine Squads execution in isolated tests, including atomic
+loader/root handover and activation. Wallet execution and live acceptance remain
+operator actions; see the [deployment runbook](../development/devnet-deployment.md).
+
+This foundation does **not** complete all migration gates. Program-held inventory,
+artist enrollment/consent/recovery, policy revisions, v3 settlement snapshots,
+replacement authorship verification heads, detailed governance projections and
+operator signing groups remain pending. Existing primary inventory is still
+owned by its registrar; initial payout terms still need governance execution.
+Do not present the foundation as a completed migration or deployed protection.
 
 ## Findings in the current implementation
 

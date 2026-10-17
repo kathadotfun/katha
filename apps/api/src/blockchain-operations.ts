@@ -53,7 +53,7 @@ export function createBlockchainOperations(
         roles[intent.kind],
       );
       if (session.cluster !== cluster) throw new DomainError("FORBIDDEN");
-      const expectedAccounts = [...intent.expectedAccounts].sort();
+      let expectedAccounts = [...intent.expectedAccounts].sort();
       const expectedHashes = [...intent.expectedHashes].sort();
       const semanticIntent = {
         schemaVersion: 1,
@@ -75,6 +75,17 @@ export function createBlockchainOperations(
         context = await chain.context(session.walletAddress, versions);
       } catch {
         throw new Error("Blockchain preparation unavailable");
+      }
+      if (context.authorization) {
+        expectedAccounts = [
+          ...new Set([
+            ...expectedAccounts,
+            context.authorization.governance,
+            context.authorization.grant,
+            context.authorization.registryConfig,
+          ]),
+        ].sort();
+        semanticIntent.expectedAccounts = expectedAccounts;
       }
       let prepared: UnsignedRegistryTransaction;
       try {

@@ -98,8 +98,11 @@ export function createConditionAttestation(
     return document;
   }
   async function review(bearer: string | undefined, kathaId: string) {
-    const session = await authorization.requireRole(bearer, "verifier");
-    await authorization.requireRegistryAuthority(bearer, "verifierAuthority");
+    const session = await authorization.requireRegistryAuthority(
+      bearer,
+      "verifierAuthority",
+    );
+    await authorization.requireRole(bearer, "verifier");
     if (session.cluster !== cluster) throw new DomainError("FORBIDDEN");
     const snapshot = await store.load(kathaId);
     if (!snapshot) throw new DomainError("NOT_FOUND");
@@ -112,6 +115,7 @@ export function createConditionAttestation(
         session.walletAddress,
         accounts,
         kathaId,
+        session.operatorAuthorization,
       );
     } catch (error) {
       if (error instanceof TypeError) throw new DomainError("CONFLICT");
@@ -270,6 +274,7 @@ export function createConditionAttestation(
           accounts,
           session.walletAddress,
           kathaId,
+          session.operatorAuthorization,
         );
       } catch (error) {
         if (error instanceof TypeError) throw new DomainError("CONFLICT");

@@ -140,7 +140,7 @@ async function artworkState(
     .getMarketplaceConfigDecoder()
     .decode(accounts.marketplaceConfigAccount.data);
   if (
-    configuration.version !== 1 ||
+    ![1, 2].includes(configuration.version) ||
     configuration.bump !== configBump ||
     configuration.registryProgram !== registry.KATHA_REGISTRY_PROGRAM_ADDRESS ||
     configuration.registryConfig !== registryConfig ||
@@ -234,6 +234,7 @@ async function artworkState(
     actor,
     kathaId,
     configuration,
+    platform,
     record,
     core,
     ledger,
@@ -246,6 +247,26 @@ async function artworkState(
       collection: platform.collection,
     },
   };
+}
+
+async function requireTradingGovernance(
+  context: MarketplaceTransactionContext,
+  state: Awaited<ReturnType<typeof artworkState>>,
+  pause: number,
+) {
+  if (state.configuration.version !== 2) return;
+  const [governance] = await registry.findGovernancePda();
+  const grant = context.authorization;
+  if (
+    !grant ||
+    grant.wallet !== state.actor ||
+    grant.governance !== governance ||
+    grant.registryConfig !== state.addresses.registryConfig ||
+    grant.pauses & pause ||
+    state.platform.registrationAuthority !== governance ||
+    state.platform.authority !== state.configuration.authority
+  )
+    throw new TypeError("Active unpaused governance snapshot is required");
 }
 
 async function conditionHead(accounts: MarketplaceListingAccounts, artwork: Address) {
@@ -287,6 +308,7 @@ export async function buildCreateListingTransaction(
   input: MarketplaceListingInput,
 ) {
   const state = await artworkState(context, accounts, input);
+  await requireTradingGovernance(context, state, 2);
   const price = BigInt(listingPriceSchema.parse(input.price));
   const expiresAt = bounded(input.expiresAt, I64_MAX, "Listing expiry");
   if (
@@ -470,6 +492,7 @@ export async function buildPurchaseListingTransaction(
   input: MarketplacePurchaseInput,
 ): Promise<PreparedMarketplaceTransaction<MarketplacePurchaseAddresses>> {
   const state = await artworkState(context, accounts, input);
+  await requireTradingGovernance(context, state, 4);
   const ledger = active(state);
   await readListingFeeRates(accounts, ledger);
   const price = BigInt(listingPriceSchema.parse(input.expectedPrice));

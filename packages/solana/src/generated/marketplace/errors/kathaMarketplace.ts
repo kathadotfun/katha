@@ -102,12 +102,17 @@ export const KATHA_MARKETPLACE_ERROR__INVALID_MULTISIG_PROGRAM_DATA = 0x1799; //
 export const KATHA_MARKETPLACE_ERROR__UPGRADE_AUTHORITY_MISMATCH = 0x179a; // 6042
 /** UnchangedAuthority: The accepting vault is already the root authority */
 export const KATHA_MARKETPLACE_ERROR__UNCHANGED_AUTHORITY = 0x179b; // 6043
+/** InvalidGovernance: Canonical active Registry governance and matching roots are required */
+export const KATHA_MARKETPLACE_ERROR__INVALID_GOVERNANCE = 0x179c; // 6044
+/** GovernancePaused: This operation is paused or the artwork is on hold */
+export const KATHA_MARKETPLACE_ERROR__GOVERNANCE_PAUSED = 0x179d; // 6045
 
 export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS
   | typeof KATHA_MARKETPLACE_ERROR__CONTROLLED_MULTISIG
   | typeof KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION
   | typeof KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED
+  | typeof KATHA_MARKETPLACE_ERROR__GOVERNANCE_PAUSED
   | typeof KATHA_MARKETPLACE_ERROR__INSUFFICIENT_PAYMENT_FUNDS
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK
@@ -117,6 +122,7 @@ export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_CUSTODY
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_FEES
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_FEE_SCHEDULE
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_GOVERNANCE
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_SCOPE
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_VALIDITY
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING
@@ -156,6 +162,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_MARKETPLACE_ERROR__CONTROLLED_MULTISIG]: `Controlled multisigs are not accepted`,
     [KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION]: `Collector inspection is expired or has an invalid timestamp`,
     [KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED]: `Create listings with a reviewed fee schedule revision`,
+    [KATHA_MARKETPLACE_ERROR__GOVERNANCE_PAUSED]: `This operation is paused or the artwork is on hold`,
     [KATHA_MARKETPLACE_ERROR__INSUFFICIENT_PAYMENT_FUNDS]: `Buyer has insufficient test-token funds`,
     [KATHA_MARKETPLACE_ERROR__INVALID_ARTIST_PAYOUT]: `Artist payout must be configured and immutable`,
     [KATHA_MARKETPLACE_ERROR__INVALID_ARTWORK]: `Artwork or Registry account does not match Marketplace configuration`,
@@ -165,6 +172,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_MARKETPLACE_ERROR__INVALID_CUSTODY]: `Custody is unknown, in transit or unrelated to the current seller`,
     [KATHA_MARKETPLACE_ERROR__INVALID_FEES]: `Combined commission and secondary royalty exceed 10000 basis points`,
     [KATHA_MARKETPLACE_ERROR__INVALID_FEE_SCHEDULE]: `Fee schedule does not belong to this Marketplace`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_GOVERNANCE]: `Canonical active Registry governance and matching roots are required`,
     [KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_SCOPE]: `Inspection does not approve the current custody and owner scope`,
     [KATHA_MARKETPLACE_ERROR__INVALID_INSPECTION_VALIDITY]: `Inspection validity must be positive and fit the signed timestamp domain`,
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING]: `Listing identity, version or primary-sale classification is invalid`,

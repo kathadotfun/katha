@@ -34,9 +34,12 @@ function fixture(facts: Facts | null) {
       },
     },
     { cluster: "localnet", adminWallets: [admin], verifierWallets: [verifier] },
-    async () => {
-      throw new Error("No chain reads for workflow markers");
-    },
+    async () => ({
+      authority: admin,
+      registrationAuthority: admin,
+      custodyAuthority: admin,
+      verifierAuthority: verifier,
+    }),
   );
   const app = createApi(
     createLogger(() => {}),

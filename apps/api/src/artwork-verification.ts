@@ -138,6 +138,7 @@ export function createArtworkVerification(
           accounts,
           session.walletAddress,
           artwork.kathaId,
+          session.operatorAuthorization,
         );
       } catch (error) {
         if (error instanceof TypeError) throw new DomainError("CONFLICT");

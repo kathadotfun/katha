@@ -207,3 +207,22 @@ export {
   type MarketplaceActivityEvent,
 } from "./marketplace-events.js";
 export * from "./devnet-bootstrap.js";
+
+export {
+  OPERATOR_ROLES,
+  governanceAccountMetas,
+  readOperatorAuthorization,
+  inspectGovernanceSuffix,
+} from "./governance.js";
+export type { OperatorAuthorization } from "./governance.js";
+export {
+  inspectUpgradeableProgram,
+  prepareProgramUpgrade,
+  findUpgradeableProgramDataAddress,
+} from "./program-upgrade.js";
+export { prepareGovernanceSetup } from "./governance-setup.js";
+export {
+  inspectSquadsVault,
+  compileSquadsMessage,
+  SQUADS_V4_PROGRAM,
+} from "./squads.js";

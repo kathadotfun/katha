@@ -2172,6 +2172,125 @@
       ]
     },
     {
+      "name": "stage_governance",
+      "discriminator": [
+        180,
+        125,
+        148,
+        129,
+        217,
+        45,
+        151,
+        177
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "registry_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                237,
+                56,
+                229,
+                5,
+                252,
+                225,
+                187,
+                78,
+                72,
+                185,
+                224,
+                137,
+                9,
+                248,
+                113,
+                209,
+                162,
+                157,
+                141,
+                34,
+                188,
+                155,
+                76,
+                147,
+                159,
+                180,
+                9,
+                130,
+                51,
+                124,
+                24,
+                3
+              ]
+            }
+          }
+        },
+        {
+          "name": "program",
+          "address": "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
+        },
+        {
+          "name": "program_data"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "transfer_multisig_authority",
       "docs": [
         "The vault must accept through Squads CPI; a member wallet cannot substitute for it."
@@ -2721,6 +2840,16 @@
       "code": 6043,
       "name": "UnchangedAuthority",
       "msg": "The accepting vault is already the root authority"
+    },
+    {
+      "code": 6044,
+      "name": "InvalidGovernance",
+      "msg": "Canonical active Registry governance and matching roots are required"
+    },
+    {
+      "code": 6045,
+      "name": "GovernancePaused",
+      "msg": "This operation is paused or the artwork is on hold"
     }
   ],
   "types": [

@@ -71,11 +71,20 @@ export function createArtists(store: ArtistStore) {
       if (!record) throw new DomainError("CONFLICT");
       return response(record);
     },
-    async verify(artistId: string, input: unknown, session: WalletSession) {
+    async verify(
+      artistId: string,
+      input: unknown,
+      session: WalletSession,
+      authorize?: () => Promise<bigint | undefined>,
+    ) {
       const params = artistIdParamsSchema.safeParse({ artistId });
       if (!params.success || !artistVerificationRequestSchema.safeParse(input).success)
         throw new DomainError("INVALID_REQUEST");
-      const result = await store.verify(params.data.artistId, session.walletAddress);
+      const result = await store.verify(
+        params.data.artistId,
+        session.walletAddress,
+        authorize,
+      );
       if (result.status === "not_found") throw new DomainError("NOT_FOUND");
       if (result.status === "already_verified") throw new DomainError("CONFLICT");
       return response(result.record);

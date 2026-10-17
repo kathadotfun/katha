@@ -538,6 +538,9 @@ it.each(["APPROVED", "DISPATCHED"] as const)(
 it("ordinary admin sees requests without Registry signing authority", async () => {
   const f = await fixture();
   f.accounts.configuration.custodyAuthority = f.accounts.artworkAccount.address;
+  f.authorization.requireRegistryAuthority = vi.fn(async () => {
+    throw new DomainError("FORBIDDEN");
+  });
   const review = await f.service.review(
     "Bearer synthetic",
     f.snapshot.artwork.kathaId,

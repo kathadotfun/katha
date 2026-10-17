@@ -67,7 +67,7 @@ export function createArtworkMintAdministration(
       asset: state.asset,
       collection: config.collection,
       collectionAuthority: config.collectionAuthority,
-      registrationAuthority: config.registrationAuthority,
+      registrationAuthority: String(config.registrationAuthority),
       owner: state.owner,
       minted: state.minted,
       metadataVersion: state.metadata.state.version,
@@ -113,6 +113,14 @@ export function createArtworkMintAdministration(
         )
           throw error;
       }
+      let canRegister = false;
+      try {
+        await authorization.requireRegistryAuthority(bearer, "registrationAuthority");
+        canRegister = true;
+      } catch (error) {
+        if (!(error instanceof DomainError) || error.code !== "FORBIDDEN") throw error;
+      }
+      if (canRegister && chain) chain.registrationAuthority = handler.walletAddress;
       const blockedReasons: ReturnType<
         typeof artworkMintReviewSchema.parse
       >["blockedReasons"] = [];

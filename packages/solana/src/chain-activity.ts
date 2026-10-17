@@ -43,9 +43,8 @@ function readInstruction<A, T extends A>(
   if (!Buffer.from(codec.encode(value)).equals(data)) fail();
   return value;
 }
-const registryEventNames: Record<
-  Exclude<KathaRegistryInstruction, KathaRegistryInstruction.TransferMultisigAuthority>,
-  RegistryActivityEvent["name"]
+const registryEventNames: Partial<
+  Record<KathaRegistryInstruction, RegistryActivityEvent["name"]>
 > = {
   [KathaRegistryInstruction.InitializePlatform]: "PlatformInitialized",
   [KathaRegistryInstruction.RegisterArtwork]: "ArtworkRegistered",
@@ -338,7 +337,12 @@ export function decodeFinalizedActivity(
           const invocation = frame.invocation;
           if (
             invocation.program === KATHA_REGISTRY_PROGRAM_ADDRESS &&
-            frame.eventCount !== 1
+            frame.eventCount !==
+              (registryEventNames[identifyKathaRegistryInstruction(invocation.data)] ||
+              identifyKathaRegistryInstruction(invocation.data) ===
+                KathaRegistryInstruction.TransferMultisigAuthority
+                ? 1
+                : 0)
           )
             fail();
           if (invocation.program === marketplace.KATHA_MARKETPLACE_PROGRAM_ADDRESS) {

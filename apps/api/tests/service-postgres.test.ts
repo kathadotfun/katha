@@ -270,9 +270,12 @@ it("creates and manually verifies artists through real signed sessions with race
   const outsider = temporaryWallet();
   const config = { origin: "http://localhost:3000", cluster: "localnet" as const };
   const sessions = createWalletSessions(createWalletSessionStore(database.db), config);
-  const chainRead = vi.fn(async () => {
-    throw new Error("Artist profile approval is off-chain");
-  });
+  const chainRead = vi.fn(async () => ({
+    authority: admin.address,
+    registrationAuthority: admin.address,
+    custodyAuthority: admin.address,
+    verifierAuthority: verifierA.address,
+  }));
   const authorization = createAuthorization(
     sessions,
     {
@@ -496,7 +499,7 @@ it("creates and manually verifies artists through real signed sessions with race
         )
       ).status,
     ).toBe(401);
-    expect(chainRead).not.toHaveBeenCalled();
+    expect(chainRead).toHaveBeenCalled();
     for (const value of [
       adminToken,
       verifierTokenA,
@@ -604,9 +607,12 @@ it("creates and edits private drafts with signed admin authorization, retry roll
     origin: "http://localhost:3000",
     cluster: "localnet",
   });
-  const chainRead = vi.fn(async () => {
-    throw new Error("Draft creation is off-chain");
-  });
+  const chainRead = vi.fn(async () => ({
+    authority: admin.address,
+    registrationAuthority: admin.address,
+    custodyAuthority: admin.address,
+    verifierAuthority: admin.address,
+  }));
   const authorization = createAuthorization(
     sessions,
     {
@@ -1293,7 +1299,7 @@ it("creates and edits private drafts with signed admin authorization, retry roll
         })
       ).status,
     ).toBe(401);
-    expect(chainRead).not.toHaveBeenCalled();
+    expect(chainRead).toHaveBeenCalled();
     for (const secret of [session.token, challenge.message, draft.title])
       expect(logs.join("")).not.toContain(secret);
   } finally {

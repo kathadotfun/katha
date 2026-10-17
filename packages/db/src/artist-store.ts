@@ -86,14 +86,19 @@ export function createArtistStore(db: Database) {
     async verify(
       id: string,
       verifiedByWallet: string,
+      authorize?: () => Promise<bigint | undefined>,
     ): Promise<ArtistVerificationResult> {
       return db.transaction(async (tx) => {
+        // Recheck finalized permission immediately before the conditional write.
+        // The slot records the decision; revocation cannot undo an in-flight DB commit.
+        const authorizationSlot = await authorize?.();
         // One conditional write wins concurrent approvals; no prior approval is overwritten.
         const [record] = await tx
           .update(artists)
           .set({
             verificationStatus: "VERIFIED",
             verifiedByWallet,
+            verificationAuthorizationSlot: authorizationSlot ?? null,
             verifiedAt: sql`statement_timestamp()`,
             updatedAt: sql`statement_timestamp()`,
           })

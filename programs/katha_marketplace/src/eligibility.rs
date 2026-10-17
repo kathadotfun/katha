@@ -192,15 +192,17 @@ pub struct LiveEligibility<'a, 'info> {
 impl LiveEligibility<'_, '_> {
     pub fn validate(&self, kind: SaleKind, now: i64) -> Result<()> {
         require!(
-            self.config.version == 1
+            matches!(self.config.version, 1 | 2)
                 && self.sale_terms.version == 1
                 && self.sale_terms.artist_payout != Pubkey::default(),
             MarketplaceError::InvalidArtistPayout
         );
         require!(
             self.verification.authorship_evidence_hash == self.artwork.authorship_evidence_hash
-                && self.verification.verifier == self.registry_config.verifier_authority
-                && self.condition_report.verifier == self.registry_config.verifier_authority
+                && (self.config.version == 2
+                    || (self.verification.verifier == self.registry_config.verifier_authority
+                        && self.condition_report.verifier
+                            == self.registry_config.verifier_authority))
                 && self.verification.verified_at > 0
                 && self.verification.verified_at <= now,
             MarketplaceError::InvalidAttestation

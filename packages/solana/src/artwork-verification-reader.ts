@@ -13,6 +13,7 @@ import {
 import { nonzeroAddress, readRegistryConfiguration } from "./registration.js";
 import { readAuthorizedArtwork, type VerifierArtworkAccounts } from "./attestation.js";
 import { kathaIdSchema } from "@katha/shared";
+import type { OperatorAuthorization } from "./governance.js";
 
 export function createArtworkVerificationReaderFromRpc(rpc: Rpc<GetAccountInfoApi>) {
   return async (identity: string) => {
@@ -56,10 +57,11 @@ export async function readArtworkVerificationIdentity(
   accounts: VerifierArtworkAccounts,
   authority: string,
   kathaId: string,
+  authorization?: OperatorAuthorization,
 ) {
   return (
     await readAuthorizedArtwork(
-      { authorityAddress: nonzeroAddress(address(authority)) },
+      { authorityAddress: nonzeroAddress(address(authority)), authorization },
       accounts,
       kathaId,
     )

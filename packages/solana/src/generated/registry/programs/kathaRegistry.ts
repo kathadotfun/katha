@@ -17,6 +17,7 @@ import {
   SOLANA_ERROR__PROGRAM_CLIENTS__UNRECOGNIZED_INSTRUCTION_TYPE,
   SolanaError,
   type Address,
+  type ClientWithPayer,
   type ClientWithRpc,
   type ClientWithTransactionPlanning,
   type ClientWithTransactionSending,
@@ -43,6 +44,8 @@ import {
   getKathaConfigCodec,
   getMetadataHeadCodec,
   getMetadataRevisionCodec,
+  getRegistryGovernanceCodec,
+  getRoleGrantCodec,
   type ArtworkRecord,
   type ArtworkRecordArgs,
   type ArtworkVerification,
@@ -61,59 +64,87 @@ import {
   type MetadataHeadArgs,
   type MetadataRevision,
   type MetadataRevisionArgs,
+  type RegistryGovernance,
+  type RegistryGovernanceArgs,
+  type RoleGrant,
+  type RoleGrantArgs,
 } from "../accounts/index.js";
 import {
+  getActivateGovernanceInstructionAsync,
+  getClearArtworkHoldInstructionAsync,
+  getCreateRoleGrantInstructionAsync,
   getInitializeConditionInstructionAsync,
   getInitializeCustodyInstructionAsync,
   getInitializeMetadataInstructionAsync,
   getInitializePlatformInstructionAsync,
   getMintArtworkInstructionAsync,
+  getPlaceArtworkHoldInstructionAsync,
   getRecordMintedConditionInstructionAsync,
   getRecordUnmintedConditionInstructionAsync,
   getRegisterArtworkInstructionAsync,
   getReviseMintedMetadataInstructionAsync,
   getReviseUnmintedMetadataInstructionAsync,
+  getSetGovernancePauseInstructionAsync,
   getTransferMultisigAuthorityInstructionAsync,
   getTransitionCustodyInstructionAsync,
+  getUpdateRoleGrantInstructionAsync,
   getVerifyArtworkInstructionAsync,
+  parseActivateGovernanceInstruction,
+  parseClearArtworkHoldInstruction,
+  parseCreateRoleGrantInstruction,
   parseInitializeConditionInstruction,
   parseInitializeCustodyInstruction,
   parseInitializeMetadataInstruction,
   parseInitializePlatformInstruction,
   parseMintArtworkInstruction,
+  parsePlaceArtworkHoldInstruction,
   parseRecordMintedConditionInstruction,
   parseRecordUnmintedConditionInstruction,
   parseRegisterArtworkInstruction,
   parseReviseMintedMetadataInstruction,
   parseReviseUnmintedMetadataInstruction,
+  parseSetGovernancePauseInstruction,
   parseTransferMultisigAuthorityInstruction,
   parseTransitionCustodyInstruction,
+  parseUpdateRoleGrantInstruction,
   parseVerifyArtworkInstruction,
+  type ActivateGovernanceAsyncInput,
+  type ClearArtworkHoldAsyncInput,
+  type CreateRoleGrantAsyncInput,
   type InitializeConditionAsyncInput,
   type InitializeCustodyAsyncInput,
   type InitializeMetadataAsyncInput,
   type InitializePlatformAsyncInput,
   type MintArtworkAsyncInput,
+  type ParsedActivateGovernanceInstruction,
+  type ParsedClearArtworkHoldInstruction,
+  type ParsedCreateRoleGrantInstruction,
   type ParsedInitializeConditionInstruction,
   type ParsedInitializeCustodyInstruction,
   type ParsedInitializeMetadataInstruction,
   type ParsedInitializePlatformInstruction,
   type ParsedMintArtworkInstruction,
+  type ParsedPlaceArtworkHoldInstruction,
   type ParsedRecordMintedConditionInstruction,
   type ParsedRecordUnmintedConditionInstruction,
   type ParsedRegisterArtworkInstruction,
   type ParsedReviseMintedMetadataInstruction,
   type ParsedReviseUnmintedMetadataInstruction,
+  type ParsedSetGovernancePauseInstruction,
   type ParsedTransferMultisigAuthorityInstruction,
   type ParsedTransitionCustodyInstruction,
+  type ParsedUpdateRoleGrantInstruction,
   type ParsedVerifyArtworkInstruction,
+  type PlaceArtworkHoldAsyncInput,
   type RecordMintedConditionAsyncInput,
   type RecordUnmintedConditionAsyncInput,
   type RegisterArtworkAsyncInput,
   type ReviseMintedMetadataAsyncInput,
   type ReviseUnmintedMetadataAsyncInput,
+  type SetGovernancePauseAsyncInput,
   type TransferMultisigAuthorityAsyncInput,
   type TransitionCustodyAsyncInput,
+  type UpdateRoleGrantAsyncInput,
   type VerifyArtworkAsyncInput,
 } from "../instructions/index.js";
 import {
@@ -121,6 +152,8 @@ import {
   findAssetPda,
   findCollectionAuthorityPda,
   findConfigPda,
+  findGovernancePda,
+  findGrantPda,
   findHeadPda,
   findInitializeCustodyHeadPda,
   findInitializeMetadataHeadPda,
@@ -145,6 +178,8 @@ export enum KathaRegistryAccount {
   KathaConfig,
   MetadataHead,
   MetadataRevision,
+  RegistryGovernance,
+  RoleGrant,
 }
 
 export function identifyKathaRegistryAccount(
@@ -249,6 +284,28 @@ export function identifyKathaRegistryAccount(
     )
   ) {
     return KathaRegistryAccount.MetadataRevision;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([14, 139, 11, 141, 229, 106, 177, 78]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryAccount.RegistryGovernance;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([126, 213, 123, 128, 172, 2, 104, 242]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryAccount.RoleGrant;
   }
   throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT, {
     accountData: data,
@@ -365,18 +422,24 @@ export function identifyKathaRegistryEvent(
 }
 
 export enum KathaRegistryInstruction {
+  ActivateGovernance,
+  ClearArtworkHold,
+  CreateRoleGrant,
   InitializeCondition,
   InitializeCustody,
   InitializeMetadata,
   InitializePlatform,
   MintArtwork,
+  PlaceArtworkHold,
   RecordMintedCondition,
   RecordUnmintedCondition,
   RegisterArtwork,
   ReviseMintedMetadata,
   ReviseUnmintedMetadata,
+  SetGovernancePause,
   TransferMultisigAuthority,
   TransitionCustody,
+  UpdateRoleGrant,
   VerifyArtwork,
 }
 
@@ -384,6 +447,39 @@ export function identifyKathaRegistryInstruction(
   instruction: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): KathaRegistryInstruction {
   const data = "data" in instruction ? instruction.data : instruction;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([59, 165, 99, 188, 34, 143, 48, 46]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.ActivateGovernance;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([80, 163, 165, 58, 195, 197, 7, 204]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.ClearArtworkHold;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([38, 155, 38, 129, 196, 5, 164, 134]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.CreateRoleGrant;
+  }
   if (
     containsBytes(
       data,
@@ -438,6 +534,17 @@ export function identifyKathaRegistryInstruction(
     )
   ) {
     return KathaRegistryInstruction.MintArtwork;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([202, 241, 204, 200, 2, 54, 134, 253]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.PlaceArtworkHold;
   }
   if (
     containsBytes(
@@ -498,6 +605,17 @@ export function identifyKathaRegistryInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([156, 221, 234, 30, 222, 238, 195, 189]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.SetGovernancePause;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([110, 188, 29, 105, 224, 116, 248, 106]),
       ),
       0,
@@ -520,6 +638,17 @@ export function identifyKathaRegistryInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([146, 73, 162, 117, 67, 130, 0, 103]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.UpdateRoleGrant;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([114, 3, 133, 184, 83, 147, 170, 59]),
       ),
       0,
@@ -537,6 +666,15 @@ export type ParsedKathaRegistryInstruction<
   TProgram extends string = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr",
 > =
   | ({
+      instructionType: KathaRegistryInstruction.ActivateGovernance;
+    } & ParsedActivateGovernanceInstruction<TProgram>)
+  | ({
+      instructionType: KathaRegistryInstruction.ClearArtworkHold;
+    } & ParsedClearArtworkHoldInstruction<TProgram>)
+  | ({
+      instructionType: KathaRegistryInstruction.CreateRoleGrant;
+    } & ParsedCreateRoleGrantInstruction<TProgram>)
+  | ({
       instructionType: KathaRegistryInstruction.InitializeCondition;
     } & ParsedInitializeConditionInstruction<TProgram>)
   | ({
@@ -551,6 +689,9 @@ export type ParsedKathaRegistryInstruction<
   | ({
       instructionType: KathaRegistryInstruction.MintArtwork;
     } & ParsedMintArtworkInstruction<TProgram>)
+  | ({
+      instructionType: KathaRegistryInstruction.PlaceArtworkHold;
+    } & ParsedPlaceArtworkHoldInstruction<TProgram>)
   | ({
       instructionType: KathaRegistryInstruction.RecordMintedCondition;
     } & ParsedRecordMintedConditionInstruction<TProgram>)
@@ -567,11 +708,17 @@ export type ParsedKathaRegistryInstruction<
       instructionType: KathaRegistryInstruction.ReviseUnmintedMetadata;
     } & ParsedReviseUnmintedMetadataInstruction<TProgram>)
   | ({
+      instructionType: KathaRegistryInstruction.SetGovernancePause;
+    } & ParsedSetGovernancePauseInstruction<TProgram>)
+  | ({
       instructionType: KathaRegistryInstruction.TransferMultisigAuthority;
     } & ParsedTransferMultisigAuthorityInstruction<TProgram>)
   | ({
       instructionType: KathaRegistryInstruction.TransitionCustody;
     } & ParsedTransitionCustodyInstruction<TProgram>)
+  | ({
+      instructionType: KathaRegistryInstruction.UpdateRoleGrant;
+    } & ParsedUpdateRoleGrantInstruction<TProgram>)
   | ({
       instructionType: KathaRegistryInstruction.VerifyArtwork;
     } & ParsedVerifyArtworkInstruction<TProgram>);
@@ -581,6 +728,27 @@ export function parseKathaRegistryInstruction<TProgram extends string>(
 ): ParsedKathaRegistryInstruction<TProgram> {
   const instructionType = identifyKathaRegistryInstruction(instruction);
   switch (instructionType) {
+    case KathaRegistryInstruction.ActivateGovernance: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.ActivateGovernance,
+        ...parseActivateGovernanceInstruction(instruction),
+      };
+    }
+    case KathaRegistryInstruction.ClearArtworkHold: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.ClearArtworkHold,
+        ...parseClearArtworkHoldInstruction(instruction),
+      };
+    }
+    case KathaRegistryInstruction.CreateRoleGrant: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.CreateRoleGrant,
+        ...parseCreateRoleGrantInstruction(instruction),
+      };
+    }
     case KathaRegistryInstruction.InitializeCondition: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -614,6 +782,13 @@ export function parseKathaRegistryInstruction<TProgram extends string>(
       return {
         instructionType: KathaRegistryInstruction.MintArtwork,
         ...parseMintArtworkInstruction(instruction),
+      };
+    }
+    case KathaRegistryInstruction.PlaceArtworkHold: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.PlaceArtworkHold,
+        ...parsePlaceArtworkHoldInstruction(instruction),
       };
     }
     case KathaRegistryInstruction.RecordMintedCondition: {
@@ -651,6 +826,13 @@ export function parseKathaRegistryInstruction<TProgram extends string>(
         ...parseReviseUnmintedMetadataInstruction(instruction),
       };
     }
+    case KathaRegistryInstruction.SetGovernancePause: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.SetGovernancePause,
+        ...parseSetGovernancePauseInstruction(instruction),
+      };
+    }
     case KathaRegistryInstruction.TransferMultisigAuthority: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -663,6 +845,13 @@ export function parseKathaRegistryInstruction<TProgram extends string>(
       return {
         instructionType: KathaRegistryInstruction.TransitionCustody,
         ...parseTransitionCustodyInstruction(instruction),
+      };
+    }
+    case KathaRegistryInstruction.UpdateRoleGrant: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.UpdateRoleGrant,
+        ...parseUpdateRoleGrantInstruction(instruction),
       };
     }
     case KathaRegistryInstruction.VerifyArtwork: {
@@ -708,9 +897,24 @@ export type KathaRegistryPluginAccounts = {
     SelfFetchFunctions<MetadataHeadArgs, MetadataHead>;
   metadataRevision: ReturnType<typeof getMetadataRevisionCodec> &
     SelfFetchFunctions<MetadataRevisionArgs, MetadataRevision>;
+  registryGovernance: ReturnType<typeof getRegistryGovernanceCodec> &
+    SelfFetchFunctions<RegistryGovernanceArgs, RegistryGovernance>;
+  roleGrant: ReturnType<typeof getRoleGrantCodec> &
+    SelfFetchFunctions<RoleGrantArgs, RoleGrant>;
 };
 
 export type KathaRegistryPluginInstructions = {
+  activateGovernance: (
+    input: MakeOptional<ActivateGovernanceAsyncInput, "payer">,
+  ) => ReturnType<typeof getActivateGovernanceInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  clearArtworkHold: (
+    input: ClearArtworkHoldAsyncInput,
+  ) => ReturnType<typeof getClearArtworkHoldInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  createRoleGrant: (
+    input: MakeOptional<CreateRoleGrantAsyncInput, "payer">,
+  ) => ReturnType<typeof getCreateRoleGrantInstructionAsync> & SelfPlanAndSendFunctions;
   initializeCondition: (
     input: InitializeConditionAsyncInput,
   ) => ReturnType<typeof getInitializeConditionInstructionAsync> &
@@ -730,6 +934,10 @@ export type KathaRegistryPluginInstructions = {
   mintArtwork: (
     input: MintArtworkAsyncInput,
   ) => ReturnType<typeof getMintArtworkInstructionAsync> & SelfPlanAndSendFunctions;
+  placeArtworkHold: (
+    input: PlaceArtworkHoldAsyncInput,
+  ) => ReturnType<typeof getPlaceArtworkHoldInstructionAsync> &
+    SelfPlanAndSendFunctions;
   recordMintedCondition: (
     input: RecordMintedConditionAsyncInput,
   ) => ReturnType<typeof getRecordMintedConditionInstructionAsync> &
@@ -749,6 +957,10 @@ export type KathaRegistryPluginInstructions = {
     input: ReviseUnmintedMetadataAsyncInput,
   ) => ReturnType<typeof getReviseUnmintedMetadataInstructionAsync> &
     SelfPlanAndSendFunctions;
+  setGovernancePause: (
+    input: SetGovernancePauseAsyncInput,
+  ) => ReturnType<typeof getSetGovernancePauseInstructionAsync> &
+    SelfPlanAndSendFunctions;
   transferMultisigAuthority: (
     input: TransferMultisigAuthorityAsyncInput,
   ) => ReturnType<typeof getTransferMultisigAuthorityInstructionAsync> &
@@ -757,6 +969,9 @@ export type KathaRegistryPluginInstructions = {
     input: TransitionCustodyAsyncInput,
   ) => ReturnType<typeof getTransitionCustodyInstructionAsync> &
     SelfPlanAndSendFunctions;
+  updateRoleGrant: (
+    input: UpdateRoleGrantAsyncInput,
+  ) => ReturnType<typeof getUpdateRoleGrantInstructionAsync> & SelfPlanAndSendFunctions;
   verifyArtwork: (
     input: VerifyArtworkAsyncInput,
   ) => ReturnType<typeof getVerifyArtworkInstructionAsync> & SelfPlanAndSendFunctions;
@@ -764,8 +979,10 @@ export type KathaRegistryPluginInstructions = {
 
 export type KathaRegistryPluginPdas = {
   config: typeof findConfigPda;
-  verification: typeof findVerificationPda;
+  governance: typeof findGovernancePda;
   head: typeof findHeadPda;
+  grant: typeof findGrantPda;
+  verification: typeof findVerificationPda;
   report: typeof findReportPda;
   initializeCustodyHead: typeof findInitializeCustodyHeadPda;
   transition: typeof findTransitionPda;
@@ -781,6 +998,7 @@ export type KathaRegistryPluginPdas = {
 export type KathaRegistryPluginRequirements = ClientWithRpc<
   GetAccountInfoApi & GetMultipleAccountsApi
 > &
+  ClientWithPayer &
   ClientWithTransactionPlanning &
   ClientWithTransactionSending;
 
@@ -806,8 +1024,34 @@ export function kathaRegistryProgram() {
           kathaConfig: addSelfFetchFunctions(client, getKathaConfigCodec()),
           metadataHead: addSelfFetchFunctions(client, getMetadataHeadCodec()),
           metadataRevision: addSelfFetchFunctions(client, getMetadataRevisionCodec()),
+          registryGovernance: addSelfFetchFunctions(
+            client,
+            getRegistryGovernanceCodec(),
+          ),
+          roleGrant: addSelfFetchFunctions(client, getRoleGrantCodec()),
         },
         instructions: {
+          activateGovernance: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getActivateGovernanceInstructionAsync({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
+            ),
+          clearArtworkHold: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getClearArtworkHoldInstructionAsync(input),
+            ),
+          createRoleGrant: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCreateRoleGrantInstructionAsync({
+                ...input,
+                payer: input.payer ?? client.payer,
+              }),
+            ),
           initializeCondition: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -830,6 +1074,11 @@ export function kathaRegistryProgram() {
             ),
           mintArtwork: (input) =>
             addSelfPlanAndSendFunctions(client, getMintArtworkInstructionAsync(input)),
+          placeArtworkHold: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getPlaceArtworkHoldInstructionAsync(input),
+            ),
           recordMintedCondition: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -855,6 +1104,11 @@ export function kathaRegistryProgram() {
               client,
               getReviseUnmintedMetadataInstructionAsync(input),
             ),
+          setGovernancePause: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetGovernancePauseInstructionAsync(input),
+            ),
           transferMultisigAuthority: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -865,6 +1119,11 @@ export function kathaRegistryProgram() {
               client,
               getTransitionCustodyInstructionAsync(input),
             ),
+          updateRoleGrant: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getUpdateRoleGrantInstructionAsync(input),
+            ),
           verifyArtwork: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -873,8 +1132,10 @@ export function kathaRegistryProgram() {
         },
         pdas: {
           config: findConfigPda,
-          verification: findVerificationPda,
+          governance: findGovernancePda,
           head: findHeadPda,
+          grant: findGrantPda,
+          verification: findVerificationPda,
           report: findReportPda,
           initializeCustodyHead: findInitializeCustodyHeadPda,
           transition: findTransitionPda,
@@ -893,3 +1154,5 @@ export function kathaRegistryProgram() {
     });
   };
 }
+
+type MakeOptional<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;

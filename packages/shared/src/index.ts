@@ -277,3 +277,4 @@ export * from "./collector-api.js";
 export * from "./resale-inspection.js";
 export * from "./devnet-bootstrap.js";
 export * from "./artwork-workflow-api.js";
+export * from "./governance.js";

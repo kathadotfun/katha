@@ -1,3 +1,4 @@
+import { assertRegistryOperator, type OperatorAuthorization } from "./governance.js";
 import { readCoreAsset } from "./core.js";
 import {
   artworkSchema,
@@ -46,7 +47,6 @@ import {
   KathaRegistryAccount,
 } from "./generated/registry/index.js";
 import {
-  nonzeroAddress,
   readRegistryConfiguration,
   unsignedMessage,
   type RegistryTransactionContext,
@@ -141,7 +141,7 @@ export function checkAccount(
 }
 
 export async function readAuthorizedArtwork(
-  context: Pick<RegistryTransactionContext, "authorityAddress">,
+  context: Pick<RegistryTransactionContext, "authorityAddress" | "authorization">,
   accounts: VerifierArtworkAccounts,
   identity: string,
   role:
@@ -150,8 +150,7 @@ export async function readAuthorizedArtwork(
     | "custodyAuthority" = "verifierAuthority",
 ) {
   const { config, state } = await readRegistryConfiguration(accounts.configAccount);
-  if (state[role] !== nonzeroAddress(context.authorityAddress))
-    throw new TypeError(`Configured ${role} is required`);
+  await assertRegistryOperator(context, state, role);
   const kathaId = kathaIdSchema.parse(identity);
   const [artwork, bump] = await findArtworkPda({ kathaId });
   // Anchor allocates the maximum bounded record size, including unused option space.
@@ -162,6 +161,13 @@ export async function readAuthorizedArtwork(
     246,
   );
   const record = getArtworkRecordDecoder().decode(accounts.artworkAccount.data);
+  if (
+    role === "verifierAuthority" &&
+    "authorization" in context &&
+    context.authorization &&
+    record.registeredBy === context.authorityAddress
+  )
+    throw new TypeError("An artwork's registrar cannot independently verify it");
   if (
     record.kathaId !== kathaId ||
     record.bump !== bump ||
@@ -176,12 +182,12 @@ export async function readAuthorizedArtwork(
     artwork,
     record,
     configuration: state,
-    verifierAuthority: createNoopSigner(state.verifierAuthority),
+    verifierAuthority: createNoopSigner(context.authorityAddress),
   };
 }
 
 async function verifiedArtwork(
-  context: Pick<RegistryTransactionContext, "authorityAddress">,
+  context: Pick<RegistryTransactionContext, "authorityAddress" | "authorization">,
   accounts: VerifiedArtworkAccounts,
   identity: string,
   minted = false,
@@ -545,9 +551,10 @@ export async function readConditionInspectionScope(
     assetAccount: import("@solana/kit").MaybeEncodedAccount;
   },
   kathaId: string,
+  authorization?: OperatorAuthorization,
 ) {
   const prepared = await verifiedArtwork(
-    { authorityAddress: address(authorityAddress) },
+    { authorityAddress: address(authorityAddress), authorization },
     accounts,
     kathaId,
     true,

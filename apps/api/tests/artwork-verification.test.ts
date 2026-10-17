@@ -1,7 +1,15 @@
 import { expect, it } from "vitest";
 import { unsignedOperationResponseSchema } from "@katha/shared";
 import { OperationSimulationError } from "@katha/solana";
-import { parseVerifyArtworkInstruction } from "@katha/solana/registry";
+import {
+  parseVerifyArtworkInstruction,
+  findGovernancePda,
+  findGrantPda,
+  getKathaConfigDecoder,
+  getKathaConfigEncoder,
+  getArtworkRecordDecoder,
+  getArtworkRecordEncoder,
+} from "@katha/solana/registry";
 import { verificationFixture } from "./fixtures/verification.js";
 import { createApi } from "../src/app.js";
 import { createLogger } from "../src/logger.js";
@@ -32,7 +40,7 @@ it("prepares actual generated unsigned verification and binds selected metadata 
   expect(JSON.stringify(response)).not.toContain("PRIVATE ARTIST BIO");
   expect(response).not.toHaveProperty("canonicalRequest");
   expect(f.read).toHaveBeenCalledOnce();
-  expect(f.readAuthorities).toHaveBeenCalledTimes(2);
+  expect(f.readAuthorities).toHaveBeenCalledTimes(3);
 });
 it.each([undefined, "Bearer outsider"])(
   "denies unauthorized verification before reading drafts/storage/chain",
@@ -54,6 +62,65 @@ it("denies a removed on-chain authority before reading draft content", async () 
     f.service.prepare("Bearer synthetic", f.snapshot.artwork.kathaId, f.request),
   ).rejects.toMatchObject({ code: "FORBIDDEN" });
   expect(f.load).not.toHaveBeenCalled();
+});
+
+it("prepares verification for a newly granted operator after governance activation and binds the full grant manifest", async () => {
+  const f = await verificationFixture();
+  const context = await f.context();
+  const wallet = context.authorityAddress;
+  const [governance] = await findGovernancePda(),
+    [grant] = await findGrantPda({ wallet });
+  const accounts = await f.readChain(f.snapshot.artwork.kathaId);
+  const configuration = getKathaConfigDecoder().decode(accounts.configAccount.data);
+  const retired = temporaryWallet().address;
+  const retiredAddress = retired as typeof wallet;
+  const record = getArtworkRecordDecoder().decode(accounts.artworkAccount.data);
+  const artworkData = new Uint8Array(246);
+  artworkData.set(
+    getArtworkRecordEncoder().encode({ ...record, registeredBy: retiredAddress }),
+  );
+  f.readChain.mockResolvedValue({
+    ...accounts,
+    configAccount: {
+      ...accounts.configAccount,
+      data: Uint8Array.from(
+        getKathaConfigEncoder().encode({
+          ...configuration,
+          registrationAuthority: governance,
+          verifierAuthority: retiredAddress,
+        }),
+      ),
+    },
+    artworkAccount: { ...accounts.artworkAccount, data: artworkData },
+  });
+  const authorization = {
+    wallet,
+    governance,
+    grant,
+    registryConfig: accounts.configAccount.address,
+    roles: 8,
+    pauses: 0,
+    slot: 123n,
+  };
+  Object.assign(f.authorities, {
+    verifierAuthority: retired,
+    operatorAuthorization: authorization,
+  });
+  f.context.mockResolvedValue({ ...context, authorization });
+  const result = await f.service.prepare(
+    "Bearer synthetic",
+    f.snapshot.artwork.kathaId,
+    f.request,
+  );
+  expect(result.kind).toBe("VERIFY_ARTWORK");
+  expect(f.simulate.mock.calls[0]![0].instruction.accounts.slice(-3)).toEqual([
+    { address: governance, role: 0 },
+    { address: grant, role: 0 },
+    { address: accounts.configAccount.address, role: 0 },
+  ]);
+  expect(f.save.mock.calls[0]![0].expectedAccounts).toEqual(
+    expect.arrayContaining([governance, grant]),
+  );
 });
 it.each([
   "artist",

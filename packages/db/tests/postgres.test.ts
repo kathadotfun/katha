@@ -10,6 +10,7 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { expect, it } from "vitest";
 import {
   artists,
+  createArtistStore,
   indexedEvents,
   indexerCheckpoints,
   artworkOwnership,
@@ -64,7 +65,7 @@ it("generates forward migrations, applies them once, and rolls back failed trans
         sql`select count(*)::int as count from drizzle.__drizzle_migrations`,
       )
     )[0]?.count;
-    expect(applicationCount).toBe(16);
+    expect(applicationCount).toBe(17);
     await writeFile(
       config,
       `export default ${JSON.stringify({
@@ -6576,6 +6577,41 @@ it("serializes scoped resale inspection requests without condition approval or c
         .where(eq(conditionReports.artworkId, artwork.id)),
     ).toHaveLength(0);
   } finally {
+    await connection.close();
+  }
+});
+
+it("rechecks artist permission before writing and records the finalized decision slot", async () => {
+  const url = process.env.KATHA_TEST_DATABASE_URL;
+  if (!url || url !== process.env.DATABASE_URL)
+    throw new Error("Run through pnpm db:test");
+  const connection = createDatabase(url);
+  const store = createArtistStore(connection.db);
+  const artist = await store.create({
+    slug: "permission-recheck",
+    displayName: "Synthetic",
+    biography: "Synthetic",
+    region: "Lalitpur",
+    traditions: ["Paubha"],
+  });
+  if (!artist) throw new Error("Missing fixture artist");
+  const wallet = "Vote111111111111111111111111111111111111111";
+  try {
+    await expect(
+      store.verify(artist.id, wallet, async () => {
+        throw new Error("revoked");
+      }),
+    ).rejects.toThrow("revoked");
+    expect((await store.read(artist.id))?.verificationStatus).toBe("UNVERIFIED");
+    const result = await store.verify(artist.id, wallet, async () => 123n);
+    expect(result.status).toBe("verified");
+    expect((await store.read(artist.id))?.verificationAuthorizationSlot).toBe(123n);
+    expect(await store.verify(artist.id, wallet, async () => 124n)).toEqual({
+      status: "already_verified",
+    });
+    expect((await store.read(artist.id))?.verificationAuthorizationSlot).toBe(123n);
+  } finally {
+    await connection.db.delete(artists).where(eq(artists.id, artist.id));
     await connection.close();
   }
 });

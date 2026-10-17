@@ -17,6 +17,7 @@ import {
   type WalletTransactionVersion,
 } from "./client.js";
 import type { RegistryTransactionContext, unsignedMessage } from "./registration.js";
+import { createRegistryAuthorityReader } from "./registry-authorities.js";
 
 export type UnsignedRegistryTransaction = ReturnType<typeof unsignedMessage>;
 export class OperationSimulationError extends Error {
@@ -53,6 +54,7 @@ export async function encodeUnsignedRegistryTransaction(
 export function createOperationChainFromRpc(
   rpc: Rpc<GetLatestBlockhashApi & GetBlockHeightApi & SimulateTransactionApi>,
   cluster: KathaRpcConfig["cluster"],
+  readAuthorities?: ReturnType<typeof createRegistryAuthorityReader>,
 ) {
   return {
     async context(
@@ -80,6 +82,9 @@ export function createOperationChainFromRpc(
         supportedTransactionVersions: versions,
         lifetime,
         currentBlockHeight: height,
+        ...(readAuthorities
+          ? { authorization: (await readAuthorities(wallet)).operatorAuthorization }
+          : {}),
       };
     },
     async simulate(prepared: UnsignedRegistryTransaction) {
@@ -132,6 +137,10 @@ export function createOperationChainFromRpc(
   };
 }
 export function createOperationChain(config: KathaRpcConfig) {
-  return createOperationChainFromRpc(createKathaRpcClient(config).rpc, config.cluster);
+  return createOperationChainFromRpc(
+    createKathaRpcClient(config).rpc,
+    config.cluster,
+    createRegistryAuthorityReader(config),
+  );
 }
 export type OperationChain = ReturnType<typeof createOperationChain>;

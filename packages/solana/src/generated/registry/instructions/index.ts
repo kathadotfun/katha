@@ -6,16 +6,22 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./activateGovernance.js";
+export * from "./clearArtworkHold.js";
+export * from "./createRoleGrant.js";
 export * from "./initializeCondition.js";
 export * from "./initializeCustody.js";
 export * from "./initializeMetadata.js";
 export * from "./initializePlatform.js";
 export * from "./mintArtwork.js";
+export * from "./placeArtworkHold.js";
 export * from "./recordMintedCondition.js";
 export * from "./recordUnmintedCondition.js";
 export * from "./registerArtwork.js";
 export * from "./reviseMintedMetadata.js";
 export * from "./reviseUnmintedMetadata.js";
+export * from "./setGovernancePause.js";
 export * from "./transferMultisigAuthority.js";
 export * from "./transitionCustody.js";
+export * from "./updateRoleGrant.js";
 export * from "./verifyArtwork.js";

@@ -37,6 +37,11 @@ import {
 } from "./client.js";
 import { readCoreCollection } from "./core.js";
 import {
+  assertRegistryOperator,
+  governanceAccountMetas,
+  type OperatorAuthorization,
+} from "./governance.js";
+import {
   ArtworkCategory,
   findArtworkPda,
   findCollectionAuthorityPda,
@@ -59,6 +64,7 @@ const CATEGORY = {
 } as const;
 
 export interface RegistryTransactionContext {
+  authorization?: OperatorAuthorization | undefined;
   cluster: KathaCluster;
   feePayerAddress: Address;
   authorityAddress: Address;
@@ -137,9 +143,10 @@ export function unsignedMessage(
   const instruction = Object.freeze({
     programAddress: generated.programAddress,
     accounts: Object.freeze(
-      (generated.accounts ?? []).map(({ address, role }) =>
-        Object.freeze({ address, role }),
-      ),
+      [
+        ...(generated.accounts ?? []),
+        ...(context.authorization ? governanceAccountMetas(context.authorization) : []),
+      ].map(({ address, role }) => Object.freeze({ address, role })),
     ),
     data: Uint8Array.from(generated.data ?? []),
   });
@@ -280,8 +287,7 @@ export async function buildRegisterArtworkTransaction(
   input: ArtworkRegistrationInput,
 ) {
   const { config, state } = await readRegistryConfiguration(configAccount);
-  if (state.registrationAuthority !== nonzeroAddress(context.authorityAddress))
-    throw new TypeError("Registration authority is invalid");
+  await assertRegistryOperator(context, state, "registrationAuthority");
 
   const kathaId = artworkSchema.shape.kathaId.parse(input.kathaId);
   const category = artworkSchema.shape.category.parse(input.category);
@@ -308,7 +314,7 @@ export async function buildRegisterArtworkTransaction(
   const instruction = getRegisterArtworkInstruction({
     config,
     artwork,
-    registrationAuthority: createNoopSigner(state.registrationAuthority),
+    registrationAuthority: createNoopSigner(context.authorityAddress),
     kathaId,
     artistId,
     creatorWallet,

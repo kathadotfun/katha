@@ -15,3 +15,5 @@ export * from "./custodyTransition.js";
 export * from "./kathaConfig.js";
 export * from "./metadataHead.js";
 export * from "./metadataRevision.js";
+export * from "./registryGovernance.js";
+export * from "./roleGrant.js";

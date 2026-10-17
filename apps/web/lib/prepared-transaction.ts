@@ -1,3 +1,4 @@
+import { inspectGovernanceSuffix } from "@katha/solana";
 import { parseWalletOperation, type WalletOperation } from "./wallet-operation.ts";
 import * as market from "@katha/solana/marketplace";
 import {
@@ -142,7 +143,12 @@ export async function inspectPreparedTransaction(
     transaction.messageBytes,
   );
   const message = decompileTransactionMessage(compiled);
-  const instruction = message.instructions[0];
+  const fullInstruction = message.instructions[0];
+  if (!fullInstruction) throw new Error("Instruction is required");
+  const { instruction, governed } = await inspectGovernanceSuffix(
+    fullInstruction,
+    address(context.wallet),
+  );
   if (!("blockhash" in message.lifetimeConstraint))
     throw new Error("Recent blockhash required.");
   if (
@@ -287,7 +293,7 @@ export async function inspectPreparedTransaction(
           lastValidBlockHeight: BigInt(operation.lastValidBlockHeight),
         },
       },
-      accounts: instruction.accounts.map((value) => ({
+      accounts: fullInstruction.accounts!.map((value) => ({
         address: String(value.address),
         role: value.role,
       })),
@@ -351,7 +357,7 @@ export async function inspectPreparedTransaction(
           lastValidBlockHeight: BigInt(operation.lastValidBlockHeight),
         },
       },
-      accounts: instruction.accounts.map((item) => ({
+      accounts: fullInstruction.accounts!.map((item) => ({
         address: String(item.address),
         role: item.role,
       })),
@@ -442,7 +448,7 @@ export async function inspectPreparedTransaction(
           lastValidBlockHeight: BigInt(operation.lastValidBlockHeight),
         },
       },
-      accounts: instruction.accounts.map((value) => ({
+      accounts: fullInstruction.accounts!.map((value) => ({
         address: String(value.address),
         role: value.role,
       })),
@@ -520,7 +526,7 @@ export async function inspectPreparedTransaction(
     if (
       !metadata ||
       metadata.status !== "PREPARED" ||
-      chain.registrationAuthority !== context.wallet ||
+      (!governed && chain.registrationAuthority !== context.wallet) ||
       chain.version >= 4294967295
     )
       throw new Error("Metadata review required");
@@ -853,7 +859,7 @@ export async function inspectPreparedTransaction(
         lastValidBlockHeight: BigInt(operation.lastValidBlockHeight),
       },
     },
-    accounts: (instruction.accounts ?? []).map((account) => ({
+    accounts: (fullInstruction.accounts ?? []).map((account) => ({
       address: String(account.address),
       role: account.role,
     })),

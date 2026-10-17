@@ -261,6 +261,7 @@ export function createDevnetBootstrapClient(
         summary: JSON.stringify(
           {
             step,
+            upgrade: step.startsWith("upgrade-") ? config.upgrade : undefined,
             cluster: "devnet",
             transactionVersion: message.version,
             computeUnitLimit,

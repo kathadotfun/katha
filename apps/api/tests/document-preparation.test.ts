@@ -88,6 +88,7 @@ async function fixture(admin = false) {
       verificationStatus: "VERIFIED",
       verifiedAt: at,
       verifiedByWallet: wallet,
+      verificationAuthorizationSlot: null,
       createdAt: at,
       updatedAt: at,
     },

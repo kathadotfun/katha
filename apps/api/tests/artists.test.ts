@@ -33,6 +33,7 @@ function fixture() {
     profileImageUrl: null,
     verificationStatus: "UNVERIFIED",
     verifiedByWallet: null,
+    verificationAuthorizationSlot: null,
     verifiedAt: null,
     createdAt: now,
     updatedAt: now,
@@ -67,9 +68,12 @@ function fixture() {
     if (header === "Bearer stranger") return { ...session, walletAddress: stranger };
     throw new DomainError("UNAUTHENTICATED");
   });
-  const chain = vi.fn(async () => {
-    throw new Error("Chain should not be used for artist profiles");
-  });
+  const chain = vi.fn(async () => ({
+    authority: admin,
+    registrationAuthority: admin,
+    custodyAuthority: admin,
+    verifierAuthority: verifier,
+  }));
   const authorization = createAuthorization(
     { authenticate },
     { cluster: "localnet", adminWallets: [admin], verifierWallets: [verifier] },
@@ -111,8 +115,12 @@ it("creates unverified profiles with server identity and approves with authentic
   expect(verified.status).toBe(200);
   const approval = artistResponseSchema.parse(await verified.json());
   expect(approval.verifiedByWallet).toBe(f.session.walletAddress);
-  expect(f.store.verify).toHaveBeenCalledWith(result.id, f.session.walletAddress);
-  expect(f.chain).not.toHaveBeenCalled();
+  expect(f.store.verify).toHaveBeenCalledWith(
+    result.id,
+    f.session.walletAddress,
+    expect.any(Function),
+  );
+  expect(f.chain).toHaveBeenCalled();
   expect(JSON.stringify(approval)).not.toContain("SYNTHETIC_PRIVATE_EVIDENCE");
   expect(f.logs.join("")).not.toContain(profile.biography);
   expect(f.logs.join("")).not.toContain("Bearer");

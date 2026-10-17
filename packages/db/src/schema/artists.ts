@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   check,
+  bigint,
   pgEnum,
   pgTable,
   text,
@@ -35,6 +36,9 @@ export const artists = pgTable(
       .default("UNVERIFIED"),
     verifiedByWallet: varchar("verified_by_wallet", { length: 44 }),
     verifiedAt: timestamp("verified_at", { withTimezone: true, mode: "date" }),
+    verificationAuthorizationSlot: bigint("verification_authorization_slot", {
+      mode: "bigint",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
       .notNull()
       .defaultNow(),
