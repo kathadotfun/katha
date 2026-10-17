@@ -182,6 +182,11 @@ reads within the page. Retries stop after five attempts, honor `Retry-After` up
 to 30 seconds, and stop on cancellation; a longer provider cooldown is surfaced.
 Malformed evidence and access/configuration failures are not retried. The Devnet
 read-only deployment check uses the same policy; wallet submissions are unchanged.
+Fresh Registry permission checks also retry transient configuration, genesis and
+governance-bank reads within an eight-second overall read deadline. A retry reads
+the grant and chain clock again; no permission is cached. Exhausted transient
+provider failures return a service error rather than an authorization denial.
+Malformed accounts, revoked/expired grants and pauses still deny access.
 
 For a full replay from the acknowledged start, or a bounded historical replay:
 

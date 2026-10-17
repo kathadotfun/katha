@@ -198,6 +198,8 @@ test("uncertain writes pause and pending preparations cannot activate after sign
   };
   await manager.prepare(true);
   assert.equal(manager.getSnapshot().reloadRequired, true);
+  assert.match(manager.getSnapshot().error!, /temporarily unavailable/);
+  assert.equal(manager.getSnapshot().page?.kathaId, f.page.kathaId);
   await manager.prepare(true);
   assert.equal(f.count().preparations, 0);
   await manager.read();

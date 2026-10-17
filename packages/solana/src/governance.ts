@@ -12,6 +12,7 @@ import * as registry from "./generated/registry/index.js";
 import * as market from "./generated/marketplace/index.js";
 import { assertOwnedEncodedAccount } from "./client.js";
 import { OPERATOR_ROLES } from "@katha/shared";
+import { retryRpcRead } from "./rpc-retry.js";
 export { OPERATOR_ROLES } from "@katha/shared";
 
 export const REGISTRY_GOVERNANCE_SIZE = 8 + 1 + 5 * 32 + 8 + 1 + 4 + 76 * 64 + 1;
@@ -67,6 +68,7 @@ export async function inspectGovernanceSuffix<T extends Instruction>(
 export async function readOperatorAuthorization(
   rpc: Rpc<GetMultipleAccountsApi>,
   wallet: Address,
+  signal: AbortSignal = AbortSignal.timeout(8000),
 ): Promise<OperatorAuthorization> {
   const [
     [config, configBump],
@@ -81,10 +83,14 @@ export async function readOperatorAuthorization(
     registry.findCollectionAuthorityPda(),
     market.findConfigPda(),
   ]);
-  const accounts = await fetchEncodedAccounts(rpc, [config, governance, grant, CLOCK], {
-    commitment: "finalized",
-    abortSignal: AbortSignal.timeout(5000),
-  });
+  const accounts = await retryRpcRead(
+    () =>
+      fetchEncodedAccounts(rpc, [config, governance, grant, CLOCK], {
+        commitment: "finalized",
+        abortSignal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+      }),
+    signal,
+  );
   const [configAccount, governanceAccount, grantAccount, clockAccount] = accounts;
   if (!configAccount?.exists || !governanceAccount?.exists || !clockAccount?.exists)
     throw new TypeError("Active governance is unavailable");

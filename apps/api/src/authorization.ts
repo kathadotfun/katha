@@ -1,4 +1,5 @@
 import { OPERATOR_ROLES as R } from "@katha/shared";
+import { isRetryableRpcFailure } from "@katha/solana";
 import type { WalletSession } from "@katha/shared";
 import type {
   RegistryAuthorities,
@@ -27,7 +28,10 @@ export function createAuthorization(
     if (session.cluster !== config.cluster) throw new DomainError("FORBIDDEN");
     try {
       return await readAuthorities(session.walletAddress);
-    } catch {
+    } catch (error) {
+      // A provider outage cannot establish permission, but is not a revoked grant.
+      if (isRetryableRpcFailure(error))
+        throw new Error("Registry authorization unavailable", { cause: error });
       throw new DomainError("FORBIDDEN");
     }
   }

@@ -118,7 +118,7 @@ export function createArtworkRegistrationWorkflow(
             ? "An administrator session and the configured registration authority are required."
             : code === "CONFLICT"
               ? "The artwork, metadata or authority changed, or registration is already pending. Reload saved state before continuing."
-              : "This request could not be confirmed. Reload saved state; check any retained signature before preparing a replacement.",
+              : "The registration service is temporarily unavailable. Wait briefly, then reload registration state. Check any retained signature before preparing a replacement.",
       });
     }
   }

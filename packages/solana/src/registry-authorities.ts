@@ -5,6 +5,7 @@ import { nonzeroAddress, readRegistryConfiguration } from "./registration.js";
 import { findGovernancePda } from "./generated/registry/index.js";
 import { readOperatorAuthorization, type OperatorAuthorization } from "./governance.js";
 import { assertKathaRpcCluster } from "./rpc-cluster.js";
+import { retryRpcRead } from "./rpc-retry.js";
 
 export type RegistryAuthorityRole =
   "authority" | "registrationAuthority" | "verifierAuthority" | "custodyAuthority";
@@ -28,19 +29,29 @@ export async function readRegistryAuthorities(
 export function createRegistryAuthorityReader(config: KathaRpcConfig) {
   const client = createKathaRpcClient(config);
   return async (wallet?: string): Promise<RegistryAuthorities> => {
+    // Bound permission recovery below the browser request timeout; never reuse a grant.
+    const signal = AbortSignal.timeout(8000);
     const [configAddress] = await findConfigPda();
-    const account = await fetchEncodedAccount(client.rpc, configAddress, {
-      commitment: "finalized",
-      abortSignal: AbortSignal.timeout(5000),
-    });
+    const account = await retryRpcRead(
+      () =>
+        fetchEncodedAccount(client.rpc, configAddress, {
+          commitment: "finalized",
+          abortSignal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+        }),
+      signal,
+    );
     if (!account.exists) throw new TypeError("Registry is not initialized");
     const authorities = await readRegistryAuthorities(account);
     if (authorities.registrationAuthority !== (await findGovernancePda())[0])
       return authorities;
     assertKathaRpcCluster(
-      await client.rpc
-        .getGenesisHash()
-        .send({ abortSignal: AbortSignal.timeout(5000) }),
+      await retryRpcRead(
+        () =>
+          client.rpc.getGenesisHash().send({
+            abortSignal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+          }),
+        signal,
+      ),
       config.cluster,
     );
     if (!wallet)
@@ -51,6 +62,7 @@ export function createRegistryAuthorityReader(config: KathaRpcConfig) {
       operatorAuthorization: await readOperatorAuthorization(
         client.rpc,
         address(wallet),
+        signal,
       ),
     };
   };

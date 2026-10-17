@@ -380,3 +380,20 @@ it("denies protected reads and database writes when chain permission reads fail 
     f.authorization.requirePermission("Bearer admin", 1),
   ).rejects.toMatchObject({ code: "FORBIDDEN" });
 });
+
+it("reports provider timeouts as service failures and never reaches a protected write", async () => {
+  const f = fixture();
+  const timeout = new Error("Synthetic private provider details");
+  timeout.name = "TimeoutError";
+  f.readAuthorities.mockRejectedValue(timeout);
+  const response = await f.app.request("/admin/probe", {
+    method: "POST",
+    headers: { Authorization: "Bearer admin" },
+  });
+  expect(response.status).toBe(500);
+  expect(await response.text()).not.toContain(timeout.message);
+  expect(f.reached).not.toHaveBeenCalled();
+  await expect(
+    f.authorization.requireRegistryAuthority("Bearer admin", "registrationAuthority"),
+  ).rejects.toThrow("Registry authorization unavailable");
+});

@@ -1,8 +1,18 @@
-import { address, fetchEncodedAccount, lamports, type Address } from "@solana/kit";
-import { expect, it, vi } from "vitest";
+import {
+  address,
+  blockhash,
+  fetchEncodedAccount,
+  lamports,
+  SolanaError,
+  SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
+  type Address,
+} from "@solana/kit";
+import { afterEach, expect, it, vi } from "vitest";
+import * as rpcClient from "../src/client.js";
 import {
   findConfigPda,
   findCollectionAuthorityPda,
+  findGovernancePda,
   getKathaConfigEncoder,
   KATHA_REGISTRY_PROGRAM_ADDRESS,
   type KathaConfigArgs,
@@ -12,6 +22,20 @@ import {
   createRegistryCollectionReader,
   readRegistryAuthorities,
 } from "../src/registry-authorities.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.mocked(fetchEncodedAccount).mockReset();
+});
+
+function rateLimit() {
+  return new SolanaError(SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, {
+    statusCode: 429,
+    message: "Synthetic rate limit",
+    headers: new Headers(),
+  });
+}
 
 vi.mock("@solana/kit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@solana/kit")>()),
@@ -143,4 +167,39 @@ it("binds collection filters to fresh finalized validated configuration", async 
   account.programAddress = SYSTEM;
   fetch.mockResolvedValueOnce(account);
   await expect(read()).rejects.toThrow();
+});
+
+it("recovers a rate-limited configuration read without accepting a forged replacement", async () => {
+  const { account } = await fixture();
+  const fetch = vi.mocked(fetchEncodedAccount);
+  fetch.mockRejectedValueOnce(rateLimit()).mockResolvedValue(account);
+  const read = createRegistryAuthorityReader({ cluster: "localnet" });
+  expect((await read()).registrationAuthority).toBe(ADMIN);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  account.programAddress = SYSTEM;
+  await expect(read()).rejects.toThrow();
+  expect(fetch).toHaveBeenCalledTimes(3);
+});
+
+it("retries genesis transport but rejects a wrong network before reading grants", async () => {
+  const { account, state } = await fixture();
+  state.registrationAuthority = (await findGovernancePda())[0];
+  account.data = Uint8Array.from(getKathaConfigEncoder().encode(state));
+  vi.mocked(fetchEncodedAccount).mockResolvedValue(account);
+  const client = rpcClient.createKathaRpcClient({ cluster: "devnet" });
+  const genesis = vi
+    .fn()
+    .mockRejectedValueOnce(rateLimit())
+    .mockResolvedValue(blockhash("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"));
+  vi.spyOn(rpcClient, "createKathaRpcClient").mockReturnValue({
+    ...client,
+    rpc: {
+      ...client.rpc,
+      getGenesisHash: () => ({ ...client.rpc.getGenesisHash(), send: genesis }),
+    },
+  });
+  const read = createRegistryAuthorityReader({ cluster: "devnet" });
+  await expect(read(ADMIN)).rejects.toThrow("cluster mismatch");
+  expect(genesis).toHaveBeenCalledTimes(2);
+  expect(fetchEncodedAccount).toHaveBeenCalledTimes(1);
 });

@@ -1,9 +1,11 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import {
   address,
   fetchEncodedAccounts,
   generateKeyPairSigner,
   lamports,
+  SolanaError,
+  SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR,
   type EncodedAccount,
   type MaybeEncodedAccount,
   type GetMultipleAccountsApi,
@@ -21,6 +23,11 @@ vi.mock("@solana/kit", async (original) => ({
   fetchEncodedAccounts: vi.fn(),
 }));
 const rpc = {} as Rpc<GetMultipleAccountsApi>;
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.mocked(fetchEncodedAccounts).mockReset();
+});
 
 async function fixture() {
   const wallet = (await generateKeyPairSigner()).address;
@@ -143,6 +150,47 @@ it("reads all grant, governance and clock accounts from one finalized bank; expi
     commitment: "finalized",
     abortSignal: expect.any(AbortSignal),
   });
+});
+
+it("retries the whole finalized bank read and observes revocation during recovery", async () => {
+  const f = await fixture();
+  const fetch = vi.mocked(fetchEncodedAccounts);
+  fetch.mockImplementationOnce(async () => {
+    f.grantState.enabled = false;
+    throw new SolanaError(SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, {
+      statusCode: 429,
+      message: "Synthetic rate limit",
+      headers: new Headers(),
+    });
+  });
+  fetch.mockImplementation(async () => f.accounts());
+  expect((await readOperatorAuthorization(rpc, f.wallet)).roles).toBe(0);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it("cancels a rate-limited permission read without scheduling another bank read", async () => {
+  const f = await fixture();
+  const fetch = vi.mocked(fetchEncodedAccounts);
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  fetch.mockImplementation(async () => {
+    entered();
+    throw new SolanaError(SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, {
+      statusCode: 429,
+      message: "Synthetic rate limit",
+      headers: new Headers(),
+    });
+  });
+  const controller = new AbortController();
+  const rejected = expect(
+    readOperatorAuthorization(rpc, f.wallet, controller.signal),
+  ).rejects.toThrow("Synthetic cancellation");
+  await started;
+  controller.abort(new Error("Synthetic cancellation"));
+  await rejected;
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it.each([
