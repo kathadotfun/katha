@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vitest";
+import { SolanaError, SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR } from "@solana/kit";
 import type {
   Rpc,
   GetGenesisHashApi,
@@ -90,6 +91,31 @@ it("returns an empty page without pretending it contains a scanned slot range", 
   ).toMatchObject({ headSignature: null, nextBefore: null, transactions: [] });
   expect(f.transaction).not.toHaveBeenCalled();
   expect(f.block).not.toHaveBeenCalled();
+});
+it("retries a rate-limited block read without restarting successful page reads", async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture();
+    f.block.mockRejectedValueOnce(
+      new SolanaError(SOLANA_ERROR__RPC__TRANSPORT_HTTP_ERROR, {
+        statusCode: 429,
+        message: "Synthetic rate limit",
+        headers: new Headers({ "retry-after": "2" }),
+      }),
+    );
+    const page = f.read({ programAddress: KATHA_REGISTRY_PROGRAM_ADDRESS });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((await page).transactions[0]).toMatchObject({
+      signature: SIG,
+      transactionIndex: 1,
+    });
+    expect(f.genesis).toHaveBeenCalledTimes(1);
+    expect(f.listing).toHaveBeenCalledTimes(1);
+    expect(f.transaction).toHaveBeenCalledTimes(1);
+    expect(f.block).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it("caches block signatures within the page and sorts equal-slot transactions by block order", async () => {
   const f = fixture();

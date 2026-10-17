@@ -13,6 +13,7 @@ import {
   type KathaRpcConfig,
   type KathaCluster,
 } from "./client.js";
+import { retryRpcRead } from "./rpc-retry.js";
 import { assertKathaRpcCluster } from "./rpc-cluster.js";
 import { KATHA_MARKETPLACE_PROGRAM_ADDRESS } from "./generated/marketplace/index.js";
 import { CORE_PROGRAM_ADDRESS } from "./core.js";
@@ -91,17 +92,24 @@ export function createActivityReaderFromRpc(
         ).includes(discovery))
     )
       throw new ActivityEvidenceError();
-    const genesisHash = await rpc.getGenesisHash().send({ abortSignal: call() });
+    const genesisHash = await retryRpcRead(
+      () => rpc.getGenesisHash().send({ abortSignal: call() }),
+      signal,
+    );
     assertKathaRpcCluster(genesisHash, cluster);
     const rows = activityArray(
-      await rpc
-        .getSignaturesForAddress(discovery, {
-          commitment: "finalized",
-          limit,
-          ...(before === undefined ? {} : { before }),
-          ...(until === undefined ? {} : { until }),
-        })
-        .send({ abortSignal: call() }),
+      await retryRpcRead(
+        () =>
+          rpc
+            .getSignaturesForAddress(discovery, {
+              commitment: "finalized",
+              limit,
+              ...(before === undefined ? {} : { before }),
+              ...(until === undefined ? {} : { until }),
+            })
+            .send({ abortSignal: call() }),
+        signal,
+      ),
       limit,
     ).map(activityRecord);
     const seen = new Set<string>();
@@ -130,13 +138,17 @@ export function createActivityReaderFromRpc(
     for (const row of rows) {
       const transactionSignature = row.signature as string,
         slot = activitySlot(row.slot);
-      const response = await rpc
-        .getTransaction(signature(transactionSignature), {
-          commitment: "finalized",
-          encoding: "json",
-          maxSupportedTransactionVersion: 1,
-        })
-        .send({ abortSignal: call() });
+      const response = await retryRpcRead(
+        () =>
+          rpc
+            .getTransaction(signature(transactionSignature), {
+              commitment: "finalized",
+              encoding: "json",
+              maxSupportedTransactionVersion: 1,
+            })
+            .send({ abortSignal: call() }),
+        signal,
+      );
       if (response === null) throw new ActivityEvidenceError();
       const transaction = decodeFinalizedActivity(response, transactionSignature, slot);
       if ((row.err === null) !== (transaction.outcome === "SUCCESS"))
@@ -158,14 +170,18 @@ export function createActivityReaderFromRpc(
       if (!keys.includes(discovery)) throw new ActivityEvidenceError();
       let signatures = blocks.get(slot);
       if (!signatures) {
-        const block = await rpc
-          .getBlock(slot, {
-            commitment: "finalized",
-            transactionDetails: "signatures",
-            maxSupportedTransactionVersion: 1,
-            rewards: false,
-          })
-          .send({ abortSignal: call() });
+        const block = await retryRpcRead(
+          () =>
+            rpc
+              .getBlock(slot, {
+                commitment: "finalized",
+                transactionDetails: "signatures",
+                maxSupportedTransactionVersion: 1,
+                rewards: false,
+              })
+              .send({ abortSignal: call() }),
+          signal,
+        );
         const values = activityArray(activityRecord(block).signatures, 65536);
         signatures = values.map((value) =>
           typeof value === "string"

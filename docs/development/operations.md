@@ -177,6 +177,11 @@ database health check. The worker binds to the configured network, processes
 finalized activity and commits events, projections and checkpoints atomically.
 Core discovery is scoped to the collection. Registry, Core and Marketplace
 observations preserve one sale/ownership change without duplicating provenance.
+Activity reads retry transient RPC failures individually, preserving successful
+reads within the page. Retries stop after five attempts, honor `Retry-After` up
+to 30 seconds, and stop on cancellation; a longer provider cooldown is surfaced.
+Malformed evidence and access/configuration failures are not retried. The Devnet
+read-only deployment check uses the same policy; wallet submissions are unchanged.
 
 For a full replay from the acknowledged start, or a bounded historical replay:
 

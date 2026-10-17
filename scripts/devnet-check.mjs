@@ -1,4 +1,4 @@
-/* global fetch, AbortSignal */
+/* global AbortSignal */
 import process from "node:process";
 import { Buffer } from "node:buffer";
 import { readFile } from "node:fs/promises";
@@ -8,6 +8,8 @@ import {
   inspectUpgradeableProgram,
   findUpgradeableProgramDataAddress,
   readRegistryAuthorities,
+  createKathaRpcClient,
+  retryRpcRead,
 } from "../packages/solana/dist/index.js";
 import { readMarketplaceFeeSchedule } from "../packages/solana/dist/marketplace.js";
 import * as registry from "../packages/solana/dist/generated/registry/index.js";
@@ -16,18 +18,19 @@ import * as market from "../packages/solana/dist/generated/marketplace/index.js"
 const endpoint = "https://api.devnet.solana.com";
 const genesis = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
 const loader = "BPFLoaderUpgradeab1e11111111111111111111111";
+const client = createKathaRpcClient({ cluster: "devnet" });
 async function rpc(method, params) {
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!response.ok) throw new Error("Devnet RPC unavailable");
-  const body = await response.json();
-  if (body.error || !("result" in body))
-    throw new Error("Devnet RPC rejected the read");
-  return body.result;
+  if (!["getGenesisHash", "getAccountInfo", "getSlot"].includes(method))
+    throw new Error("Unsupported read-only Devnet RPC method");
+  return retryRpcRead(() =>
+    client.rpc[method](...params).send({ abortSignal: AbortSignal.timeout(20000) }),
+  );
+}
+function publicInteger(value) {
+  const number = typeof value === "bigint" ? Number(value) : value;
+  if (!Number.isSafeInteger(number) || number < 0)
+    throw new Error("Invalid public RPC integer");
+  return number;
 }
 function account(key, value) {
   if (value === null) return { address: key, exists: false };
@@ -37,8 +40,6 @@ function account(key, value) {
     value.data.length !== 2 ||
     value.data[1] !== "base64" ||
     typeof value.data[0] !== "string" ||
-    !Number.isSafeInteger(value.lamports) ||
-    value.lamports < 0 ||
     typeof value.executable !== "boolean" ||
     typeof value.owner !== "string"
   )
@@ -51,7 +52,7 @@ function account(key, value) {
     exists: true,
     programAddress: value.owner,
     executable: value.executable,
-    lamports: BigInt(value.lamports),
+    lamports: BigInt(publicInteger(value.lamports)),
     space: BigInt(data.length),
     data: new Uint8Array(data),
   };
@@ -61,8 +62,8 @@ export async function readPublicDevnetAccount(key) {
     key,
     { encoding: "base64", commitment: "finalized" },
   ]);
-  if (!result.context || !Number.isSafeInteger(result.context.slot))
-    throw new Error("Missing finalized account slot");
+  if (!result.context) throw new Error("Missing finalized account slot");
+  publicInteger(result.context.slot);
   return account(key, result.value);
 }
 const read = readPublicDevnetAccount;
@@ -159,7 +160,9 @@ export async function checkDevnet() {
     cluster: "devnet",
     rpcUrl: endpoint,
     genesis,
-    observedFinalizedSlot: await rpc("getSlot", [{ commitment: "finalized" }]),
+    observedFinalizedSlot: publicInteger(
+      await rpc("getSlot", [{ commitment: "finalized" }]),
+    ),
     programs,
     accounts: {
       registryConfig: config,
