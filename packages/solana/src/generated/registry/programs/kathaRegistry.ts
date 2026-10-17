@@ -73,6 +73,7 @@ import {
   getRegisterArtworkInstructionAsync,
   getReviseMintedMetadataInstructionAsync,
   getReviseUnmintedMetadataInstructionAsync,
+  getTransferMultisigAuthorityInstructionAsync,
   getTransitionCustodyInstructionAsync,
   getVerifyArtworkInstructionAsync,
   parseInitializeConditionInstruction,
@@ -85,6 +86,7 @@ import {
   parseRegisterArtworkInstruction,
   parseReviseMintedMetadataInstruction,
   parseReviseUnmintedMetadataInstruction,
+  parseTransferMultisigAuthorityInstruction,
   parseTransitionCustodyInstruction,
   parseVerifyArtworkInstruction,
   type InitializeConditionAsyncInput,
@@ -102,6 +104,7 @@ import {
   type ParsedRegisterArtworkInstruction,
   type ParsedReviseMintedMetadataInstruction,
   type ParsedReviseUnmintedMetadataInstruction,
+  type ParsedTransferMultisigAuthorityInstruction,
   type ParsedTransitionCustodyInstruction,
   type ParsedVerifyArtworkInstruction,
   type RecordMintedConditionAsyncInput,
@@ -109,6 +112,7 @@ import {
   type RegisterArtworkAsyncInput,
   type ReviseMintedMetadataAsyncInput,
   type ReviseUnmintedMetadataAsyncInput,
+  type TransferMultisigAuthorityAsyncInput,
   type TransitionCustodyAsyncInput,
   type VerifyArtworkAsyncInput,
 } from "../instructions/index.js";
@@ -259,6 +263,7 @@ export enum KathaRegistryEvent {
   ConditionRecorded,
   CustodyUpdated,
   MetadataCommitted,
+  MultisigAuthorityTransferred,
   PlatformInitialized,
 }
 
@@ -336,6 +341,17 @@ export function identifyKathaRegistryEvent(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([176, 155, 168, 120, 171, 4, 113, 129]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryEvent.MultisigAuthorityTransferred;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([16, 222, 212, 5, 213, 140, 112, 162]),
       ),
       0,
@@ -359,6 +375,7 @@ export enum KathaRegistryInstruction {
   RegisterArtwork,
   ReviseMintedMetadata,
   ReviseUnmintedMetadata,
+  TransferMultisigAuthority,
   TransitionCustody,
   VerifyArtwork,
 }
@@ -481,6 +498,17 @@ export function identifyKathaRegistryInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([110, 188, 29, 105, 224, 116, 248, 106]),
+      ),
+      0,
+    )
+  ) {
+    return KathaRegistryInstruction.TransferMultisigAuthority;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([96, 221, 253, 81, 87, 151, 241, 153]),
       ),
       0,
@@ -538,6 +566,9 @@ export type ParsedKathaRegistryInstruction<
   | ({
       instructionType: KathaRegistryInstruction.ReviseUnmintedMetadata;
     } & ParsedReviseUnmintedMetadataInstruction<TProgram>)
+  | ({
+      instructionType: KathaRegistryInstruction.TransferMultisigAuthority;
+    } & ParsedTransferMultisigAuthorityInstruction<TProgram>)
   | ({
       instructionType: KathaRegistryInstruction.TransitionCustody;
     } & ParsedTransitionCustodyInstruction<TProgram>)
@@ -618,6 +649,13 @@ export function parseKathaRegistryInstruction<TProgram extends string>(
       return {
         instructionType: KathaRegistryInstruction.ReviseUnmintedMetadata,
         ...parseReviseUnmintedMetadataInstruction(instruction),
+      };
+    }
+    case KathaRegistryInstruction.TransferMultisigAuthority: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaRegistryInstruction.TransferMultisigAuthority,
+        ...parseTransferMultisigAuthorityInstruction(instruction),
       };
     }
     case KathaRegistryInstruction.TransitionCustody: {
@@ -710,6 +748,10 @@ export type KathaRegistryPluginInstructions = {
   reviseUnmintedMetadata: (
     input: ReviseUnmintedMetadataAsyncInput,
   ) => ReturnType<typeof getReviseUnmintedMetadataInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  transferMultisigAuthority: (
+    input: TransferMultisigAuthorityAsyncInput,
+  ) => ReturnType<typeof getTransferMultisigAuthorityInstructionAsync> &
     SelfPlanAndSendFunctions;
   transitionCustody: (
     input: TransitionCustodyAsyncInput,
@@ -812,6 +854,11 @@ export function kathaRegistryProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getReviseUnmintedMetadataInstructionAsync(input),
+            ),
+          transferMultisigAuthority: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getTransferMultisigAuthorityInstructionAsync(input),
             ),
           transitionCustody: (input) =>
             addSelfPlanAndSendFunctions(

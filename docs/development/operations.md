@@ -8,10 +8,13 @@ existing singleton configurations must not be initialized again.
 
 The requested 2-of-3 governance and operational-wallet migration is specified in
 [ADR 0002](../decisions/0002-authority-and-settings-migration.md), including artist
-consent, incident recovery and transaction grouping. It is a design, not an
-available rotation command. Current role wallets, treasury, payment mint,
-inspection validity and artist payout still have their existing initialization
-constraints. Changing `.env` does not rotate those on-chain authorities.
+consent, incident recovery and transaction grouping. Both programs now include a
+verified two-sided Squads root-handover instruction, but the full migration and
+its operational role/recovery controls remain pending. No authority transfer is
+performed by installation, build or environment changes. Current role wallets,
+treasury, payment mint, inspection validity and artist payout still have their
+existing initialization constraints. See the ADR's implemented-foundation section
+before preparing any handover; a reviewed live migration manifest is still needed.
 
 ## Configuration and service health
 
@@ -87,6 +90,9 @@ select **update-fees**, then prepare, inspect the displayed rates and approve
 in the wallet. No program redeployment is needed for subsequent rate changes.
 The signed instruction includes the expected schedule revision; a concurrent
 update requires preparation again.
+After a root handover, use an approved Squads vault execution for Marketplace root
+operations. The current `/admin/devnet` page expects a single wallet signer and
+cannot sign as the vault. A member wallet or the former authority is insufficient.
 
 Only future listings use changed rates. A seller must cancel and relist to adopt
 new terms. Old version-1 listings keep the original Marketplace config rates;

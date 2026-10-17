@@ -1935,6 +1935,90 @@
       ]
     },
     {
+      "name": "transfer_multisig_authority",
+      "docs": [
+        "Root handover only; operational roles, historical attestations and sale terms do not move."
+      ],
+      "discriminator": [
+        110,
+        188,
+        29,
+        105,
+        224,
+        116,
+        248,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  107,
+                  97,
+                  116,
+                  104,
+                  97,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "new_authority",
+          "signer": true
+        },
+        {
+          "name": "multisig"
+        },
+        {
+          "name": "program",
+          "address": "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr"
+        },
+        {
+          "name": "program_data"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "vault_index",
+          "type": "u8"
+        },
+        {
+          "name": "expected_members",
+          "type": {
+            "array": [
+              "pubkey",
+              3
+            ]
+          }
+        },
+        {
+          "name": "expected_time_lock",
+          "type": "u32"
+        }
+      ]
+    },
+    {
       "name": "transition_custody",
       "discriminator": [
         96,
@@ -2405,6 +2489,19 @@
       ]
     },
     {
+      "name": "MultisigAuthorityTransferred",
+      "discriminator": [
+        176,
+        155,
+        168,
+        120,
+        171,
+        4,
+        113,
+        129
+      ]
+    },
+    {
       "name": "PlatformInitialized",
       "discriminator": [
         16,
@@ -2648,6 +2745,61 @@
       "code": 6045,
       "name": "CoreMetadataOutOfSync",
       "msg": "Core identity or URI differs from the current Registry metadata revision"
+    },
+    {
+      "code": 6046,
+      "name": "UnauthorizedAuthority",
+      "msg": "Only the current root authority can authorize a handover"
+    },
+    {
+      "code": 6047,
+      "name": "StaleAuthority",
+      "msg": "Root authority changed since this handover was reviewed"
+    },
+    {
+      "code": 6048,
+      "name": "InvalidMultisig",
+      "msg": "Multisig account is invalid or not the canonical Squads account"
+    },
+    {
+      "code": 6049,
+      "name": "ControlledMultisig",
+      "msg": "Controlled multisigs are not accepted"
+    },
+    {
+      "code": 6050,
+      "name": "InvalidThreshold",
+      "msg": "The accepted multisig threshold must be two"
+    },
+    {
+      "code": 6051,
+      "name": "InvalidMembers",
+      "msg": "Three distinct fully permitted members must match the reviewed order"
+    },
+    {
+      "code": 6052,
+      "name": "UnexpectedTimeLock",
+      "msg": "The live multisig delay differs from the reviewed delay"
+    },
+    {
+      "code": 6053,
+      "name": "InvalidVault",
+      "msg": "The accepting signer is not the reviewed Squads vault"
+    },
+    {
+      "code": 6054,
+      "name": "InvalidMultisigProgramData",
+      "msg": "ProgramData does not belong to the program being handed over"
+    },
+    {
+      "code": 6055,
+      "name": "UpgradeAuthorityMismatch",
+      "msg": "Program upgrade authority must already be the accepting vault"
+    },
+    {
+      "code": 6056,
+      "name": "UnchangedAuthority",
+      "msg": "The accepting vault is already the root authority"
     }
   ],
   "types": [
@@ -3546,6 +3698,47 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MultisigAuthorityTransferred",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "previous_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "multisig",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_index",
+            "type": "u8"
+          },
+          {
+            "name": "members",
+            "type": {
+              "array": [
+                "pubkey",
+                3
+              ]
+            }
+          },
+          {
+            "name": "time_lock",
+            "type": "u32"
           }
         ]
       }

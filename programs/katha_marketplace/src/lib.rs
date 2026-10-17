@@ -2,6 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token};
 use katha_registry::{program::KathaRegistry, KathaConfig};
 
+pub mod multisig;
+pub use multisig::*;
 pub mod distribution;
 pub use distribution::*;
 pub mod eligibility;
@@ -24,6 +26,48 @@ pub const BASIS_POINTS_DENOMINATOR: u32 = 10_000;
 #[program]
 pub mod katha_marketplace {
     use super::*;
+
+    /// The vault must accept through Squads CPI; a member wallet cannot substitute for it.
+    pub fn transfer_multisig_authority(
+        ctx: Context<TransferMultisigAuthority>,
+        expected_authority: Pubkey,
+        vault_index: u8,
+        expected_members: [Pubkey; 3],
+        expected_time_lock: u32,
+    ) -> Result<()> {
+        use crate::MarketplaceError as MultisigAuthorityError;
+        use katha_registry::multisig::validate_squads_vault;
+        require_keys_eq!(
+            ctx.accounts.config.authority,
+            expected_authority,
+            MultisigAuthorityError::StaleAuthority
+        );
+        validate_squads_vault(
+            &ctx.accounts.multisig.to_account_info(),
+            ctx.accounts.new_authority.key(),
+            vault_index,
+            expected_members,
+            expected_time_lock,
+        )
+        .map_err(|_| error!(MarketplaceError::InvalidMultisig))?;
+        require_keys_neq!(
+            expected_authority,
+            ctx.accounts.new_authority.key(),
+            MultisigAuthorityError::UnchangedAuthority
+        );
+        let config = &mut ctx.accounts.config;
+        config.authority = ctx.accounts.new_authority.key();
+        emit!(MarketplaceMultisigAuthorityTransferred {
+            config: config.key(),
+            previous_authority: expected_authority,
+            authority: config.authority,
+            multisig: ctx.accounts.multisig.key(),
+            vault_index,
+            members: expected_members,
+            time_lock: expected_time_lock,
+        });
+        Ok(())
+    }
 
     pub fn check_listing_fees(ctx: Context<CheckListingFees>) -> Result<()> {
         require!(
@@ -361,6 +405,26 @@ pub enum MarketplaceError {
     InvalidListingFees,
     #[msg("Create listings with a reviewed fee schedule revision")]
     FeeScheduleRequired,
+    #[msg("Root authority changed since this handover was reviewed")]
+    StaleAuthority,
+    #[msg("Multisig account is invalid or not the canonical Squads account")]
+    InvalidMultisig,
+    #[msg("Controlled multisigs are not accepted")]
+    ControlledMultisig,
+    #[msg("The accepted multisig threshold must be two")]
+    InvalidThreshold,
+    #[msg("Three distinct fully permitted members must match the reviewed order")]
+    InvalidMembers,
+    #[msg("The live multisig delay differs from the reviewed delay")]
+    UnexpectedTimeLock,
+    #[msg("The accepting signer is not the reviewed Squads vault")]
+    InvalidVault,
+    #[msg("ProgramData does not belong to the program being handed over")]
+    InvalidMultisigProgramData,
+    #[msg("Program upgrade authority must already be the accepting vault")]
+    UpgradeAuthorityMismatch,
+    #[msg("The accepting vault is already the root authority")]
+    UnchangedAuthority,
 }
 
 #[cfg(test)]

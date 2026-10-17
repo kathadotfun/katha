@@ -61,6 +61,7 @@ import {
   getInitializeMarketplaceInstructionAsync,
   getInitializeSaleTermsInstructionAsync,
   getPurchaseListingInstructionAsync,
+  getTransferMultisigAuthorityInstructionAsync,
   getUpdateFeeScheduleInstructionAsync,
   parseCancelListingInstruction,
   parseCheckListingFeesInstruction,
@@ -72,6 +73,7 @@ import {
   parseInitializeMarketplaceInstruction,
   parseInitializeSaleTermsInstruction,
   parsePurchaseListingInstruction,
+  parseTransferMultisigAuthorityInstruction,
   parseUpdateFeeScheduleInstruction,
   type CancelListingAsyncInput,
   type CheckListingFeesAsyncInput,
@@ -92,8 +94,10 @@ import {
   type ParsedInitializeMarketplaceInstruction,
   type ParsedInitializeSaleTermsInstruction,
   type ParsedPurchaseListingInstruction,
+  type ParsedTransferMultisigAuthorityInstruction,
   type ParsedUpdateFeeScheduleInstruction,
   type PurchaseListingAsyncInput,
+  type TransferMultisigAuthorityAsyncInput,
   type UpdateFeeScheduleAsyncInput,
 } from "../instructions/index.js";
 import {
@@ -191,6 +195,7 @@ export enum KathaMarketplaceEvent {
   ListingCreated,
   ListingReleased,
   MarketplaceInitialized,
+  MarketplaceMultisigAuthorityTransferred,
 }
 
 export function identifyKathaMarketplaceEvent(
@@ -252,6 +257,17 @@ export function identifyKathaMarketplaceEvent(
   ) {
     return KathaMarketplaceEvent.MarketplaceInitialized;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([205, 121, 176, 102, 11, 53, 155, 15]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceEvent.MarketplaceMultisigAuthorityTransferred;
+  }
   throw new Error(
     "The provided event could not be identified as a kathaMarketplace event.",
   );
@@ -268,6 +284,7 @@ export enum KathaMarketplaceInstruction {
   InitializeMarketplace,
   InitializeSaleTerms,
   PurchaseListing,
+  TransferMultisigAuthority,
   UpdateFeeSchedule,
 }
 
@@ -389,6 +406,17 @@ export function identifyKathaMarketplaceInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([110, 188, 29, 105, 224, 116, 248, 106]),
+      ),
+      0,
+    )
+  ) {
+    return KathaMarketplaceInstruction.TransferMultisigAuthority;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([190, 103, 25, 122, 142, 37, 230, 81]),
       ),
       0,
@@ -435,6 +463,9 @@ export type ParsedKathaMarketplaceInstruction<
   | ({
       instructionType: KathaMarketplaceInstruction.PurchaseListing;
     } & ParsedPurchaseListingInstruction<TProgram>)
+  | ({
+      instructionType: KathaMarketplaceInstruction.TransferMultisigAuthority;
+    } & ParsedTransferMultisigAuthorityInstruction<TProgram>)
   | ({
       instructionType: KathaMarketplaceInstruction.UpdateFeeSchedule;
     } & ParsedUpdateFeeScheduleInstruction<TProgram>);
@@ -514,6 +545,13 @@ export function parseKathaMarketplaceInstruction<TProgram extends string>(
         ...parsePurchaseListingInstruction(instruction),
       };
     }
+    case KathaMarketplaceInstruction.TransferMultisigAuthority: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: KathaMarketplaceInstruction.TransferMultisigAuthority,
+        ...parseTransferMultisigAuthorityInstruction(instruction),
+      };
+    }
     case KathaMarketplaceInstruction.UpdateFeeSchedule: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -588,6 +626,10 @@ export type KathaMarketplacePluginInstructions = {
   purchaseListing: (
     input: PurchaseListingAsyncInput,
   ) => ReturnType<typeof getPurchaseListingInstructionAsync> & SelfPlanAndSendFunctions;
+  transferMultisigAuthority: (
+    input: TransferMultisigAuthorityAsyncInput,
+  ) => ReturnType<typeof getTransferMultisigAuthorityInstructionAsync> &
+    SelfPlanAndSendFunctions;
   updateFeeSchedule: (
     input: UpdateFeeScheduleAsyncInput,
   ) => ReturnType<typeof getUpdateFeeScheduleInstructionAsync> &
@@ -676,6 +718,11 @@ export function kathaMarketplaceProgram() {
             addSelfPlanAndSendFunctions(
               client,
               getPurchaseListingInstructionAsync(input),
+            ),
+          transferMultisigAuthority: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getTransferMultisigAuthorityInstructionAsync(input),
             ),
           updateFeeSchedule: (input) =>
             addSelfPlanAndSendFunctions(

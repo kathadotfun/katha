@@ -82,9 +82,30 @@ export const KATHA_MARKETPLACE_ERROR__STALE_FEE_SCHEDULE = 0x178f; // 6031
 export const KATHA_MARKETPLACE_ERROR__INVALID_LISTING_FEES = 0x1790; // 6032
 /** FeeScheduleRequired: Create listings with a reviewed fee schedule revision */
 export const KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED = 0x1791; // 6033
+/** StaleAuthority: Root authority changed since this handover was reviewed */
+export const KATHA_MARKETPLACE_ERROR__STALE_AUTHORITY = 0x1792; // 6034
+/** InvalidMultisig: Multisig account is invalid or not the canonical Squads account */
+export const KATHA_MARKETPLACE_ERROR__INVALID_MULTISIG = 0x1793; // 6035
+/** ControlledMultisig: Controlled multisigs are not accepted */
+export const KATHA_MARKETPLACE_ERROR__CONTROLLED_MULTISIG = 0x1794; // 6036
+/** InvalidThreshold: The accepted multisig threshold must be two */
+export const KATHA_MARKETPLACE_ERROR__INVALID_THRESHOLD = 0x1795; // 6037
+/** InvalidMembers: Three distinct fully permitted members must match the reviewed order */
+export const KATHA_MARKETPLACE_ERROR__INVALID_MEMBERS = 0x1796; // 6038
+/** UnexpectedTimeLock: The live multisig delay differs from the reviewed delay */
+export const KATHA_MARKETPLACE_ERROR__UNEXPECTED_TIME_LOCK = 0x1797; // 6039
+/** InvalidVault: The accepting signer is not the reviewed Squads vault */
+export const KATHA_MARKETPLACE_ERROR__INVALID_VAULT = 0x1798; // 6040
+/** InvalidMultisigProgramData: ProgramData does not belong to the program being handed over */
+export const KATHA_MARKETPLACE_ERROR__INVALID_MULTISIG_PROGRAM_DATA = 0x1799; // 6041
+/** UpgradeAuthorityMismatch: Program upgrade authority must already be the accepting vault */
+export const KATHA_MARKETPLACE_ERROR__UPGRADE_AUTHORITY_MISMATCH = 0x179a; // 6042
+/** UnchangedAuthority: The accepting vault is already the root authority */
+export const KATHA_MARKETPLACE_ERROR__UNCHANGED_AUTHORITY = 0x179b; // 6043
 
 export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS
+  | typeof KATHA_MARKETPLACE_ERROR__CONTROLLED_MULTISIG
   | typeof KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION
   | typeof KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED
   | typeof KATHA_MARKETPLACE_ERROR__INSUFFICIENT_PAYMENT_FUNDS
@@ -102,27 +123,37 @@ export type KathaMarketplaceError =
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_DELEGATES
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_FEES
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_MEMBERS
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_MULTISIG
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_MULTISIG_PROGRAM_DATA
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_ACCOUNT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_RECIPIENT
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_SALE_PRICE
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_THRESHOLD
   | typeof KATHA_MARKETPLACE_ERROR__INVALID_TREASURY
+  | typeof KATHA_MARKETPLACE_ERROR__INVALID_VAULT
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_ALREADY_ACTIVE
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_NOT_ACTIVE
   | typeof KATHA_MARKETPLACE_ERROR__LISTING_NOT_EXPIRED
   | typeof KATHA_MARKETPLACE_ERROR__PAYMENT_ARITHMETIC_OVERFLOW
+  | typeof KATHA_MARKETPLACE_ERROR__STALE_AUTHORITY
   | typeof KATHA_MARKETPLACE_ERROR__STALE_FEE_SCHEDULE
   | typeof KATHA_MARKETPLACE_ERROR__STALE_LISTING_PRICE
   | typeof KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY
   | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP
-  | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER;
+  | typeof KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER
+  | typeof KATHA_MARKETPLACE_ERROR__UNCHANGED_AUTHORITY
+  | typeof KATHA_MARKETPLACE_ERROR__UNEXPECTED_TIME_LOCK
+  | typeof KATHA_MARKETPLACE_ERROR__UPGRADE_AUTHORITY_MISMATCH;
 
 let kathaMarketplaceErrorMessages: Record<KathaMarketplaceError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   kathaMarketplaceErrorMessages = {
     [KATHA_MARKETPLACE_ERROR__CONFLICTING_CORE_PLUGINS]: `Pre-existing Core plugins conflict with marketplace delegation`,
+    [KATHA_MARKETPLACE_ERROR__CONTROLLED_MULTISIG]: `Controlled multisigs are not accepted`,
     [KATHA_MARKETPLACE_ERROR__EXPIRED_INSPECTION]: `Collector inspection is expired or has an invalid timestamp`,
     [KATHA_MARKETPLACE_ERROR__FEE_SCHEDULE_REQUIRED]: `Create listings with a reviewed fee schedule revision`,
     [KATHA_MARKETPLACE_ERROR__INSUFFICIENT_PAYMENT_FUNDS]: `Buyer has insufficient test-token funds`,
@@ -140,22 +171,31 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_DELEGATES]: `Core freeze delegate does not match the active listing`,
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_FEES]: `Listing fee snapshot is missing, invalid or stale`,
     [KATHA_MARKETPLACE_ERROR__INVALID_LISTING_TERMS]: `Listing price must be positive and expiry must be in the future`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_MEMBERS]: `Three distinct fully permitted members must match the reviewed order`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_MULTISIG]: `Multisig account is invalid or not the canonical Squads account`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_MULTISIG_PROGRAM_DATA]: `ProgramData does not belong to the program being handed over`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_ACCOUNT]: `Payment account owner, mint, state or alias is invalid`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_MINT]: `Payment mint must use six decimals and have no freeze authority`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PAYMENT_RECIPIENT]: `Payment recipients cannot be default addresses`,
     [KATHA_MARKETPLACE_ERROR__INVALID_PROGRAM_DATA]: `ProgramData does not belong to this Marketplace program`,
     [KATHA_MARKETPLACE_ERROR__INVALID_SALE_PRICE]: `Sale price must be positive`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_THRESHOLD]: `The accepted multisig threshold must be two`,
     [KATHA_MARKETPLACE_ERROR__INVALID_TREASURY]: `Registry treasury cannot be the default address`,
+    [KATHA_MARKETPLACE_ERROR__INVALID_VAULT]: `The accepting signer is not the reviewed Squads vault`,
     [KATHA_MARKETPLACE_ERROR__LISTING_ALREADY_ACTIVE]: `An active listing already exists; cancel or recover expiry first`,
     [KATHA_MARKETPLACE_ERROR__LISTING_NOT_ACTIVE]: `Listing is not active`,
     [KATHA_MARKETPLACE_ERROR__LISTING_NOT_EXPIRED]: `Listing has not reached its expiry time`,
     [KATHA_MARKETPLACE_ERROR__PAYMENT_ARITHMETIC_OVERFLOW]: `Payment arithmetic overflow or underflow`,
+    [KATHA_MARKETPLACE_ERROR__STALE_AUTHORITY]: `Root authority changed since this handover was reviewed`,
     [KATHA_MARKETPLACE_ERROR__STALE_FEE_SCHEDULE]: `Fee schedule revision is stale or exhausted`,
     [KATHA_MARKETPLACE_ERROR__STALE_LISTING_PRICE]: `Reviewed listing price no longer matches`,
     [KATHA_MARKETPLACE_ERROR__STALE_LISTING_REVISION]: `Listing revision does not match the reviewed revision`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_AUTHORITY]: `Only the configured Registry authority can initialize Marketplace`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_BOOTSTRAP]: `Bootstrap signer is not the Marketplace upgrade authority`,
     [KATHA_MARKETPLACE_ERROR__UNAUTHORIZED_SELLER]: `Seller must sign as the current Core owner`,
+    [KATHA_MARKETPLACE_ERROR__UNCHANGED_AUTHORITY]: `The accepting vault is already the root authority`,
+    [KATHA_MARKETPLACE_ERROR__UNEXPECTED_TIME_LOCK]: `The live multisig delay differs from the reviewed delay`,
+    [KATHA_MARKETPLACE_ERROR__UPGRADE_AUTHORITY_MISMATCH]: `Program upgrade authority must already be the accepting vault`,
   };
 }
 

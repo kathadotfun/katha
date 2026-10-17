@@ -12,4 +12,5 @@ export * from "./artworkVerified.js";
 export * from "./conditionRecorded.js";
 export * from "./custodyUpdated.js";
 export * from "./metadataCommitted.js";
+export * from "./multisigAuthorityTransferred.js";
 export * from "./platformInitialized.js";

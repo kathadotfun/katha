@@ -2172,6 +2172,96 @@
       ]
     },
     {
+      "name": "transfer_multisig_authority",
+      "docs": [
+        "The vault must accept through Squads CPI; a member wallet cannot substitute for it."
+      ],
+      "discriminator": [
+        110,
+        188,
+        29,
+        105,
+        224,
+        116,
+        248,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116,
+                  112,
+                  108,
+                  97,
+                  99,
+                  101,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "new_authority",
+          "signer": true
+        },
+        {
+          "name": "multisig"
+        },
+        {
+          "name": "program",
+          "address": "B7q1HFwusCjndtLaTd75wUCSTPtrYw88ABAonLw4b8Lq"
+        },
+        {
+          "name": "program_data"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_authority",
+          "type": "pubkey"
+        },
+        {
+          "name": "vault_index",
+          "type": "u8"
+        },
+        {
+          "name": "expected_members",
+          "type": {
+            "array": [
+              "pubkey",
+              3
+            ]
+          }
+        },
+        {
+          "name": "expected_time_lock",
+          "type": "u32"
+        }
+      ]
+    },
+    {
       "name": "update_fee_schedule",
       "discriminator": [
         190,
@@ -2396,6 +2486,19 @@
         155,
         14
       ]
+    },
+    {
+      "name": "MarketplaceMultisigAuthorityTransferred",
+      "discriminator": [
+        205,
+        121,
+        176,
+        102,
+        11,
+        53,
+        155,
+        15
+      ]
     }
   ],
   "errors": [
@@ -2568,6 +2671,56 @@
       "code": 6033,
       "name": "FeeScheduleRequired",
       "msg": "Create listings with a reviewed fee schedule revision"
+    },
+    {
+      "code": 6034,
+      "name": "StaleAuthority",
+      "msg": "Root authority changed since this handover was reviewed"
+    },
+    {
+      "code": 6035,
+      "name": "InvalidMultisig",
+      "msg": "Multisig account is invalid or not the canonical Squads account"
+    },
+    {
+      "code": 6036,
+      "name": "ControlledMultisig",
+      "msg": "Controlled multisigs are not accepted"
+    },
+    {
+      "code": 6037,
+      "name": "InvalidThreshold",
+      "msg": "The accepted multisig threshold must be two"
+    },
+    {
+      "code": 6038,
+      "name": "InvalidMembers",
+      "msg": "Three distinct fully permitted members must match the reviewed order"
+    },
+    {
+      "code": 6039,
+      "name": "UnexpectedTimeLock",
+      "msg": "The live multisig delay differs from the reviewed delay"
+    },
+    {
+      "code": 6040,
+      "name": "InvalidVault",
+      "msg": "The accepting signer is not the reviewed Squads vault"
+    },
+    {
+      "code": 6041,
+      "name": "InvalidMultisigProgramData",
+      "msg": "ProgramData does not belong to the program being handed over"
+    },
+    {
+      "code": 6042,
+      "name": "UpgradeAuthorityMismatch",
+      "msg": "Program upgrade authority must already be the accepting vault"
+    },
+    {
+      "code": 6043,
+      "name": "UnchangedAuthority",
+      "msg": "The accepting vault is already the root authority"
     }
   ],
   "types": [
@@ -3550,6 +3703,47 @@
           {
             "name": "inspection_validity_seconds",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketplaceMultisigAuthorityTransferred",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "pubkey"
+          },
+          {
+            "name": "previous_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "multisig",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_index",
+            "type": "u8"
+          },
+          {
+            "name": "members",
+            "type": {
+              "array": [
+                "pubkey",
+                3
+              ]
+            }
+          },
+          {
+            "name": "time_lock",
+            "type": "u32"
           }
         ]
       }

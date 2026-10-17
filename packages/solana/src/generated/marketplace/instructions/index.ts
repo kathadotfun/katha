@@ -16,4 +16,5 @@ export * from "./initializeFeeSchedule.js";
 export * from "./initializeMarketplace.js";
 export * from "./initializeSaleTerms.js";
 export * from "./purchaseListing.js";
+export * from "./transferMultisigAuthority.js";
 export * from "./updateFeeSchedule.js";

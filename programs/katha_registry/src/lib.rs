@@ -1,5 +1,8 @@
 use anchor_lang::prelude::*;
 
+pub mod multisig;
+pub use multisig::*;
+
 declare_id!("Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr");
 
 pub const CONFIG_SEED: &[u8] = b"katha-config";
@@ -17,6 +20,45 @@ pub const CORE_ASSET_SEED: &[u8] = b"core-asset";
 #[program]
 pub mod katha_registry {
     use super::*;
+
+    /// Root handover only; operational roles, historical attestations and sale terms do not move.
+    pub fn transfer_multisig_authority(
+        ctx: Context<TransferMultisigAuthority>,
+        expected_authority: Pubkey,
+        vault_index: u8,
+        expected_members: [Pubkey; 3],
+        expected_time_lock: u32,
+    ) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.config.authority,
+            expected_authority,
+            MultisigAuthorityError::StaleAuthority
+        );
+        validate_squads_vault(
+            &ctx.accounts.multisig.to_account_info(),
+            ctx.accounts.new_authority.key(),
+            vault_index,
+            expected_members,
+            expected_time_lock,
+        )?;
+        require_keys_neq!(
+            expected_authority,
+            ctx.accounts.new_authority.key(),
+            MultisigAuthorityError::UnchangedAuthority
+        );
+        let config = &mut ctx.accounts.config;
+        config.authority = ctx.accounts.new_authority.key();
+        emit!(MultisigAuthorityTransferred {
+            config: config.key(),
+            previous_authority: expected_authority,
+            authority: config.authority,
+            multisig: ctx.accounts.multisig.key(),
+            vault_index,
+            members: expected_members,
+            time_lock: expected_time_lock,
+        });
+        Ok(())
+    }
 
     pub fn initialize_platform(
         ctx: Context<InitializePlatform>,
@@ -1704,6 +1746,28 @@ pub enum RegistryError {
     InvalidCoreAsset,
     #[msg("Core identity or URI differs from the current Registry metadata revision")]
     CoreMetadataOutOfSync,
+    #[msg("Only the current root authority can authorize a handover")]
+    UnauthorizedAuthority,
+    #[msg("Root authority changed since this handover was reviewed")]
+    StaleAuthority,
+    #[msg("Multisig account is invalid or not the canonical Squads account")]
+    InvalidMultisig,
+    #[msg("Controlled multisigs are not accepted")]
+    ControlledMultisig,
+    #[msg("The accepted multisig threshold must be two")]
+    InvalidThreshold,
+    #[msg("Three distinct fully permitted members must match the reviewed order")]
+    InvalidMembers,
+    #[msg("The live multisig delay differs from the reviewed delay")]
+    UnexpectedTimeLock,
+    #[msg("The accepting signer is not the reviewed Squads vault")]
+    InvalidVault,
+    #[msg("ProgramData does not belong to the program being handed over")]
+    InvalidMultisigProgramData,
+    #[msg("Program upgrade authority must already be the accepting vault")]
+    UpgradeAuthorityMismatch,
+    #[msg("The accepting vault is already the root authority")]
+    UnchangedAuthority,
 }
 
 #[cfg(feature = "core-cpi-test")]

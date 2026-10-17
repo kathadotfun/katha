@@ -34,6 +34,9 @@ const coreProgram = "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d";
 const registryProgram = "Gy1weme3YxEYuuMbJ2MnmLXerPqoSW9X3CAQ86wyZAtr";
 const coreSha256 = "7e033fd24ce189d9e7dc2600152c6c88ce80d662deeeb7ecc64f0c8437867cf7";
 const coreBinary = join(root, "target/test-fixtures/core-devnet.so");
+const squadsProgram = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
+const squadsSha256 = "97fb2a5c08e5df5e862d8354ac5b97d3587117f98c4457754ca12e30bef0664d";
+const squadsBinary = join(root, "target/test-fixtures/squads-devnet.so");
 const registryBinary = join(root, "target/core-cpi-test/katha_registry.so");
 const marketplaceBinary = join(root, "target/marketplace-test/katha_marketplace.so");
 const toolEnv = { ...process.env, NO_DNA: "1" };
@@ -75,6 +78,31 @@ async function verifiedCoreBinary() {
   return bytes;
 }
 
+async function verifiedSquadsBinary() {
+  let bytes;
+  try {
+    bytes = await readFile(squadsBinary);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    await mkdir(dirname(squadsBinary), { recursive: true });
+    await run("solana", [
+      "program",
+      "dump",
+      "--url",
+      "https://api.devnet.solana.com",
+      squadsProgram,
+      squadsBinary,
+    ]);
+    bytes = await readFile(squadsBinary);
+  }
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  if (hash !== squadsSha256)
+    throw new Error(
+      `Squads Devnet binary hash changed: ${hash}; review the fixture before updating its pin`,
+    );
+  return bytes;
+}
+
 async function freePort() {
   const server = createServer();
   await new Promise((resolve, reject) => {
@@ -112,6 +140,7 @@ async function loadProgram(url, id, bytes) {
 
 async function main() {
   const coreBytes = await verifiedCoreBinary();
+  if (!adminLifecycle) await verifiedSquadsBinary();
   await run(
     "cargo",
     [
@@ -216,6 +245,7 @@ async function main() {
           ? ["tests/admin-lifecycle.test.ts"]
           : [
               "tests/core-cpi.test.ts",
+              "tests/multisig-authority.test.ts",
               "tests/registry-config.test.ts",
               "tests/marketplace-fixtures.test.ts",
               "tests/marketplace-config.test.ts",
@@ -231,6 +261,7 @@ async function main() {
       {
         ...toolEnv,
         KATHA_TEST_CORE_SO: coreBinary,
+        ...(!adminLifecycle ? { KATHA_TEST_SQUADS_SO: squadsBinary } : {}),
         KATHA_TEST_REGISTRY_SO: registryBinary,
         ...(!adminLifecycle ? { KATHA_TEST_MARKETPLACE_SO: marketplaceBinary } : {}),
         ...(primaryJourney ? { KATHA_TEST_PRIMARY_BROWSER: "1" } : {}),

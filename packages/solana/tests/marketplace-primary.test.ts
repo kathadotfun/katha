@@ -1,6 +1,8 @@
 import { expect, it } from "vitest";
 import {
   addSignersToInstruction,
+  createNoopSigner,
+  getAddressDecoder,
   isSignerRole,
   type Address,
   type Instruction,
@@ -8,6 +10,7 @@ import {
 } from "@solana/kit";
 import { fetchToken } from "@solana-program/token";
 import { setupMarketplaceConfiguration } from "./fixtures/marketplace-configuration.js";
+import { createSquads, transferUpgradeAuthority } from "./fixtures/squads.js";
 import { readListingDelegates } from "./fixtures/core-plugins.js";
 import {
   buildCreateListingTransaction,
@@ -17,7 +20,13 @@ import {
 import * as market from "../src/generated/marketplace/index.js";
 import * as registry from "../src/generated/registry/index.js";
 
-it("completes a primary sale while preserving artist attribution, custody and all prior attestations", async () => {
+it.each([false, true])(
+  "completes a primary sale preserving attribution, custody and history (multisig handover: %s)",
+  primaryJourney,
+  30_000,
+);
+
+async function primaryJourney(handover: boolean) {
   // Fixture executes actual registration -> verification -> metadata -> inspection
   // -> held custody -> Core mint, with separate artist/seller/platform/buyer roles.
   const f = await setupMarketplaceConfiguration();
@@ -215,6 +224,49 @@ it("completes a primary sale while preserving artist attribution, custody and al
   expect(await amounts()).toEqual(beforeAmounts);
   unchangedHistory();
 
+  if (handover) {
+    const squads = await createSquads(f.client, f.roles.bootstrap);
+    const program = account(registry.KATHA_REGISTRY_PROGRAM_ADDRESS);
+    const registryData = getAddressDecoder().decode(program.data.subarray(4, 36));
+    const transfer = {
+      authority: f.roles.bootstrap,
+      newAuthority: createNoopSigner(squads.vault),
+      multisig: squads.multisig,
+      expectedAuthority: f.roles.bootstrap.address,
+      vaultIndex: 0,
+      expectedMembers: squads.memberAddresses,
+      expectedTimeLock: 0,
+    };
+    const proposal = await squads.propose(
+      [
+        await registry.getTransferMultisigAuthorityInstructionAsync({
+          ...transfer,
+          programData: registryData,
+        }),
+        await market.getTransferMultisigAuthorityInstructionAsync({
+          ...transfer,
+          programData: f.programDataAddress,
+        }),
+      ],
+      [f.roles.bootstrap],
+    );
+    await proposal.approve();
+    await proposal.approve(squads.members[1]!);
+    await proposal.execute([
+      transferUpgradeAuthority(registryData, f.roles.bootstrap, squads.vault),
+      transferUpgradeAuthority(f.programDataAddress, f.roles.seller, squads.vault),
+    ]);
+    expect(
+      registry.getKathaConfigDecoder().decode(account(f.registryConfig).data).authority,
+    ).toBe(squads.vault);
+    expect(
+      market.getMarketplaceConfigDecoder().decode(account(f.config).data).authority,
+    ).toBe(squads.vault);
+    expect(account(saleTerms)).toEqual(immutableTerms);
+    expect(account(listing)).toEqual(beforeListing);
+    unchangedHistory();
+  }
+  // The purchase prepared before a root handover retains its exact listing terms.
   const result = await send(prepared.instruction, f.roles.buyerA);
   const afterAmounts = await amounts();
   expect(afterAmounts).toEqual([900_000_000n, 0n, 90_000_000n, 10_000_000n]);
@@ -287,4 +339,4 @@ it("completes a primary sale while preserving artist attribution, custody and al
   expect(await amounts()).toEqual(afterAmounts);
   unchangedHistory();
   expect(account(saleTerms)).toEqual(immutableTerms);
-}, 30_000);
+}

@@ -11,3 +11,4 @@ export * from "./feeScheduleChanged.js";
 export * from "./listingCreated.js";
 export * from "./listingReleased.js";
 export * from "./marketplaceInitialized.js";
+export * from "./marketplaceMultisigAuthorityTransferred.js";

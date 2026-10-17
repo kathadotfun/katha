@@ -9,6 +9,8 @@ import {
   identifyKathaRegistryInstruction,
   KathaRegistryInstruction,
   getInitializeMetadataInstructionDataCodec,
+  getTransferMultisigAuthorityInstructionDataCodec,
+  getMultisigAuthorityTransferredEventCodec,
   getReviseUnmintedMetadataInstructionDataCodec,
   getReviseMintedMetadataInstructionDataCodec,
 } from "./generated/registry/index.js";
@@ -42,7 +44,7 @@ function readInstruction<A, T extends A>(
   return value;
 }
 const registryEventNames: Record<
-  KathaRegistryInstruction,
+  Exclude<KathaRegistryInstruction, KathaRegistryInstruction.TransferMultisigAuthority>,
   RegistryActivityEvent["name"]
 > = {
   [KathaRegistryInstruction.InitializePlatform]: "PlatformInitialized",
@@ -135,6 +137,45 @@ interface Invocation {
   outer: number;
   inner: number;
   height: number | null;
+}
+
+// Governance receipts are validated here but do not invent an artwork provenance event.
+// Their exact emitted bytes remain in the finalized public transaction record.
+function validateMultisigHandover(
+  invocation: Invocation,
+  data: Uint8Array,
+  market: boolean,
+) {
+  const instruction = readInstruction(
+    market
+      ? marketplace.getTransferMultisigAuthorityInstructionDataCodec()
+      : getTransferMultisigAuthorityInstructionDataCodec(),
+    invocation.data,
+  );
+  const event = readInstruction(
+    market
+      ? marketplace.getMarketplaceMultisigAuthorityTransferredEventCodec()
+      : getMultisigAuthorityTransferredEventCodec(),
+    data,
+  );
+  const expected = market
+    ? marketplace.getMarketplaceMultisigAuthorityTransferredEventCodec().encode(event)
+    : getMultisigAuthorityTransferredEventCodec().encode(event);
+  if (
+    !Buffer.from(expected).equals(data) ||
+    invocation.accounts.length !== 6 ||
+    event.config !== invocation.accounts[0] ||
+    event.previousAuthority !== invocation.accounts[1] ||
+    event.authority !== invocation.accounts[2] ||
+    event.multisig !== invocation.accounts[3] ||
+    invocation.accounts[4] !== invocation.program ||
+    instruction.expectedAuthority !== event.previousAuthority ||
+    instruction.vaultIndex !== event.vaultIndex ||
+    instruction.expectedTimeLock !== event.timeLock ||
+    instruction.expectedMembers.length !== event.members.length ||
+    instruction.expectedMembers.some((member, i) => member !== event.members[i])
+  )
+    fail();
 }
 
 /** Input is the raw Kit JSON response, not jsonParsed instructions or client assertions. */
@@ -305,7 +346,15 @@ export function decodeFinalizedActivity(
               marketplaceEventNames[
                 marketplace.identifyKathaMarketplaceInstruction(invocation.data)
               ];
-            if (frame.eventCount !== (expected ? 1 : 0)) fail();
+            if (
+              frame.eventCount !==
+              (expected ||
+              marketplace.identifyKathaMarketplaceInstruction(invocation.data) ===
+                marketplace.KathaMarketplaceInstruction.TransferMultisigAuthority
+                ? 1
+                : 0)
+            )
+              fail();
             const purchase = frame.activities.find(
               (a) => a.kind === "MARKETPLACE" && a.event.name === "ArtworkPurchased",
             );
@@ -356,8 +405,16 @@ export function decodeFinalizedActivity(
         const encoded = line.slice(14),
           data = Buffer.from(encoded, "base64");
         if (data.toString("base64") !== encoded) fail();
-        const frame = stack.at(-1)!,
-          event = decodeMarketplaceEvent(data);
+        const frame = stack.at(-1)!;
+        if (
+          marketplace.identifyKathaMarketplaceInstruction(frame.invocation.data) ===
+          marketplace.KathaMarketplaceInstruction.TransferMultisigAuthority
+        ) {
+          validateMultisigHandover(frame.invocation, data, true);
+          frame.eventCount++;
+          continue;
+        }
+        const event = decodeMarketplaceEvent(data);
         const kind = marketplace.identifyKathaMarketplaceInstruction(
           frame.invocation.data,
         );
@@ -486,12 +543,15 @@ export function decodeFinalizedActivity(
           data = Buffer.from(encoded, "base64");
         if (data.toString("base64") !== encoded) fail();
         const frame = stack.at(-1)!;
+        const registryKind = identifyKathaRegistryInstruction(frame.invocation.data);
+        if (registryKind === KathaRegistryInstruction.TransferMultisigAuthority) {
+          validateMultisigHandover(frame.invocation, data, false);
+          frame.eventCount++;
+          continue;
+        }
         const event = decodeRegistryEvent(data);
         if (
-          event.name !==
-            registryEventNames[
-              identifyKathaRegistryInstruction(frame.invocation.data)
-            ] ||
+          event.name !== registryEventNames[registryKind] ||
           ("artwork" in event.value &&
             !frame.invocation.accounts.includes(event.value.artwork))
         )

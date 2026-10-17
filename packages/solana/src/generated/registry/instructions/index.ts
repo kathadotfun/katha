@@ -16,5 +16,6 @@ export * from "./recordUnmintedCondition.js";
 export * from "./registerArtwork.js";
 export * from "./reviseMintedMetadata.js";
 export * from "./reviseUnmintedMetadata.js";
+export * from "./transferMultisigAuthority.js";
 export * from "./transitionCustody.js";
 export * from "./verifyArtwork.js";

@@ -106,11 +106,34 @@ export const KATHA_REGISTRY_ERROR__INVALID_CORE_PROGRAM = 0x179b; // 6043
 export const KATHA_REGISTRY_ERROR__INVALID_CORE_ASSET = 0x179c; // 6044
 /** CoreMetadataOutOfSync: Core identity or URI differs from the current Registry metadata revision */
 export const KATHA_REGISTRY_ERROR__CORE_METADATA_OUT_OF_SYNC = 0x179d; // 6045
+/** UnauthorizedAuthority: Only the current root authority can authorize a handover */
+export const KATHA_REGISTRY_ERROR__UNAUTHORIZED_AUTHORITY = 0x179e; // 6046
+/** StaleAuthority: Root authority changed since this handover was reviewed */
+export const KATHA_REGISTRY_ERROR__STALE_AUTHORITY = 0x179f; // 6047
+/** InvalidMultisig: Multisig account is invalid or not the canonical Squads account */
+export const KATHA_REGISTRY_ERROR__INVALID_MULTISIG = 0x17a0; // 6048
+/** ControlledMultisig: Controlled multisigs are not accepted */
+export const KATHA_REGISTRY_ERROR__CONTROLLED_MULTISIG = 0x17a1; // 6049
+/** InvalidThreshold: The accepted multisig threshold must be two */
+export const KATHA_REGISTRY_ERROR__INVALID_THRESHOLD = 0x17a2; // 6050
+/** InvalidMembers: Three distinct fully permitted members must match the reviewed order */
+export const KATHA_REGISTRY_ERROR__INVALID_MEMBERS = 0x17a3; // 6051
+/** UnexpectedTimeLock: The live multisig delay differs from the reviewed delay */
+export const KATHA_REGISTRY_ERROR__UNEXPECTED_TIME_LOCK = 0x17a4; // 6052
+/** InvalidVault: The accepting signer is not the reviewed Squads vault */
+export const KATHA_REGISTRY_ERROR__INVALID_VAULT = 0x17a5; // 6053
+/** InvalidMultisigProgramData: ProgramData does not belong to the program being handed over */
+export const KATHA_REGISTRY_ERROR__INVALID_MULTISIG_PROGRAM_DATA = 0x17a6; // 6054
+/** UpgradeAuthorityMismatch: Program upgrade authority must already be the accepting vault */
+export const KATHA_REGISTRY_ERROR__UPGRADE_AUTHORITY_MISMATCH = 0x17a7; // 6055
+/** UnchangedAuthority: The accepting vault is already the root authority */
+export const KATHA_REGISTRY_ERROR__UNCHANGED_AUTHORITY = 0x17a8; // 6056
 
 export type KathaRegistryError =
   | typeof KATHA_REGISTRY_ERROR__ARTWORK_ALREADY_MINTED
   | typeof KATHA_REGISTRY_ERROR__ASSET_ALREADY_EXISTS
   | typeof KATHA_REGISTRY_ERROR__AUTHORSHIP_HASH_MISMATCH
+  | typeof KATHA_REGISTRY_ERROR__CONTROLLED_MULTISIG
   | typeof KATHA_REGISTRY_ERROR__CORE_METADATA_OUT_OF_SYNC
   | typeof KATHA_REGISTRY_ERROR__INITIAL_CONDITION_REQUIRED
   | typeof KATHA_REGISTRY_ERROR__INVALID_ARTIST_ID
@@ -133,27 +156,37 @@ export type KathaRegistryError =
   | typeof KATHA_REGISTRY_ERROR__INVALID_INITIAL_CONDITION_REASON
   | typeof KATHA_REGISTRY_ERROR__INVALID_INSPECTION_TIME
   | typeof KATHA_REGISTRY_ERROR__INVALID_INSPECTOR_ID
+  | typeof KATHA_REGISTRY_ERROR__INVALID_MEMBERS
   | typeof KATHA_REGISTRY_ERROR__INVALID_METADATA_HASH
   | typeof KATHA_REGISTRY_ERROR__INVALID_METADATA_RELATIONSHIP
   | typeof KATHA_REGISTRY_ERROR__INVALID_METADATA_URI
   | typeof KATHA_REGISTRY_ERROR__INVALID_METADATA_VERSION
   | typeof KATHA_REGISTRY_ERROR__INVALID_MINT_CUSTODY
+  | typeof KATHA_REGISTRY_ERROR__INVALID_MULTISIG
+  | typeof KATHA_REGISTRY_ERROR__INVALID_MULTISIG_PROGRAM_DATA
   | typeof KATHA_REGISTRY_ERROR__INVALID_PROGRAM_DATA
   | typeof KATHA_REGISTRY_ERROR__INVALID_REPORT_ID
   | typeof KATHA_REGISTRY_ERROR__INVALID_ROLE
+  | typeof KATHA_REGISTRY_ERROR__INVALID_THRESHOLD
   | typeof KATHA_REGISTRY_ERROR__INVALID_UNMINTED_CONDITION_REASON
+  | typeof KATHA_REGISTRY_ERROR__INVALID_VAULT
   | typeof KATHA_REGISTRY_ERROR__INVALID_VERIFICATION_RELATIONSHIP
   | typeof KATHA_REGISTRY_ERROR__MINTED_CONDITION_REQUIRES_OWNER_SCOPE
   | typeof KATHA_REGISTRY_ERROR__MINTED_METADATA_REQUIRES_CORE_SYNC
   | typeof KATHA_REGISTRY_ERROR__MISSING_CUSTODY_SUBJECT
+  | typeof KATHA_REGISTRY_ERROR__STALE_AUTHORITY
   | typeof KATHA_REGISTRY_ERROR__STALE_CONDITION_VERSION
   | typeof KATHA_REGISTRY_ERROR__STALE_CUSTODY_REVISION
   | typeof KATHA_REGISTRY_ERROR__STALE_METADATA_VERSION
+  | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_AUTHORITY
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_BOOTSTRAP
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_CUSTODY
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_REGISTRATION
   | typeof KATHA_REGISTRY_ERROR__UNAUTHORIZED_VERIFIER
-  | typeof KATHA_REGISTRY_ERROR__UNEXPECTED_CUSTODY_SUBJECT;
+  | typeof KATHA_REGISTRY_ERROR__UNCHANGED_AUTHORITY
+  | typeof KATHA_REGISTRY_ERROR__UNEXPECTED_CUSTODY_SUBJECT
+  | typeof KATHA_REGISTRY_ERROR__UNEXPECTED_TIME_LOCK
+  | typeof KATHA_REGISTRY_ERROR__UPGRADE_AUTHORITY_MISMATCH;
 
 let kathaRegistryErrorMessages: Record<KathaRegistryError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
@@ -161,6 +194,7 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_REGISTRY_ERROR__ARTWORK_ALREADY_MINTED]: `Artwork is already bound to a Core asset`,
     [KATHA_REGISTRY_ERROR__ASSET_ALREADY_EXISTS]: `The deterministic Core asset account already exists`,
     [KATHA_REGISTRY_ERROR__AUTHORSHIP_HASH_MISMATCH]: `The evidence hash does not match the registered artwork`,
+    [KATHA_REGISTRY_ERROR__CONTROLLED_MULTISIG]: `Controlled multisigs are not accepted`,
     [KATHA_REGISTRY_ERROR__CORE_METADATA_OUT_OF_SYNC]: `Core identity or URI differs from the current Registry metadata revision`,
     [KATHA_REGISTRY_ERROR__INITIAL_CONDITION_REQUIRED]: `Initial verification condition report is required for minting`,
     [KATHA_REGISTRY_ERROR__INVALID_ARTIST_ID]: `Artist ID must be a canonical lowercase UUID`,
@@ -183,27 +217,37 @@ if (process.env["NODE_ENV"] !== "production") {
     [KATHA_REGISTRY_ERROR__INVALID_INITIAL_CONDITION_REASON]: `The first condition report must be an initial verification inspection`,
     [KATHA_REGISTRY_ERROR__INVALID_INSPECTION_TIME]: `Inspection time must be positive and no later than chain time`,
     [KATHA_REGISTRY_ERROR__INVALID_INSPECTOR_ID]: `Inspector ID must be a valid UUID`,
+    [KATHA_REGISTRY_ERROR__INVALID_MEMBERS]: `Three distinct fully permitted members must match the reviewed order`,
     [KATHA_REGISTRY_ERROR__INVALID_METADATA_HASH]: `Metadata hash must not be zero`,
     [KATHA_REGISTRY_ERROR__INVALID_METADATA_RELATIONSHIP]: `Metadata head is unrelated to the artwork`,
     [KATHA_REGISTRY_ERROR__INVALID_METADATA_URI]: `Metadata URI must be a bounded public HTTP or HTTPS URI`,
     [KATHA_REGISTRY_ERROR__INVALID_METADATA_VERSION]: `Metadata versions must advance by exactly one`,
     [KATHA_REGISTRY_ERROR__INVALID_MINT_CUSTODY]: `Minting requires attested Katha or collector custody`,
+    [KATHA_REGISTRY_ERROR__INVALID_MULTISIG]: `Multisig account is invalid or not the canonical Squads account`,
+    [KATHA_REGISTRY_ERROR__INVALID_MULTISIG_PROGRAM_DATA]: `ProgramData does not belong to the program being handed over`,
     [KATHA_REGISTRY_ERROR__INVALID_PROGRAM_DATA]: `ProgramData does not belong to this Registry program`,
     [KATHA_REGISTRY_ERROR__INVALID_REPORT_ID]: `Condition report ID must be a valid UUID`,
     [KATHA_REGISTRY_ERROR__INVALID_ROLE]: `Platform role addresses must not be the default address`,
+    [KATHA_REGISTRY_ERROR__INVALID_THRESHOLD]: `The accepted multisig threshold must be two`,
     [KATHA_REGISTRY_ERROR__INVALID_UNMINTED_CONDITION_REASON]: `Unminted follow-up reports must be pre-sale or insurance inspections`,
+    [KATHA_REGISTRY_ERROR__INVALID_VAULT]: `The accepting signer is not the reviewed Squads vault`,
     [KATHA_REGISTRY_ERROR__INVALID_VERIFICATION_RELATIONSHIP]: `Verification does not belong to this artwork`,
     [KATHA_REGISTRY_ERROR__MINTED_CONDITION_REQUIRES_OWNER_SCOPE]: `Minted inspections require validated ownership and custody scope`,
     [KATHA_REGISTRY_ERROR__MINTED_METADATA_REQUIRES_CORE_SYNC]: `Minted metadata changes must synchronize Core URI atomically`,
     [KATHA_REGISTRY_ERROR__MISSING_CUSTODY_SUBJECT]: `Collector custody requires an actual custodian address`,
+    [KATHA_REGISTRY_ERROR__STALE_AUTHORITY]: `Root authority changed since this handover was reviewed`,
     [KATHA_REGISTRY_ERROR__STALE_CONDITION_VERSION]: `Condition version is stale`,
     [KATHA_REGISTRY_ERROR__STALE_CUSTODY_REVISION]: `Custody revision is stale`,
     [KATHA_REGISTRY_ERROR__STALE_METADATA_VERSION]: `Metadata version is stale`,
+    [KATHA_REGISTRY_ERROR__UNAUTHORIZED_AUTHORITY]: `Only the current root authority can authorize a handover`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_BOOTSTRAP]: `Bootstrap signer is not the Registry upgrade authority`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_CUSTODY]: `Signer is not the configured custody authority`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_REGISTRATION]: `Only the configured registration authority can register artwork`,
     [KATHA_REGISTRY_ERROR__UNAUTHORIZED_VERIFIER]: `Only the configured verifier can authenticate artwork`,
+    [KATHA_REGISTRY_ERROR__UNCHANGED_AUTHORITY]: `The accepting vault is already the root authority`,
     [KATHA_REGISTRY_ERROR__UNEXPECTED_CUSTODY_SUBJECT]: `This transition does not accept a collector custodian address`,
+    [KATHA_REGISTRY_ERROR__UNEXPECTED_TIME_LOCK]: `The live multisig delay differs from the reviewed delay`,
+    [KATHA_REGISTRY_ERROR__UPGRADE_AUTHORITY_MISMATCH]: `Program upgrade authority must already be the accepting vault`,
   };
 }
 

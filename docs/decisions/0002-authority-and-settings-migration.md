@@ -8,6 +8,43 @@ defines the migration contract for that selection. It does not change the runnin
 programs, API authorization, payouts, or signing flow. The original
 [trust boundaries](0001-trust-and-lifecycle.md) continue to apply.
 
+## Implemented foundation: root authority handover
+
+Both programs now expose `transfer_multisig_authority`. This is an opt-in root
+handover primitive; the governance/grants migration below remains pending. No
+Devnet authority was changed by adding it.
+
+The existing root and accepting Squads vault must both sign. Program-side checks
+require the official Squads v4 owner, discriminator, canonical multisig/vault PDAs,
+an autonomous configuration, exactly three distinct fully permitted members,
+threshold two, and the exact reviewed member order and delay. The accepting vault
+must already be the bound program's upgrade authority. The expected old root
+prevents stale handovers, and the target must always be a verified vault rather
+than a replacement hot wallet. A Squads vault signs through program execution;
+its members' wallet signatures cannot substitute for its CPI signature.
+
+Existing config layouts, instruction formats, role wallets, historical attestations,
+custody identity and listing economics are preserved. The root field alone changes.
+After handover, existing Marketplace root checks require the vault, including fee
+changes and initial sale-term creation. These actions need Squads execution; the
+current single-wallet `/admin/devnet` flow does not execute a Squads proposal.
+Changing a Squad's configuration later is governed by Squads itself; the acceptance
+event records a snapshot, not a permanent guarantee that its membership or threshold
+can never change.
+
+The public activity decoder validates these exact events without adding them to
+an artwork's provenance. The public finalized transaction remains the governance
+receipt. IDLs and Codama clients include the new instruction and events.
+
+This foundation does **not** add revocable role grants, holds, independent
+verification, inventory constraints, artist-signed consent, batch receipts or the
+fresh API permissions specified below. It does not activate a governance migration
+state. The live migration still requires those release gates and a concrete,
+operator-approved manifest; do not use this primitive alone as evidence that the
+full migration has shipped. Local tests use the genuine SHA-256-pinned Squads
+program and synthetic identities, including two-approval success, one-approval
+failure, real timelock enforcement and atomic loader/config rollback.
+
 ## Findings in the current implementation
 
 These are source observations at commit
