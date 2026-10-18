@@ -1557,10 +1557,12 @@ export async function runPublicBrowsingJourneys({
         name: "Prepare report",
         exact: true,
       });
-      const reloadInspection = main.getByRole("button", {
-        name: "Reload inspection state",
-        exact: true,
-      });
+      const reloadInspection = main
+        .getByRole("region", { name: "Report and transaction", exact: true })
+        .getByRole("button", {
+          name: "Reload inspection state",
+          exact: true,
+        });
       await expect(main).toContainText("Evidence image 1");
       await audit("inspection protected initial scope");
       await prepareReport.click();
@@ -1607,7 +1609,13 @@ export async function runPublicBrowsingJourneys({
       await expect(main).not.toContainText("PRIVATE_INSPECTION_ERROR");
       await audit("inspection stale preparation");
       rejectInspection = false;
-      await reloadInspection.click();
+      await expect(
+        main.getByRole("button", { name: "Reload inspection state", exact: true }),
+      ).toHaveCount(2);
+      await alert("changed")
+        .getByRole("button", { name: "Reload inspection state", exact: true })
+        .click();
+      await expect(alert("changed")).toHaveCount(0);
       await conditionApproval.check();
       await conditionPrepare.click();
       await expect(
