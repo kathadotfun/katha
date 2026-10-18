@@ -153,8 +153,6 @@ export function createCustodyAdministrationWorkflow(
           data.expectedUpdatedAt !== page.updatedAt ||
           data.expectedCustodyRevision !== page.chain.revision ||
           !allowed.some((t) => JSON.stringify(t) === JSON.stringify(data.transition)) ||
-          page.chain.custodyAuthority !==
-            session.getSnapshot().session?.walletAddress ||
           (data.transition.to === "COLLECTOR_HELD" &&
             page.chain.ownerWallet !== null &&
             data.collectorWallet !== page.chain.ownerWallet)

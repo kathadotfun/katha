@@ -137,7 +137,7 @@ const ACTION = {
 function custodyInput(
   input: CustodyTransactionInput,
   from: (typeof STATE)[number],
-  authority: Address,
+  custodyIdentity: Address,
 ) {
   const transition = physicalCustodyTransitionSchema.parse(input.transition);
   if (transition.from !== from)
@@ -147,7 +147,7 @@ function custodyInput(
     if (input.collector === null)
       throw new TypeError("Collector custody requires a subject");
     collector = nonzeroAddress(address(input.collector));
-    if (collector === authority)
+    if (collector === custodyIdentity)
       throw new TypeError("Collector custody must identify a distinct custodian");
   } else if (input.collector !== null)
     throw new TypeError("This custody action does not accept a collector");
@@ -157,7 +157,7 @@ function custodyInput(
 async function custodyHead(
   account: EncodedAccount,
   artwork: Address,
-  authority: Address,
+  custodyIdentity: Address,
 ) {
   const [head, bump] = await findInitializeCustodyHeadPda({ artwork });
   checkAccount(account, head, KathaRegistryAccount.CustodyHead, 115);
@@ -184,8 +184,8 @@ async function custodyHead(
       throw new TypeError("Held custody requires a subject");
     const subject = nonzeroAddress(state.subject.value);
     if (
-      (state.state === CustodyState.KathaHeld && subject !== authority) ||
-      (state.state === CustodyState.CollectorHeld && subject === authority)
+      (state.state === CustodyState.KathaHeld && subject !== custodyIdentity) ||
+      (state.state === CustodyState.CollectorHeld && subject === custodyIdentity)
     )
       throw new TypeError("Custody subject does not match the attested state");
   }
@@ -204,7 +204,11 @@ export function buildInitializeCustodyTransaction(
       input.kathaId,
       "custodyAuthority",
     );
-    const args = custodyInput(input, "UNKNOWN", context.authorityAddress);
+    const args = custodyInput(
+      input,
+      "UNKNOWN",
+      prepared.configuration.custodyAuthority,
+    );
     const [head] = await findInitializeCustodyHeadPda({ artwork: prepared.artwork });
     const [transition] = await findTransitionPda({ artwork: prepared.artwork });
     const instruction = getInitializeCustodyInstruction({
@@ -243,7 +247,7 @@ export function buildTransitionCustodyTransaction(
     const current = await custodyHead(
       accounts.custodyHeadAccount,
       prepared.artwork,
-      context.authorityAddress,
+      prepared.configuration.custodyAuthority,
     );
     if (
       typeof input.expectedRevision !== "bigint" ||
@@ -254,7 +258,7 @@ export function buildTransitionCustodyTransaction(
     const args = custodyInput(
       input,
       STATE[current.state.state]!,
-      context.authorityAddress,
+      prepared.configuration.custodyAuthority,
     );
     const revision = input.expectedRevision + 1n;
     const [transition] = await findTransitionCustodyTransitionPda({

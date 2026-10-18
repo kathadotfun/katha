@@ -249,7 +249,7 @@ export function CustodyAdministrationPanel({ kathaId }: { kathaId: string }) {
                   <dd>{page.chain.revision}</dd>
                 </div>
                 <div className="kv kv-ops">
-                  <dt>Custody authority</dt>
+                  <dt>Katha custodian identity</dt>
                   <dd className="id">{page.chain.custodyAuthority}</dd>
                 </div>
               </dl>

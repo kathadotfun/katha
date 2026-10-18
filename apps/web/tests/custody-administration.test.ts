@@ -187,6 +187,17 @@ test("prepares movement separately without automatic signing", async () => {
   assert.equal(f.counts().updates, 0);
   f.workflow.dispose();
 });
+
+test("a currently authorized custody operator can prepare without owning the historical custody identity", async () => {
+  const f = await fixture();
+  f.page.chain.custodyAuthority = "11111111111111111111111111111114";
+  assert.notEqual(f.page.chain.custodyAuthority, f.operation.feePayer);
+  await f.workflow.read();
+  await f.workflow.prepare(prepareInput(f));
+  assert.equal(f.counts().preparations, 1);
+  assert.equal(f.counts().loads, 1);
+  f.workflow.dispose();
+});
 test("fulfillment update keeps custody unchanged", async () => {
   const f = await fixture();
   await f.workflow.read();

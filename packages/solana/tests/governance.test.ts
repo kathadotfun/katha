@@ -9,6 +9,8 @@ import {
 import { randomUUID } from "node:crypto";
 import { fetchToken } from "@solana-program/token";
 import { readOperatorAuthorization } from "../src/governance.js";
+import { createCustodyReaderFromRpc } from "../src/custody-reader.js";
+import { buildTransitionCustodyTransaction } from "../src/lifecycle.js";
 import {
   buildCreateListingTransaction,
   buildPurchaseListingTransaction,
@@ -576,4 +578,41 @@ it("runs registration through purchase after activation, rotates verifier and cu
     completedSales: 1n,
     status: market.ListingStatus.Purchased,
   });
+  // The rotated signer changes custody without becoming Katha's stored subject.
+  const readCustody = createCustodyReaderFromRpc(f.client.rpc);
+  for (const transition of [
+    { action: "DISPATCH_FROM_KATHA", from: "KATHA_HELD", to: "IN_TRANSIT" },
+    { action: "RECEIVE_AT_KATHA", from: "IN_TRANSIT", to: "KATHA_HELD" },
+  ] as const) {
+    const accounts = await readCustody(kathaId);
+    if (!accounts.custodyHeadAccount.exists) throw new Error("Missing custody head");
+    const prepared = await buildTransitionCustodyTransaction(
+      {
+        cluster: "localnet",
+        feePayerAddress: f.roles.bootstrap.address,
+        authorityAddress: f.roles.outsider.address,
+        supportedTransactionVersions: new Set([0]),
+        currentBlockHeight: 0n,
+        lifetime: {
+          blockhash: f.client.svm.latestBlockhash(),
+          lastValidBlockHeight: 1000000n,
+        },
+        authorization: await readOperatorAuthorization(
+          f.client.rpc,
+          f.roles.outsider.address,
+        ),
+      },
+      {
+        ...accounts,
+        custodyHeadAccount: accounts.custodyHeadAccount,
+      },
+      {
+        kathaId,
+        expectedRevision: accounts.custodyRevision,
+        transition,
+        collector: null,
+      },
+    );
+    await send(prepared.instruction, f.roles.outsider);
+  }
 }, 30_000);

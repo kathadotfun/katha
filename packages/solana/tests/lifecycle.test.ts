@@ -30,6 +30,8 @@ import {
   findAssetPda,
   findCollectionAuthorityPda,
   findConfigPda,
+  findGovernancePda,
+  findGrantPda,
   findHeadPda,
   findInitializeCustodyHeadPda,
   findInitializeMetadataHeadPda,
@@ -45,6 +47,7 @@ import {
   getMetadataHeadEncoder,
   getMetadataRevisionEncoder,
   getKathaConfigEncoder,
+  getKathaConfigDecoder,
   KATHA_REGISTRY_PROGRAM_ADDRESS as REGISTRY,
   parseInitializeCustodyInstruction,
   parseTransitionCustodyInstruction,
@@ -329,6 +332,94 @@ describe("Registry lifecycle preparation", () => {
         Object.values(compileTransaction(result.transactionMessage).signatures),
       ).toEqual([null, null]);
     }
+  });
+
+  it("keeps custody subjects bound to stored identity while a distinct granted operator signs", async () => {
+    const configuration = getKathaConfigDecoder().decode(f.accounts.configAccount.data);
+    const [governance] = await findGovernancePda();
+    const [grant] = await findGrantPda({ wallet: registration });
+    configuration.registrationAuthority = governance;
+    const accounts = {
+      ...f.accounts,
+      configAccount: {
+        ...f.accounts.configAccount,
+        data: Uint8Array.from(getKathaConfigEncoder().encode(configuration)),
+      },
+    };
+    const governed = {
+      ...context,
+      authorization: {
+        governance,
+        grant,
+        registryConfig: accounts.configAccount.address,
+        wallet: registration,
+        roles: 16,
+        pauses: 0,
+        slot: 1n,
+      },
+    };
+    const changed = await buildTransitionCustodyTransaction(governed, accounts, {
+      kathaId,
+      expectedRevision: 1n,
+      transition: {
+        action: "DISPATCH_FROM_KATHA",
+        from: "KATHA_HELD",
+        to: "IN_TRANSIT",
+      },
+      collector: null,
+    });
+    expect(
+      parseTransitionCustodyInstruction(changed.instruction).accounts.custodyAuthority
+        .address,
+    ).toBe(registration);
+    await expect(
+      buildInitializeCustodyTransaction(governed, accounts, {
+        kathaId,
+        transition: {
+          action: "ATTEST_COLLECTOR_CUSTODY",
+          from: "UNKNOWN",
+          to: "COLLECTOR_HELD",
+        },
+        collector: custody,
+      }),
+    ).rejects.toThrow();
+    await expect(
+      buildTransitionCustodyTransaction(
+        { ...governed, authorization: { ...governed.authorization, roles: 0 } },
+        accounts,
+        {
+          kathaId,
+          expectedRevision: 1n,
+          transition: {
+            action: "DISPATCH_FROM_KATHA",
+            from: "KATHA_HELD",
+            to: "IN_TRANSIT",
+          },
+          collector: null,
+        },
+      ),
+    ).rejects.toThrow();
+    const wrongSubject = {
+      ...accounts,
+      custodyHeadAccount: {
+        ...accounts.custodyHeadAccount,
+        data: Uint8Array.from(
+          getCustodyHeadEncoder().encode({ ...f.custodyArgs, subject: registration }),
+        ),
+      },
+    };
+    await expect(
+      buildTransitionCustodyTransaction(governed, wrongSubject, {
+        kathaId,
+        expectedRevision: 1n,
+        transition: {
+          action: "DISPATCH_FROM_KATHA",
+          from: "KATHA_HELD",
+          to: "IN_TRANSIT",
+        },
+        collector: null,
+      }),
+    ).rejects.toThrow();
   });
 
   it.each([
