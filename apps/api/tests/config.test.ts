@@ -4,6 +4,63 @@ import { readServerConfiguration, toPublicConfiguration } from "../src/config.js
 const databaseUrl = "postgres://synthetic:fixture-password@127.0.0.1:5432/katha_test";
 const environment = { DATABASE_URL: databaseUrl };
 
+const cloudinaryEnvironment = {
+  ...environment,
+  KATHA_STORAGE_PROVIDER: "cloudinary",
+  CLOUDINARY_CLOUD_NAME: "synthetic-cloud",
+  CLOUDINARY_API_KEY: "123456",
+  CLOUDINARY_API_SECRET: "synthetic-cloud-secret",
+};
+
+it("requires explicit provider selection and excludes Cloudinary settings from public config", () => {
+  expect(readServerConfiguration(environment).KATHA_STORAGE_PROVIDER).toBe("local");
+  const config = readServerConfiguration(cloudinaryEnvironment);
+  expect(config.KATHA_STORAGE_PROVIDER).toBe("cloudinary");
+  expect(Object.keys(toPublicConfiguration(config)).sort()).toEqual([
+    "apiOrigin",
+    "appOrigin",
+    "cluster",
+  ]);
+  expect(
+    readServerConfiguration({
+      ...cloudinaryEnvironment,
+      KATHA_STORAGE_PROVIDER: undefined,
+    }).KATHA_STORAGE_PROVIDER,
+  ).toBe("local");
+});
+it.each(["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"])(
+  "requires and protects %s",
+  (key) => {
+    expect(() =>
+      readServerConfiguration({ ...cloudinaryEnvironment, [key]: undefined }),
+    ).toThrow(key);
+    expect(() =>
+      readServerConfiguration({ ...cloudinaryEnvironment, [key]: "" }),
+    ).toThrow(key);
+    expect(() =>
+      readServerConfiguration({ ...environment, [`NEXT_PUBLIC_${key}`]: "synthetic" }),
+    ).toThrow("Server-only");
+  },
+);
+it("rejects unsupported providers and redacts invalid Cloudinary credentials", () => {
+  expect(() =>
+    readServerConfiguration({ ...environment, KATHA_STORAGE_PROVIDER: "unknown" }),
+  ).toThrow("KATHA_STORAGE_PROVIDER");
+  try {
+    readServerConfiguration({
+      ...cloudinaryEnvironment,
+      CLOUDINARY_API_SECRET: "synthetic secret with spaces",
+    });
+    throw new Error("Expected configuration failure");
+  } catch (error) {
+    expect(error).toMatchObject({
+      fields: ["CLOUDINARY_API_SECRET"],
+    });
+    expect(String(error)).not.toContain("synthetic secret");
+    expect(error).not.toHaveProperty("cause");
+  }
+});
+
 describe("server configuration", () => {
   it("defaults the local listener and cluster while requiring the database URL", () => {
     expect(readServerConfiguration(environment)).toMatchObject({

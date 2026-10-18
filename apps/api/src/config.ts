@@ -1,3 +1,4 @@
+import { cloudinaryCredentialsSchema } from "./cloudinary-storage.js";
 import { resolve } from "node:path";
 import { validStorageRoot } from "./local-storage.js";
 import { z } from "zod";
@@ -70,6 +71,10 @@ const serverConfigurationSchema = z
       .pipe(z.number().int().max(65535))
       .default(3001),
     DATABASE_URL: z.string().refine(validDatabaseUrl),
+    KATHA_STORAGE_PROVIDER: z.enum(["local", "cloudinary"]).default("local"),
+    CLOUDINARY_CLOUD_NAME: cloudinaryCredentialsSchema.shape.cloudName.optional(),
+    CLOUDINARY_API_KEY: cloudinaryCredentialsSchema.shape.apiKey.optional(),
+    CLOUDINARY_API_SECRET: cloudinaryCredentialsSchema.shape.apiSecret.optional(),
     KATHA_STORAGE_ROOT: z
       .string()
       .refine(validStorageRoot)
@@ -103,6 +108,20 @@ const serverConfigurationSchema = z
     KATHA_PUBLIC_API_ORIGIN: origin.default("http://localhost:3001"),
   })
   .superRefine((config, context) => {
+    if (config.KATHA_STORAGE_PROVIDER === "cloudinary") {
+      for (const field of [
+        "CLOUDINARY_CLOUD_NAME",
+        "CLOUDINARY_API_KEY",
+        "CLOUDINARY_API_SECRET",
+      ] as const) {
+        if (!config[field])
+          context.addIssue({
+            code: "custom",
+            path: [field],
+            message: "Required for Cloudinary storage",
+          });
+      }
+    }
     try {
       resolveKathaRpcConfig({
         cluster: config.KATHA_CLUSTER,
@@ -140,7 +159,7 @@ export function readServerConfiguration(
     Object.keys(environment).some(
       (key) =>
         key.startsWith("NEXT_PUBLIC_") &&
-        /DATABASE|PASSWORD|SECRET|TOKEN|PRIVATE_KEY|ADMIN|VERIFIER|RPC|STORAGE/.test(
+        /DATABASE|PASSWORD|SECRET|TOKEN|PRIVATE_KEY|ADMIN|VERIFIER|RPC|STORAGE|CLOUDINARY/.test(
           key,
         ),
     )

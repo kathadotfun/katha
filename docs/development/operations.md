@@ -61,6 +61,36 @@ Back up and restore the database and API storage together. Default storage is
 `KATHA_STORAGE_ROOT` override must be an absolute normalized path ending in
 `/.storage`, with an existing parent. Local files are not permanent archival storage.
 
+For hosted file storage, set `KATHA_STORAGE_PROVIDER=cloudinary` with server-only
+`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`.
+Credentials alone do not select a provider; `local` remains the default. Both
+providers enforce `KATHA_STORAGE_MAX_BYTES` (10 MiB by default) and the same file
+validation. Cloudinary uses authenticated `raw` uploads for all originals,
+including images, so bytes match their SHA-256 commitments. Overwrites are
+disabled, and downloads are verified by size, hash and content signature. Public
+documents/media still pass through Katha's existing public API routes; signed
+Cloudinary delivery URLs and credentials are never returned to clients. Image
+transformations and direct CDN delivery are not part of this adapter.
+
+On a Cloudinary Free account, enable **Allow delivery of PDF and ZIP files** in
+the product environment's **Settings → Security** before accepting PDF uploads.
+The provider verifies download immediately after upload and rejects a write if
+delivery is blocked. Enabling this file-format setting does not change Katha's
+authenticated delivery type or permit ZIP uploads through Katha. See
+[blocked delivery formats](https://cloudinary.com/documentation/image_delivery_options).
+
+Changing providers does not migrate files. Before switching an existing dataset,
+copy and verify every referenced object under its existing visibility and hash;
+preserve the source backup and committed document URLs. The adapter never falls
+back between providers or public/private namespaces. A fresh hosted database
+needs migrations and a reviewed ID-allocation/indexing plan before onboarding;
+do not reset counters or silently import private local data.
+
+Cloudinary's free allowance is shared across storage, bandwidth and processing;
+monitor the account's usage. This integration does not establish permanent archival
+storage. See [Cloudinary access controls](https://cloudinary.com/documentation/control_access_to_media)
+and [current free-plan limits](https://cloudinary.com/pricing).
+
 Storage keys are content-addressed under `public/` and `private/`. Explicitly
 approved public bytes can be accessible before catalogue publication; check
 visibility before upload. Never mount the entire storage root publicly. Private

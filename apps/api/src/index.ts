@@ -65,7 +65,7 @@ import { createPublicDocuments } from "./public-documents.js";
 import { createPublicDocumentStore } from "@katha/db";
 import { createDocumentPreparation } from "./document-preparation.js";
 import { createDocumentPreparationStore } from "@katha/db";
-import { createLocalStorageProvider } from "./local-storage.js";
+import { createStorageProvider } from "./storage-provider.js";
 import { createArtworkDetails } from "./artwork-details.js";
 import { createPublicArtworkDetailStore } from "@katha/db";
 import { createArtworkDiscovery } from "./artwork-discovery.js";
@@ -105,10 +105,7 @@ function startApi() {
     origin: config.KATHA_PUBLIC_APP_ORIGIN,
     cluster: config.KATHA_CLUSTER,
   });
-  const storage = createLocalStorageProvider({
-    root: config.KATHA_STORAGE_ROOT,
-    maxBytes: config.KATHA_STORAGE_MAX_BYTES,
-  });
+  const storage = createStorageProvider(config);
   const rpcConfig = {
     cluster: config.KATHA_CLUSTER,
     ...(config.KATHA_RPC_URL === undefined ? {} : { rpcUrl: config.KATHA_RPC_URL }),
