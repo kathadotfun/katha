@@ -35,25 +35,22 @@ const own = [
   {
     label: "The painting",
     title: "One physical original",
-    image: "paubha-detail",
-    alt: "AI illustration: detail of Green Tara, her crown and a lotus flower.",
+    visual: "painting",
     text: "Inspected in person and graded for condition. Physical custody is recorded separately from who owns the asset.",
   },
   {
     label: "The asset",
     title: "One asset in your wallet",
-    image: "mandala-detail",
-    alt: "AI illustration: a lotus at the centre of a mandala.",
+    visual: "asset",
     text: "A single Metaplex Core asset on Solana, bound to the painting’s record. Copyright stays with the artist.",
   },
   {
     label: "The record",
     title: "A history anyone can check",
-    image: "thangka-detail",
-    alt: "AI illustration: Buddha seated before a blue halo.",
+    visual: "record",
     text: "Registration, verification, inspections, custody changes and transfers, with the recorded evidence available to check.",
   },
-];
+] as const;
 const steps = [
   {
     title: "Document",
@@ -122,6 +119,90 @@ function Arrow() {
     <svg className="ic" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <path d="M3 8h10M9 4l4 4-4 4" />
     </svg>
+  );
+}
+
+function OwnershipVisual({ kind }: { kind: (typeof own)[number]["visual"] }) {
+  if (kind === "painting")
+    return (
+      <div className="ownership-visual ownership-painting">
+        <img
+          src="/design/ownership/physical-painting.webp"
+          width="1200"
+          height="800"
+          alt="AI illustration of a complete Green Tara Paubha in a walnut frame on a gallery wall, showing the physical painting."
+          loading="lazy"
+        />
+        <span className="ownership-scene-note">Illustrative scene</span>
+      </div>
+    );
+  return (
+    <div
+      className={`ownership-visual ownership-${kind}`}
+      role="img"
+      aria-label={
+        kind === "asset"
+          ? "Sample wallet collectible: one Green Tara asset on Solana linked to one physical painting."
+          : "Sample artwork history showing registration, an in-person inspection and an ownership transfer."
+      }
+    >
+      <div className="ownership-preview">
+        <div className="ownership-preview-head">
+          <span>{kind === "asset" ? "Wallet collectible" : "Artwork history"}</span>
+          <span className="ownership-sample">Sample</span>
+        </div>
+        {kind === "asset" ? (
+          <>
+            <div className="ownership-collectible">
+              <div className="ownership-thumbnail">
+                <img
+                  src="/design/paintings/paubha.jpg"
+                  width="1200"
+                  height="1490"
+                  alt=""
+                  loading="lazy"
+                />
+              </div>
+              <div>
+                <p className="ownership-artwork-name">Green Tara</p>
+                <p className="ownership-preview-detail">Paubha</p>
+                <span className="ownership-standard">Metaplex Core</span>
+              </div>
+            </div>
+            <div className="ownership-wallet-foot">
+              <svg
+                className="ic"
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
+                <path d="M3 6.5h13.5v10H3zM3 6.5l1.5-3h10l2 3M12.5 11.5h2" />
+              </svg>
+              <span>1 painting · 1 asset</span>
+            </div>
+          </>
+        ) : (
+          <ol className="ownership-timeline">
+            {[
+              ["Registered", "Permanent artwork identity"],
+              ["Inspected", "Signed in-person assessment"],
+              ["Transferred", "Ownership history preserved"],
+            ].map(([title, detail]) => (
+              <li key={title}>
+                <span className="ownership-event-mark">
+                  <Icon name="check" size={12} />
+                </span>
+                <div>
+                  <span className="ownership-event-title">{title}</span>
+                  <span className="ownership-event-detail">{detail}</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </div>
   );
 }
 function SectionHead({
@@ -410,13 +491,7 @@ export function KathaHomepage({
           <div className="own">
             {own.map((item) => (
               <article className="card" key={item.label}>
-                <img
-                  src={`/design/paintings/${item.image}.jpg`}
-                  alt={item.alt}
-                  loading="lazy"
-                  width="1024"
-                  height="683"
-                />
+                <OwnershipVisual kind={item.visual} />
                 <div className="px-6 pt-6 pb-7">
                   <p className="lbl text-madder">{item.label}</p>
                   <h3 className="h3 mt-2.5">{item.title}</h3>
